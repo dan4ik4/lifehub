@@ -7,6 +7,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Request
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic.json_schema import GenerateJsonSchema
 from sqlalchemy import select
 
 from app.core.database import utcnow
@@ -66,6 +67,24 @@ class ActionEnvelope(InputModel):
     action: CreateTaskAction | UpdateTaskAction | CreateEventAction | AddListItemsAction | ClarifyAction
 
 
+class OpenAIJsonSchema(GenerateJsonSchema):
+    def decimal_schema(self, schema):
+        result = super().decimal_schema(schema)
+        for option in result.get('anyOf', [result]):
+            if option.get('type') == 'string':
+                # Pydantic's Decimal pattern uses lookarounds rejected by OpenAI.
+                # Precision and value limits still run when Pydantic parses the response.
+                option['pattern'] = r'^[+-]?[0-9]+([.][0-9]+)?$'
+        return result
+
+
+class OpenAIActionEnvelope(ActionEnvelope):
+    @classmethod
+    def model_json_schema(cls, **kwargs):
+        kwargs['schema_generator'] = OpenAIJsonSchema
+        return super().model_json_schema(**kwargs)
+
+
 class ResourceRef(BaseModel):
     type: Literal['task', 'event', 'list_item']
     id: UUID
@@ -104,7 +123,7 @@ class OpenAIPlanningProvider:
                     model=self.settings.openai_model, store=False, max_output_tokens=2000,
                     input=[{'role': 'system', 'content': instructions},
                            {'role': 'user', 'content': json.dumps({'context': context, 'message': message}, ensure_ascii=False)}],
-                    text_format=ActionEnvelope,
+                    text_format=OpenAIActionEnvelope,
                 )
         except (OpenAIError, ValidationError, ValueError) as exc:
             raise AppError(502, 'model_error', 'The model could not produce a valid planning action') from exc

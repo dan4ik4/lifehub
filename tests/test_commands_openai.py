@@ -1,9 +1,13 @@
 import json
+from decimal import Decimal
+from uuid import uuid4
 
 import httpx
 import openai
+import pytest
+from pydantic import ValidationError
 
-from app.modules.planning.commands import OpenAIPlanningProvider
+from app.modules.planning.commands import OpenAIActionEnvelope, OpenAIPlanningProvider
 
 
 def test_real_sdk_sends_strict_structured_request_and_parses_action(settings, monkeypatch):
@@ -28,3 +32,28 @@ def test_real_sdk_sends_strict_structured_request_and_parses_action(settings, mo
     assert captured[0]['text']['format']['type'] == 'json_schema'
     assert captured[0]['store'] is False
     assert captured[0]['model'] == 'gpt-5.6-luna'
+
+    quantity = captured[0]['text']['format']['schema']['$defs']['ListItemCreate']['properties']['quantity']
+    for option in quantity['anyOf']:
+        assert '(?' not in option.get('pattern', '')
+    numeric = next(option for option in quantity['anyOf'] if option.get('type') == 'number')
+    assert numeric['exclusiveMinimum'] == 0
+
+
+@pytest.mark.parametrize('quantity', ['0', '-1', '1.23456', '10000000000', 'not-a-number'])
+def test_openai_envelope_still_rejects_invalid_quantities(quantity):
+    with pytest.raises(ValidationError):
+        OpenAIActionEnvelope.model_validate({'action': {
+            'type': 'add_list_items', 'payload': {
+                'list_id': str(uuid4()), 'items': [{'title': 'Milk', 'quantity': quantity}],
+            },
+        }})
+
+
+def test_openai_envelope_preserves_exact_decimal_quantity():
+    result = OpenAIActionEnvelope.model_validate({'action': {
+        'type': 'add_list_items', 'payload': {
+            'list_id': str(uuid4()), 'items': [{'title': 'Milk', 'quantity': '9999999999.1234'}],
+        },
+    }})
+    assert result.action.payload.items[0].quantity == Decimal('9999999999.1234')
