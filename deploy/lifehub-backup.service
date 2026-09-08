@@ -1,0 +1,8 @@
+[Unit]
+Description=Life Hub PostgreSQL backup
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh /srv/lifehub/deploy/backup.sh

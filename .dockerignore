@@ -1,0 +1,15 @@
+.git
+.venv
+.env
+.pytest_cache
+.ruff_cache
+__pycache__
+*.pyc
+*.db
+docs/figjam-*
+tests
+.test-tmp*
+.migration-draft.db
+.docker-build.log
+scripts
+.env.*

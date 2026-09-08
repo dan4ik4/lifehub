@@ -1,0 +1,1409 @@
+
+
+SECTION: back
+
+SECTION: Life Hub — backend runtime architecture
+
+SECTION: Client Apps
+
+Flutter Mobile
+Flutter Web
+
+SECTION: Application
+
+FastAPI Modular Monolith
+Scheduler and Background Worker
+Schedules Jobs
+
+HTTPS API Gateway
+PostgreSQL
+Export and Avatar Storage
+OpenAI Models
+App Store and Google Play
+Google and Apple Calendar
+Resend Email
+Open Library
+HTTPS
+HTTPS
+Routes /api/v1
+Reads and Writes
+Stores Files
+AI: Generate
+Billing: Verify
+Planning: Sync
+Auth: Send Email
+Books: Search
+Reads and Writes
+Stores Exports
+
+SECTION: auth/ API
+
+routes.py
+schemas.py
+Validates
+dependencies.py
+Resolves user
+
+SECTION: auth/ Services
+
+AuthService
+OtpService
+
+TokenService
+
+SocialAuthService
+
+PasswordService
+
+SECTION: auth/ Data
+
+AuthCrud
+UserCrud
+Auth Models
+
+SECTION: Providers
+
+PostgreSQL
+Email Gateway
+Google and Apple Verifier
+
+Flutter Auth Screens
+HTTP request
+Calls
+
+Sends OTP
+Sends reset
+Verifies token
+
+SECTION: planning/ API
+
+routes.py
+schemas.py
+Validates
+dependencies.py
+Checks access
+
+SECTION: planning/ Services
+
+PlanningService
+RecurrenceService
+
+CalendarQueryService
+
+CalendarSyncService
+ReminderService
+
+PlanningCommandExecutor
+
+SECTION: planning/ Data
+
+PlanningCrud
+CalendarSyncCrud
+Planning Models
+
+SECTION: Infrastructure
+
+PostgreSQL
+Calendar Provider Adapter
+Background Scheduler
+
+Planning Screens
+AI Structured Action
+HTTP request
+Calls
+
+Syncs events
+Runs reminders
+Runs sync
+
+TEXT: Life Hub — Backend Architecture
+
+TEXT: Modular monolith for the current FigJam scope. Detailed contracts below cover Auth and Planning.
+
+SECTION: General backend structure
+
+TEXT: 1. Общая структура backend
+
+TEXT: Один deployable FastAPI-сервис, но код режется по бизнес-модулям. В каждом модуле своя модель, схемы, CRUD, сервис и роуты.
+
+app/
+├── main.py
+├── core/
+│   ├── config.py · database.py · security.py
+│   └── errors.py · rate_limits.py · logging.py
+├── api/v1/router.py
+├── modules/
+│   ├── auth/
+│   │   ├── models.py · schemas.py · crud.py
+│   │   ├── service.py · routes.py · dependencies.py
+│   │   └── otp.py · tokens.py · oauth.py
+│   ├── users/
+│   ├── onboarding/
+│   ├── dashboard/
+│   ├── planning/
+│   │   ├── models.py · schemas.py · crud.py
+│   │   ├── service.py · routes.py · dependencies.py
+│   │   └── recurrence.py · sync.py
+│   ├── goals_habits/
+│   ├── health/
+│   ├── finance/
+│   ├── books_diary/
+│   ├── ai/
+│   │   └── router.py · prompts/ · providers/
+│   ├── billing/
+│   │   └── provider.py · webhooks.py
+│   ├── notifications/
+│   │   └── providers/
+│   ├── integrations/
+│   │   └── providers/
+│   └── privacy/
+├── workers/
+│   ├── scheduler.py
+│   └── jobs/
+├── migrations/
+└── tests/
+├── unit/
+└── integration/
+
+Стандарт для доменного модуля:
+models.py · schemas.py · crud.py · service.py · routes.py
+
+TABLE: 178:4061
+
+| Модуль
+
+| Зона ответственности
+
+| Дополнительные части
+
+| auth
+
+| Регистрация, OTP, login, social, refresh, reset
+
+| otp.py, tokens.py, oauth.py
+
+| users
+
+| Профиль, настройки, avatar, soft delete
+
+| profile service
+
+| onboarding
+
+| 3 шага, free_modules, trial activation
+
+| entitlement checks
+
+| dashboard
+
+| Один агрегирующий GET для виджетов
+
+| widget aggregators
+
+| planning
+
+| Задачи, календарь, списки, RRULE
+
+| recurrence.py, sync.py
+
+| goals_habits
+
+| Цели, этапы, привычки, check-ins, streak
+
+| streak jobs
+
+| health
+
+| Сон, тренировки, вес, питание, лекарства
+
+| Health adapters
+
+| finance
+
+| Операции, бюджет, подписки, цели, баланс
+
+| OCR flow, FX cache
+
+| books_diary
+
+| Книги, прогресс, дневник, AI digest
+
+| Open Library adapter
+
+| ai
+
+| Luna router, Terra/Sol, prompts, limits, SSE
+
+| router.py, prompts/, providers/
+
+| billing
+
+| Free/Trial/Pro и store webhooks
+
+| provider.py, webhooks.py
+
+| notifications
+
+| Push/email и настройки уведомлений
+
+| providers/
+
+| integrations
+
+| Google/Apple Calendar и Health sync
+
+| provider adapters
+
+| privacy
+
+| GDPR export, deletion grace period
+
+| export jobs
+
+| workers
+
+| Cron, reminders, digests, cleanup, sync
+
+| scheduler.py, jobs/
+
+TEXT: ЗАЛУПА
+
+SECTION: Auth exact contracts
+
+TEXT: 2. Auth — точная архитектура, классы и API
+
+TEXT: Источник истины: email+OTP, Google/Apple, access+refresh JWT, password reset и маршрутизация в onboarding.
+
+TABLE: 178:4066
+
+| Тип
+
+| Класс
+
+| Назначение
+
+| ORM
+
+| User
+
+| Аккаунт; password_hash nullable для social-only; plan, trial_ends, onboarding_completed, free_modules, deleted_at
+
+| ORM
+
+| PendingRegistration
+
+| name, email, password_hash, otp_hash, otp_expires_at, expires_at, attempts, resend_count, last_sent_at
+
+| ORM
+
+| AuthIdentity
+
+| user_id, provider, provider_subject; уникальная внешняя identity Google/Apple
+
+| ORM
+
+| RefreshSession
+
+| user_id, token_hash, family_id, expires_at, revoked_at, replaced_by_id, device_info
+
+| ORM
+
+| PasswordResetToken
+
+| user_id, token_hash, expires_at, used_at
+
+| ORM
+
+| EmailChangeChallenge
+
+| user_id, new_email, otp_hash, expires_at, attempts, used_at
+
+| Enum
+
+| AuthProvider
+
+| password | google | apple
+
+| Service
+
+| AuthService
+
+| Оркестрирует preregister, confirm, login, refresh, logout
+
+| Service
+
+| OtpService
+
+| Генерация, hash, verify, cooldown, attempts и resend limits
+
+| Service
+
+| TokenService
+
+| Access JWT, rotating refresh tokens, reuse detection, revoke family
+
+| Service
+
+| SocialAuthService
+
+| Google/Apple token verification, identity link/create
+
+| Service
+
+| PasswordService
+
+| Hash/verify, forgot/reset/change password
+
+| Service
+
+| EmailChangeService
+
+| OTP-процесс безопасной смены email
+
+| CRUD
+
+| AuthCrud
+
+| Pending registrations, identities, refresh sessions, reset/email challenges
+
+| CRUD
+
+| UserCrud
+
+| Create/find/update User внутри транзакции auth
+
+| Provider
+
+| PasswordHasher
+
+| bcrypt/argon adapter; бизнес-логика не знает библиотеку
+
+| Protocol
+
+| EmailSender
+
+| send_otp, send_password_reset, send_email_change
+
+| Protocol
+
+| OAuthTokenVerifier
+
+| verify(provider, token) → verified identity
+
+| Provider
+
+| GoogleTokenVerifier
+
+| Проверка Google ID token
+
+| Provider
+
+| AppleTokenVerifier
+
+| Проверка Apple identity token и first-login name
+
+| Request
+
+| PreregisterRequest
+
+| name, email, password
+
+| Request
+
+| ConfirmRegistrationRequest
+
+| challenge_id, otp
+
+| Request
+
+| ResendOtpRequest
+
+| challenge_id
+
+| Request
+
+| LoginRequest
+
+| email, password
+
+| Request
+
+| SocialLoginRequest
+
+| provider, token
+
+| Request
+
+| RefreshTokenRequest
+
+| refresh_token
+
+| Request
+
+| LogoutRequest
+
+| refresh_token
+
+| Request
+
+| ForgotPasswordRequest
+
+| email
+
+| Request
+
+| ResetPasswordRequest
+
+| token, new_password
+
+| Request
+
+| ChangeEmailRequest
+
+| new_email
+
+| Request
+
+| ConfirmEmailChangeRequest
+
+| challenge_id, otp
+
+| Request
+
+| ChangePasswordRequest
+
+| current_password, new_password
+
+| Response
+
+| OtpChallengeResponse
+
+| Без секретов; сроки challenge и оставшиеся попытки
+
+| Response
+
+| TokenPairResponse
+
+| Access + refresh metadata
+
+| Response
+
+| AuthSessionResponse
+
+| UserAuthResponse + TokenPairResponse + is_new_user
+
+| Response
+
+| UserAuthResponse
+
+| Минимальный auth/profile state для маршрутизации
+
+| Response
+
+| MessageResponse
+
+| Нейтральное подтверждение принятого действия
+
+| Response
+
+| ErrorResponse
+
+| Единый machine-readable envelope
+
+| Response
+
+| ValidationErrorResponse
+
+| 422: список ошибок по полям
+
+TABLE: 178:4067
+
+| Method
+
+| Path
+
+| Request
+
+| Успешный ответ
+
+| Ошибки
+
+| POST
+
+| /api/v1/auth/preregister
+
+| PreregisterRequest
+
+| 202 OtpChallengeResponse
+
+| 409 email_in_use; 422 validation; 429 rate_limit
+
+| POST
+
+| /api/v1/auth/confirm
+
+| ConfirmRegistrationRequest
+
+| 201 AuthSessionResponse
+
+| 400 invalid_otp; 410 otp_expired; 423 otp_locked; 422; 429
+
+| POST
+
+| /api/v1/auth/resend
+
+| ResendOtpRequest
+
+| 202 OtpChallengeResponse
+
+| 404 challenge_not_found; 410 registration_expired; 429 cooldown_or_limit
+
+| POST
+
+| /api/v1/auth/login
+
+| LoginRequest
+
+| 200 AuthSessionResponse
+
+| 401 invalid_credentials; 403 account_unavailable; 422; 429
+
+| POST
+
+| /api/v1/auth/social
+
+| SocialLoginRequest
+
+| 200 existing / 201 new AuthSessionResponse
+
+| 401 invalid_provider_token; 409 identity_conflict; 422; 429
+
+| POST
+
+| /api/v1/auth/refresh
+
+| RefreshTokenRequest
+
+| 200 TokenPairResponse
+
+| 401 invalid_expired_or_reused_refresh; 422; 429
+
+| POST
+
+| /api/v1/auth/logout
+
+| LogoutRequest
+
+| 204 No Content
+
+| 401 invalid_refresh; 422
+
+| POST
+
+| /api/v1/auth/forgot-password
+
+| ForgotPasswordRequest
+
+| 202 MessageResponse always
+
+| 422 validation; 429 rate_limit
+
+| POST
+
+| /api/v1/auth/reset-password
+
+| ResetPasswordRequest
+
+| 204 No Content
+
+| 400 invalid_token; 410 token_expired; 422 weak_password; 429
+
+| POST
+
+| /api/v1/auth/change-email
+
+| ChangeEmailRequest
+
+| 202 OtpChallengeResponse
+
+| 401; 409 email_in_use; 422; 429
+
+| POST
+
+| /api/v1/auth/confirm-email-change
+
+| ConfirmEmailChangeRequest
+
+| 200 UserAuthResponse
+
+| 400 invalid_otp; 401; 409; 410; 423; 422; 429
+
+| POST
+
+| /api/v1/auth/change-password
+
+| ChangePasswordRequest
+
+| 204 No Content
+
+| 401 invalid_current_password; 422; 429
+
+| GET
+
+| /api/v1/users/me
+
+| —
+
+| 200 UserAuthResponse
+
+| 401 unauthorized
+
+| PATCH
+
+| /api/v1/users/me
+
+| UserPatchRequest
+
+| 200 UserAuthResponse
+
+| 401; 409 immutable_free_modules; 422
+
+TABLE: 178:4068
+
+| Response schema
+
+| Поля
+
+| OtpChallengeResponse
+
+| challenge_id: UUID; otp_expires_at: datetime; registration_expires_at: datetime; resend_available_at: datetime; attempts_left: int
+
+| TokenPairResponse
+
+| access_token: str; refresh_token: str; token_type: literal bearer; expires_in: int; refresh_expires_in: int
+
+| AuthSessionResponse
+
+| user: UserAuthResponse; tokens: TokenPairResponse; is_new_user: bool
+
+| UserAuthResponse
+
+| id: UUID; name: str; email: EmailStr; email_verified: bool; auth_providers: list[AuthProvider]; plan: free|trial|pro; trial_ends: datetime|null; onboarding_completed: bool; free_modules: list[ModuleCode]
+
+| MessageResponse
+
+| message: str
+
+| ErrorDetail
+
+| field: str|null; message: str; type: str
+
+| ErrorResponse
+
+| error.code: str; error.message: str; error.details: list[ErrorDetail]; trace_id: str
+
+| ValidationErrorResponse
+
+| ErrorResponse with code=validation_error and one ErrorDetail per invalid field
+
+TEXT: Инварианты: OTP 6 цифр, живёт 10 мин; pending registration живёт 12 ч; максимум 5 неверных попыток; resend через 60 сек, максимум 3; confirm создаёт User и сразу возвращает JWT; access 15 мин, refresh 30 дней с rotation/reuse detection; forgot-password всегда отвечает одинаково; пароль/OTP/refresh хранятся только как hash.
+
+SECTION: Planning exact contracts
+
+TEXT: 3. Planning — точная архитектура, классы и API
+
+TEXT: Задачи, день/неделя, события, списки, RRULE-повторы, напоминания, AI quick-add и Pro calendar sync.
+
+TABLE: 178:4073
+
+| Тип
+
+| Класс
+
+| Назначение
+
+| ORM
+
+| Task
+
+| Владелец, title, notes, start/due, all_day, priority, rrule, completed_at, deleted_at
+
+| ORM
+
+| TaskOccurrence
+
+| Исключение/состояние конкретного повтора: occurrence_at, status, completed_at
+
+| ORM
+
+| CalendarEvent
+
+| Локальное или синхронизированное событие; start/end/timezone/all_day/rrule/source
+
+| ORM
+
+| PlanningList
+
+| Shopping system list или custom Pro list
+
+| ORM
+
+| ListItem
+
+| Пункт списка; quantity, unit, checked, position
+
+| ORM
+
+| Reminder
+
+| entity_type/id, trigger_at или offset, channel, delivered_at
+
+| ORM
+
+| CalendarConnection
+
+| provider, encrypted credentials, status, last_synced_at
+
+| ORM
+
+| ExternalEventLink
+
+| Local event ↔ provider/external_id, etag, sync version
+
+| ORM
+
+| CalendarSyncCursor
+
+| Incremental sync token/cursor per connection
+
+| Domain
+
+| RecurrenceRule
+
+| RFC 5545 RRULE value object; validate and calculate occurrences
+
+| Domain
+
+| PlanningCommand
+
+| create_task | update_task | create_event | add_list_items
+
+| Domain
+
+| TaskDraft
+
+| Структурированный результат Luna для задачи
+
+| Domain
+
+| EventDraft
+
+| Структурированный результат Luna для события
+
+| Domain
+
+| ListItemsDraft
+
+| Структурированный результат Luna для нескольких пунктов
+
+| Enum
+
+| TaskPriority
+
+| none | low | medium | high
+
+| Enum
+
+| OccurrenceStatus
+
+| pending | completed | skipped
+
+| Enum
+
+| PlanningSource
+
+| local | google | apple | ai
+
+| Enum
+
+| ConnectionStatus
+
+| active | reauth_required | disconnected
+
+| Service
+
+| PlanningService
+
+| Транзакционная фасада для routes и AI executor
+
+| Service
+
+| TaskService
+
+| CRUD задач и completion конкретных occurrence
+
+| Service
+
+| CalendarQueryService
+
+| Единый range view для day/week: tasks + events
+
+| Service
+
+| ListService
+
+| Shopping list, custom lists и bulk items
+
+| Service
+
+| RecurrenceService
+
+| RRULE parse/validate/next/between без N копий
+
+| Service
+
+| ReminderService
+
+| Планирование и доставка напоминаний
+
+| Service
+
+| CalendarSyncService
+
+| Pull/push sync, cursor, idempotency и conflict policy
+
+| Service
+
+| PlanningCommandExecutor
+
+| Применяет типизированный AI action через PlanningService
+
+| CRUD
+
+| TaskCrud
+
+| Owner-scoped SQLAlchemy queries и optimistic version
+
+| CRUD
+
+| CalendarEventCrud
+
+| Range queries и local event mutations
+
+| CRUD
+
+| ListCrud
+
+| Lists/items/bulk operations
+
+| CRUD
+
+| ReminderCrud
+
+| Due reminder selection and delivery mark
+
+| CRUD
+
+| CalendarSyncCrud
+
+| Connections, links, cursor and sync state
+
+| Dependency
+
+| PlanningAccess
+
+| current_user + module entitlement + Pro feature check
+
+| Dependency
+
+| EntitlementService
+
+| free_modules, trial/pro и feature gates
+
+| Protocol
+
+| CalendarProviderAdapter
+
+| authorize, exchange, pull_changes, push_change, revoke
+
+| Provider
+
+| GoogleCalendarAdapter
+
+| Server-side Google Calendar sync
+
+| Provider
+
+| DeviceCalendarBridgeAdapter
+
+| Normalized device/Apple calendar deltas from Flutter
+
+| Worker
+
+| PlanningReminderJob
+
+| Выбирает due reminders и отправляет идемпотентно
+
+| Worker
+
+| CalendarSyncJob
+
+| Периодическая и ручная синхронизация connections
+
+| Request
+
+| TaskCreate | TaskUpdate
+
+| Поля задачи; rrule/priority проверяются как Pro
+
+| Request
+
+| TaskCompleteRequest
+
+| occurrence_at nullable для one-off
+
+| Request
+
+| CalendarEventCreate | CalendarEventUpdate
+
+| Поля события и optional rrule
+
+| Request
+
+| PlanningListCreate | PlanningListUpdate
+
+| Custom list mutations
+
+| Request
+
+| ListItemCreate | ListItemUpdate | ListItemsBulkCreate
+
+| Пункт или массив пунктов
+
+| Request
+
+| CalendarConnectRequest | CalendarSyncRequest
+
+| Provider connection/sync
+
+| Response
+
+| TaskResponse | TaskOccurrenceResponse | TaskPageResponse
+
+| Task contracts
+
+| Response
+
+| CalendarEventResponse | CalendarRangeResponse | EventPageResponse
+
+| Calendar contracts
+
+| Response
+
+| PlanningListResponse | ListItemResponse | collection responses
+
+| List contracts
+
+| Response
+
+| CalendarConnectionResponse | CalendarAuthUrlResponse | CalendarSyncJobResponse
+
+| Sync contracts
+
+| Response
+
+| PlanningCommandResponse
+
+| AI action + affected resources
+
+| Response
+
+| ErrorResponse
+
+| Общий envelope из core.schemas
+
+TABLE: 178:4074
+
+| Method
+
+| Path
+
+| Request
+
+| Успешный ответ
+
+| Ошибки
+
+| GET
+
+| /api/v1/planning/tasks
+
+| query filters + cursor
+
+| 200 TaskPageResponse
+
+| 401; 403 module_locked; 422
+
+| POST
+
+| /api/v1/planning/tasks
+
+| TaskCreate
+
+| 201 TaskResponse
+
+| 401; 403 module_or_pro_feature; 409 duplicate; 422
+
+| GET
+
+| /api/v1/planning/tasks/{task_id}
+
+| —
+
+| 200 TaskResponse
+
+| 401; 403; 404
+
+| PATCH
+
+| /api/v1/planning/tasks/{task_id}
+
+| TaskUpdate
+
+| 200 TaskResponse
+
+| 401; 403 module_or_pro_feature; 404; 409 version_conflict; 422
+
+| DELETE
+
+| /api/v1/planning/tasks/{task_id}
+
+| —
+
+| 204 No Content
+
+| 401; 403; 404
+
+| POST
+
+| /api/v1/planning/tasks/{task_id}/complete
+
+| TaskCompleteRequest
+
+| 200 TaskOccurrenceResponse
+
+| 401; 403; 404; 409 already_completed; 422
+
+| POST
+
+| /api/v1/planning/tasks/{task_id}/reopen
+
+| TaskCompleteRequest
+
+| 200 TaskOccurrenceResponse
+
+| 401; 403; 404; 409 not_completed; 422
+
+| GET
+
+| /api/v1/planning/calendar
+
+| from, to, timezone
+
+| 200 CalendarRangeResponse
+
+| 401; 403; 422 invalid_or_large_range
+
+| GET
+
+| /api/v1/planning/events
+
+| filters + cursor
+
+| 200 EventPageResponse
+
+| 401; 403; 422
+
+| POST
+
+| /api/v1/planning/events
+
+| CalendarEventCreate
+
+| 201 CalendarEventResponse
+
+| 401; 403 pro_recurrence; 409 overlap_policy_if_enabled; 422
+
+| GET
+
+| /api/v1/planning/events/{event_id}
+
+| —
+
+| 200 CalendarEventResponse
+
+| 401; 403; 404
+
+| PATCH
+
+| /api/v1/planning/events/{event_id}
+
+| CalendarEventUpdate
+
+| 200 CalendarEventResponse
+
+| 401; 403; 404; 409 version_or_sync_conflict; 422
+
+| DELETE
+
+| /api/v1/planning/events/{event_id}
+
+| scope=this|future|all
+
+| 204 No Content
+
+| 401; 403; 404; 409 sync_conflict; 422
+
+| GET
+
+| /api/v1/planning/lists
+
+| —
+
+| 200 PlanningListCollectionResponse
+
+| 401; 403
+
+| POST
+
+| /api/v1/planning/lists
+
+| PlanningListCreate
+
+| 201 PlanningListResponse
+
+| 401; 403 pro_required; 409 list_limit; 422
+
+| GET
+
+| /api/v1/planning/lists/{list_id}
+
+| —
+
+| 200 PlanningListResponse
+
+| 401; 403; 404
+
+| PATCH
+
+| /api/v1/planning/lists/{list_id}
+
+| PlanningListUpdate
+
+| 200 PlanningListResponse
+
+| 401; 403 pro_required; 404; 409 system_list_locked; 422
+
+| DELETE
+
+| /api/v1/planning/lists/{list_id}
+
+| —
+
+| 204 No Content
+
+| 401; 403 pro_required; 404; 409 system_list_locked
+
+| GET
+
+| /api/v1/planning/lists/{list_id}/items
+
+| cursor
+
+| 200 ListItemCollectionResponse
+
+| 401; 403; 404; 422
+
+| POST
+
+| /api/v1/planning/lists/{list_id}/items
+
+| ListItemCreate
+
+| 201 ListItemResponse
+
+| 401; 403; 404; 422
+
+| POST
+
+| /api/v1/planning/lists/{list_id}/items/bulk
+
+| ListItemsBulkCreate
+
+| 201 ListItemCollectionResponse
+
+| 401; 403; 404; 422
+
+| PATCH
+
+| /api/v1/planning/lists/{list_id}/items/{item_id}
+
+| ListItemUpdate
+
+| 200 ListItemResponse
+
+| 401; 403; 404; 409 version_conflict; 422
+
+| DELETE
+
+| /api/v1/planning/lists/{list_id}/items/{item_id}
+
+| —
+
+| 204 No Content
+
+| 401; 403; 404
+
+| GET
+
+| /api/v1/planning/calendar-connections
+
+| —
+
+| 200 CalendarConnectionCollectionResponse
+
+| 401; 403 pro_required
+
+| POST
+
+| /api/v1/planning/calendar-connections/{provider}/start
+
+| CalendarConnectRequest
+
+| 200 CalendarAuthUrlResponse
+
+| 401; 403 pro_required; 409 already_connected; 422
+
+| POST
+
+| /api/v1/planning/calendar-connections/{provider}/callback
+
+| OAuth callback payload
+
+| 201 CalendarConnectionResponse
+
+| 401; 403; 409 state_or_account_conflict; 422
+
+| POST
+
+| /api/v1/planning/calendar-connections/{connection_id}/sync
+
+| CalendarSyncRequest
+
+| 202 CalendarSyncJobResponse
+
+| 401; 403 pro_required; 404; 409 sync_running; 422
+
+| DELETE
+
+| /api/v1/planning/calendar-connections/{connection_id}
+
+| —
+
+| 204 No Content
+
+| 401; 403; 404
+
+| POST
+
+| /api/v1/ai/chat
+
+| AiChatRequest context=planning, mode=command
+
+| 200 PlanningCommandResponse
+
+| 401; 403 module_locked; 422; 429 ai_limit; 502 model_error
+
+TABLE: 178:4075
+
+| Response schema
+
+| Поля
+
+| TaskResponse
+
+| id, title, notes|null, start_at|null, due_at|null, timezone, all_day, priority, recurrence|null, completed, next_occurrence_at|null, reminders[], version, created_at, updated_at
+
+| TaskOccurrenceResponse
+
+| task_id, occurrence_at, status, completed_at|null, effective_start_at|null, effective_due_at|null
+
+| TaskPageResponse
+
+| items: list[TaskResponse], next_cursor: str|null, total: int
+
+| CalendarEventResponse
+
+| id, title, notes|null, start_at, end_at, timezone, all_day, recurrence|null, source, connection_id|null, external_read_only, version, created_at, updated_at
+
+| EventPageResponse
+
+| items: list[CalendarEventResponse], next_cursor: str|null, total: int
+
+| CalendarRangeResponse
+
+| from, to, timezone, tasks: list[TaskOccurrenceResponse], events: list[CalendarEventResponse]
+
+| PlanningListResponse
+
+| id, name, kind: shopping|custom, is_system, is_editable, item_count, completed_count, created_at, updated_at
+
+| ListItemResponse
+
+| id, list_id, title, quantity|null, unit|null, checked, position, version, created_at, updated_at
+
+| PlanningListCollectionResponse
+
+| items: list[PlanningListResponse]
+
+| ListItemCollectionResponse
+
+| items: list[ListItemResponse], next_cursor: str|null, total: int
+
+| RecurrenceRuleResponse
+
+| rrule: str, human_text: str, timezone: str, next_occurrence_at: datetime|null
+
+| CalendarConnectionResponse
+
+| id, provider, status, account_label, sync_enabled, last_synced_at|null, created_at
+
+| CalendarConnectionCollectionResponse
+
+| items: list[CalendarConnectionResponse]
+
+| CalendarAuthUrlResponse
+
+| authorize_url, state, expires_at
+
+| CalendarSyncJobResponse
+
+| job_id, status: queued|running|done|failed, accepted_at
+
+| PlanningAction
+
+| type: create_task|update_task|create_event|add_list_items; payload: typed draft
+
+| PlanningCommandResponse
+
+| message_id, action: PlanningAction, affected_resources: list[ResourceRef], remaining_ai_requests
+
+| ResourceRef
+
+| type: task|event|list_item; id: UUID
+
+| ErrorResponse
+
+| error.code, error.message, error.details[], trace_id; одинаковый для всех модулей
+
+TEXT: Инварианты: все запросы owner-scoped; недоступный Free-модуль → 403 module_locked; recurrence, priority, multiple lists и calendar sync → 403 pro_required; повтор хранится одной RFC 5545 RRULE, TaskOccurrence хранит только исключения/выполнение; календарный range объединяет occurrences задач и events; UTC в БД, timezone в данных пользователя/объекта; sync и AI actions идемпотентны; optimistic version защищает от двойных свайпов и конфликтов sync.

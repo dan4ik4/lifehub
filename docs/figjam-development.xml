@@ -1,0 +1,116 @@
+<canvas id="137:763" name="Разработка" x="0" y="0" width="0" height="0">
+  <section id="138:763" name="Регистрация" x="0" y="0" width="1168" height="1736">
+    <text id="138:764" name="1 · Регистрация" x="48" y="48" width="307" height="48" />
+    <shape-with-text id="139:764" x="48" y="190" width="460" height="132" name="ROUNDED_RECTANGLE">Экран регистрации
+Email + пароль (×2)</shape-with-text>
+    <shape-with-text id="139:768" x="48" y="366" width="460" height="132" name="SQUARE">POST /auth/pre-register
+Валидация полей → создаётся запись pending_registration</shape-with-text>
+    <shape-with-text id="139:772" x="48" y="560" width="460" height="132" name="SQUARE">SendRegisterCode
+Код из 6 цифр на email · TTL 10 мин</shape-with-text>
+    <shape-with-text id="139:776" x="48" y="736" width="460" height="132" name="ROUNDED_RECTANGLE">Экран подтверждения
+Email + код (6 цифр)</shape-with-text>
+    <shape-with-text id="139:780" x="78" y="912" width="400" height="180" name="DIAMOND">Код верный?</shape-with-text>
+    <shape-with-text id="139:784" x="48" y="1164" width="460" height="166" name="SQUARE">CreateAccount
+pending_registration → users
+Выдаём JWT: access 15 мин + refresh 30 дней</shape-with-text>
+    <shape-with-text id="139:788" x="48" y="1380" width="460" height="166" name="SQUARE">InfoAboutUser
+name — до 50 символов
+(username решили не вводить)</shape-with-text>
+    <shape-with-text id="139:792" x="48" y="1556" width="460" height="132" name="ROUNDED_RECTANGLE">→ Онбординг (3 шага)
+Приветствие → 3 из 5 модулей → выбор тарифа</shape-with-text>
+    <shape-with-text id="139:796" x="600" y="912" width="440" height="234" name="SQUARE">Код неверный / истёк
+• 5 попыток ввода на один код
+• 3 отправки кода за все 12 часов жизни pending_registration (включая первую)
+• Кулдаун 60 сек между отправками
+• Лимиты исчерпаны или 12 ч прошло → pending_registration удаляется, регистрация с нуля</shape-with-text>
+    <connector id="139:800" x="278" y="330" connectorStart="139:764" connectorStartCap="NONE" connectorEnd="139:768" connectorEndCap="ARROW_LINES"></connector>
+    <connector id="139:804" x="278" y="506" connectorStart="139:768" connectorStartCap="NONE" connectorEnd="139:772" connectorEndCap="ARROW_LINES"></connector>
+    <connector id="139:808" x="278" y="672.5" connectorStart="139:772" connectorStartCap="NONE" connectorEnd="139:776" connectorEndCap="ARROW_LINES"></connector>
+    <connector id="139:812" x="278" y="876" connectorStart="139:776" connectorStartCap="NONE" connectorEnd="139:780" connectorEndCap="ARROW_LINES"></connector>
+    <connector id="139:816" x="259.5" y="1100" connectorStart="139:780" connectorStartCap="NONE" connectorEnd="139:784" connectorEndCap="ARROW_LINES">да</connector>
+    <connector id="139:820" x="278" y="1338" connectorStart="139:784" connectorStartCap="NONE" connectorEnd="139:788" connectorEndCap="ARROW_LINES"></connector>
+    <connector id="139:824" x="278" y="1547.5" connectorStart="139:788" connectorStartCap="NONE" connectorEnd="139:792" connectorEndCap="ARROW_LINES"></connector>
+    <connector id="139:828" x="486" y="995" connectorStart="139:780" connectorStartCap="NONE" connectorEnd="139:796" connectorEndCap="ARROW_LINES">нет</connector>
+    <connector id="139:832" x="492.5" y="802" connectorStart="139:796" connectorStartCap="NONE" connectorEnd="139:776" connectorEndCap="ARROW_LINES">повтор ввода</connector>
+    <connector id="139:836" x="220.5" y="672.5" connectorStart="139:776" connectorStartCap="NONE" connectorEnd="139:772" connectorEndCap="ARROW_LINES">Resend code</connector>
+    <rounded-rectangle id="136:1088" name="image 1" x="600" y="48" width="511.57366943359375" height="480" />
+  </section>
+  <section id="138:765" name="Вход" x="1312" y="0" width="2000" height="1296">
+    <text id="146:926" name="2 · Вход" x="48" y="48" width="155" height="48" />
+    <shape-with-text id="146:927" x="460" y="142" width="440" height="104" name="ROUNDED_RECTANGLE">Экран входа</shape-with-text>
+    <shape-with-text id="146:931" x="48" y="326" width="420" height="122" name="SQUARE">Apple ID / Google
+Только вход. Пароль не создаётся и не нужен</shape-with-text>
+    <shape-with-text id="146:935" x="620" y="326" width="400" height="104" name="SQUARE">Email + пароль</shape-with-text>
+    <shape-with-text id="146:939" x="48" y="528" width="420" height="166" name="SQUARE">Поиск аккаунта по providerId (Apple/Google)
+Это отдельная запись от аккаунта с паролем, даже если email совпадает — не объединяем</shape-with-text>
+    <shape-with-text id="146:943" x="620" y="528" width="400" height="180" name="DIAMOND">Данные верны?</shape-with-text>
+    <shape-with-text id="146:947" x="1120" y="528" width="420" height="166" name="SQUARE">Ошибка входа
+• Единый текст ошибки — не раскрываем, существует ли email
+• 5 неверных попыток → блокировка на 15 мин</shape-with-text>
+    <shape-with-text id="146:951" x="48" y="788" width="420" height="180" name="DIAMOND">Аккаунт найден?</shape-with-text>
+    <shape-with-text id="146:955" x="48" y="1048" width="460" height="188" name="SQUARE">CreateAccount (через провайдера)
+Email уже подтверждён провайдером — код и пароль не нужны
+Выдаём JWT: access 15 мин + refresh 30 дней
+→ экран name → онбординг</shape-with-text>
+    <shape-with-text id="146:959" x="620" y="1048" width="480" height="144" name="SQUARE">Access
+JWT: access 15 мин + refresh 30 дней
+refresh — в защищённом хранилище устройства</shape-with-text>
+    <shape-with-text id="146:963" x="1100" y="48" width="420" height="220" name="ROUNDED_RECTANGLE">Забыли пароль?
+→ блок 3 «Восстановление пароля»
+Только для аккаунтов с email + пароль</shape-with-text>
+    <connector id="146:967" x="428" y="194" connectorStart="146:927" connectorStartCap="NONE" connectorEnd="146:931" connectorEndCap="ARROW_LINES"></connector>
+    <connector id="146:971" x="588" y="254" connectorStart="146:927" connectorStartCap="NONE" connectorEnd="146:935" connectorEndCap="ARROW_LINES"></connector>
+    <connector id="146:975" x="258" y="456" connectorStart="146:931" connectorStartCap="NONE" connectorEnd="146:939" connectorEndCap="ARROW_LINES"></connector>
+    <connector id="146:979" x="820" y="438" connectorStart="146:935" connectorStartCap="NONE" connectorEnd="146:943" connectorEndCap="ARROW_LINES"></connector>
+    <connector id="146:983" x="258" y="702" connectorStart="146:939" connectorStartCap="NONE" connectorEnd="146:951" connectorEndCap="ARROW_LINES"></connector>
+    <connector id="146:987" x="476" y="878" connectorStart="146:951" connectorStartCap="NONE" connectorEnd="146:959" connectorEndCap="ARROW_LINES">да</connector>
+    <connector id="146:991" x="246" y="976" connectorStart="146:951" connectorStartCap="NONE" connectorEnd="146:955" connectorEndCap="ARROW_LINES">нет</connector>
+    <connector id="146:995" x="820" y="716" connectorStart="146:943" connectorStartCap="NONE" connectorEnd="146:959" connectorEndCap="ARROW_LINES">да</connector>
+    <connector id="146:999" x="1028" y="594" connectorStart="146:943" connectorStartCap="NONE" connectorEnd="146:947" connectorEndCap="ARROW_LINES">нет</connector>
+    <connector id="146:1003" x="1028.5" y="378" connectorStart="146:947" connectorStartCap="NONE" connectorEnd="146:935" connectorEndCap="ARROW_LINES">повтор</connector>
+    <connector id="146:1007" x="1028.5" y="158" connectorStart="146:935" connectorStartCap="NONE" connectorEnd="146:963" connectorEndCap="ARROW_LINES"></connector>
+    <rounded-rectangle id="136:1107" name="image 2" x="1184" y="812" width="760.5042114257812" height="424.21875" />
+  </section>
+  <section id="138:767" name="Сброс пароля" x="3456" y="0" width="1088" height="1400">
+    <text id="138:768" name="3 · Восстановление пароля" x="48" y="48" width="538" height="48" />
+    <shape-with-text id="141:855" x="48" y="190" width="500" height="132" name="ROUNDED_RECTANGLE">ForgotPassword
+Ввод email</shape-with-text>
+    <shape-with-text id="141:859" x="48" y="366" width="500" height="200" name="SQUARE">SendResetCode
+6-значный код на email · TTL 10 мин
+5 попыток ввода, кулдаун 60 сек между отправками
+Ответ всегда одинаковый — не раскрываем, есть ли такой email</shape-with-text>
+    <shape-with-text id="141:863" x="48" y="604" width="500" height="132" name="ROUNDED_RECTANGLE">Экран смены пароля
+Код (6 цифр) + новый пароль (×2)</shape-with-text>
+    <shape-with-text id="141:867" x="78" y="780" width="440" height="180" name="DIAMOND">Пароль валиден и токен активен?</shape-with-text>
+    <shape-with-text id="141:871" x="48" y="1032" width="500" height="166" name="SQUARE">ChangePassword
+Пароль обновлён, код погашен
+Все refresh-токены отозваны → повторный вход на всех устройствах</shape-with-text>
+    <shape-with-text id="141:875" x="48" y="1248" width="500" height="104" name="ROUNDED_RECTANGLE">→ Экран входа (блок 2)</shape-with-text>
+    <shape-with-text id="141:879" x="620" y="780" width="420" height="132" name="SQUARE">Код неверный / истёк или пароль не проходит правила
+→ запросить код заново (те же лимиты)</shape-with-text>
+    <connector id="141:883" x="298" y="330" connectorStart="141:855" connectorStartCap="NONE" connectorEnd="141:859" connectorEndCap="ARROW_LINES"></connector>
+    <connector id="141:887" x="193" y="540" connectorStart="141:859" connectorStartCap="NONE" connectorEnd="141:863" connectorEndCap="ARROW_LINES">ввод кода в приложении</connector>
+    <connector id="141:891" x="298" y="744" connectorStart="141:863" connectorStartCap="NONE" connectorEnd="141:867" connectorEndCap="ARROW_LINES"></connector>
+    <connector id="141:895" x="279.5" y="968" connectorStart="141:867" connectorStartCap="NONE" connectorEnd="141:871" connectorEndCap="ARROW_LINES">да</connector>
+    <connector id="141:899" x="298" y="1206" connectorStart="141:871" connectorStartCap="NONE" connectorEnd="141:875" connectorEndCap="ARROW_LINES"></connector>
+    <connector id="141:903" x="526" y="837.5" connectorStart="141:867" connectorStartCap="NONE" connectorEnd="141:879" connectorEndCap="ARROW_LINES">нет</connector>
+    <connector id="141:907" x="548" y="256" connectorStart="141:879" connectorStartCap="NONE" connectorEnd="141:855" connectorEndCap="ARROW_LINES">повтор</connector>
+  </section>
+  <section id="138:769" name="Правила" x="-1130" y="0" width="986" height="1402">
+    <text id="146:1011" name="Общие правила и лимиты" x="48" y="48" width="890" height="48" />
+    <text id="146:1012" name="Email (Login)" x="48" y="150" width="890" height="29" />
+    <text id="146:1013" name="• Login = email, обязательное условие. Формат name@domain.tld • Нормализация перед сохранением и сравнением: trim + lowercase • Email уникален среди аккаунтов с паролем • Google/Apple-аккаунт — отдельная запись, привязанная к providerId, а не к email. Совпадение email с аккаунтом-паролем их не объединяет • Смена email в профиле (для аккаунтов с паролем) → повторная верификация кодом; до подтверждения действует старый email" x="48" y="191" width="890" height="133" />
+    <text id="146:1014" name="Пароль" x="48" y="364" width="890" height="29" />
+    <text id="146:1015" name="• Минимум 8 символов • Минимум 1 заглавная, 1 строчная буква и 1 цифра • Хранится только хэшем (bcrypt / argon2), в том числе в pending_registration • Те же правила при регистрации и при смене пароля • У аккаунтов через Apple / Google пароля нет и не будет — восстановление пароля для них не предусмотрено" x="48" y="405" width="890" height="114" />
+    <text id="146:1016" name="Код подтверждения (регистрация)" x="48" y="559" width="890" height="29" />
+    <text id="146:1017" name="• 6 цифр, время жизни 10 минут • 5 попыток ввода на один код • 3 отправки кода за все 12 часов жизни pending_registration, включая первую • Кулдаун 60 секунд между отправками • Через 12 часов запись удаляется → регистрация с нуля" x="48" y="600" width="890" height="95" />
+    <text id="146:1018" name="Код восстановления пароля" x="48" y="735" width="890" height="29" />
+    <text id="146:1019" name="• 6 цифр, не ссылка — на мобильном нет проблем с deep-link • Время жизни 10 минут, одноразовый • 5 попыток ввода, кулдаун 60 секунд между отправками • После смены пароля отзываем все refresh-токены пользователя • Доступен только аккаунтам с email + паролем" x="48" y="776" width="890" height="95" />
+    <text id="146:1020" name="Профиль" x="48" y="911" width="890" height="29" />
+    <text id="146:1021" name="• name — до 50 символов • username не используем" x="48" y="952" width="890" height="38" />
+    <text id="146:1022" name="Токены и сессии" x="48" y="1030" width="890" height="29" />
+    <text id="146:1023" name="• access JWT — 15 минут, refresh — 30 дней • refresh хранится в защищённом хранилище платформы (Keychain / Keystore)" x="48" y="1071" width="890" height="38" />
+    <text id="146:1024" name="Rate limiting на /auth/*" x="48" y="1149" width="890" height="29" />
+    <text id="146:1025" name="• Ограничение числа запросов к эндпоинту за окно времени. Считаем по двум ключам сразу: по email (защита конкретного аккаунта) и по IP (защита от массового перебора) • /auth/pre-register — 5 запросов в час на IP • /auth/send-code — 3 на pending_registration за 12 ч + кулдаун 60 сек; 10 в час на IP • /auth/login — 5 неудачных подряд на email → блокировка 15 мин; 20 в час на IP • /auth/forgot-password — 3 в час на email, 10 в час на IP • При превышении: HTTP 429 + заголовок Retry-After, клиент показывает таймер на кнопке • Реализация: счётчики в Redis с TTL, middleware перед хендлером (бэкенд)" x="48" y="1190" width="890" height="152" />
+  </section>
+</canvas>
