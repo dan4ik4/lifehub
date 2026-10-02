@@ -2,7 +2,7 @@ export interface User {
   id: string; name: string; email: string; email_verified: boolean;
   auth_providers: ('password' | 'google' | 'apple')[];
   plan: 'free' | 'trial' | 'pro'; trial_ends: string | null;
-  onboarding_completed: boolean; free_modules: string[]; timezone: string;
+  onboarding_completed: boolean; free_modules: string[]; timezone: string; weight_unit?: "kg" | "lb";
 }
 export interface TokenPair {
   access_token: string; refresh_token: string; token_type: 'bearer'; expires_in: number; refresh_expires_in: number;

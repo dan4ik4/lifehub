@@ -117,6 +117,7 @@ class UserAuthResponse(BaseModel):
     onboarding_completed: bool
     free_modules: list[str]
     timezone: str
+    weight_unit: Literal["kg", "lb"] = "kg"
 
 
 class AuthSessionResponse(BaseModel):

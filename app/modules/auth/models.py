@@ -20,6 +20,7 @@ class User(Base):
     onboarding_completed: Mapped[bool] = mapped_column(Boolean, default=False)
     free_modules: Mapped[list[str]] = mapped_column(JSON, default=list)
     timezone: Mapped[str] = mapped_column(String(100), default="UTC")
+    weight_unit: Mapped[str] = mapped_column(String(2), default="kg", server_default="kg")
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, onupdate=utcnow)
     deleted_at: Mapped[datetime | None] = mapped_column(UTCDateTime)

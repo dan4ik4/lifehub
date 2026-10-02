@@ -242,6 +242,7 @@ export function AuthScreen({ onAuthenticated, onDemo }: { onAuthenticated: (sess
 function browserTimezone(): string { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch { return 'UTC'; } }
 
 export function Onboarding({ user, onComplete, onLogout }: { user: User; onComplete: (user: User) => void; onLogout: () => void }) {
+  const [modules,setModules]=useState<string[]>(user.free_modules.length?user.free_modules:['planning','goals_habits','health']);
   const [name, setName] = useState(user.name);
   const [timezone, setTimezone] = useState(user.timezone && user.timezone !== 'UTC' ? user.timezone : browserTimezone());
   const [plan, setPlan] = useState<'free' | 'trial'>(user.plan === 'trial' ? 'trial' : 'free');
@@ -256,11 +257,12 @@ export function Onboarding({ user, onComplete, onLogout }: { user: User; onCompl
     event.preventDefault();
     if (busyRef.current) return;
     if (!name.trim()) { setNameError('Как к вам обращаться?'); return; }
+    if(!user.free_modules.length&&modules.length!==3){setError('Выберите ровно три модуля для Free.');return;}
     setNameError(''); setError(''); busyRef.current = true; setBusy(true);
     try {
       const updated = await api<User>('/users/me', { method: 'PATCH', body: {
         name: name.trim(), timezone, onboarding_completed: true,
-        ...(!user.free_modules.length ? { free_modules: ['planning'] } : {}),
+        ...(!user.free_modules.length ? { free_modules: modules } : {}),
         ...(user.plan !== 'pro' ? { plan } : {}),
       } });
       onComplete(updated);
@@ -274,14 +276,13 @@ export function Onboarding({ user, onComplete, onLogout }: { user: User; onCompl
     <form className="auth-form" onSubmit={event => { void submit(event); }} noValidate aria-busy={busy}>
       <div className="field"><label htmlFor={nameId}>Как вас зовут?</label><input id={nameId} className="input" value={name} onChange={event => setName(event.target.value)} placeholder="Ваше имя" autoComplete="given-name" maxLength={50} disabled={busy} aria-invalid={Boolean(nameError)} aria-describedby={nameError ? `${nameId}-error` : undefined} autoFocus />{nameError && <span className="field-error" id={`${nameId}-error`}>{nameError}</span>}</div>
       <div className="field"><label htmlFor={timezoneId}>Часовой пояс</label><div className="auth-timezone-wrap"><Globe2 size={17} /><select id={timezoneId} className="input" value={timezone} disabled={busy} onChange={event => setTimezone(event.target.value)}>{timezones.map(zone => <option value={zone} key={zone}>{zone.replaceAll('_', ' ')}</option>)}</select></div><span className="auth-field-hint">Чтобы встречи и напоминания приходили вовремя.</span></div>
-      <div className="auth-module"><span className="auth-module-icon"><CalendarDays size={24} /></span><div><strong>Планирование</strong><p>Задачи, календарь и списки — вместе.</p></div><CircleCheck size={21} /></div>
-      {user.free_modules.length > 1 && <p className="auth-field-hint">Выбранные ранее модули аккаунта сохранятся.</p>}
+      {!user.free_modules.length ? <fieldset className="auth-plan-fieldset"><legend>Ваши три модуля Free · {modules.length} / 3</legend><p className="auth-field-hint">Выбор сохраняется. В Pro доступны все пять модулей.</p>{[['planning','Планирование'],['goals_habits','Цели и привычки'],['health','Здоровье'],['finance','Финансы'],['books','Книги и дневник']].map(([key,label])=><label className={`auth-plan-option${modules.includes(key)?' selected':''}`} key={key}><input type="checkbox" checked={modules.includes(key)} disabled={busy||(!modules.includes(key)&&modules.length===3)} onChange={()=>setModules(old=>old.includes(key)?old.filter(x=>x!==key):[...old,key])}/><strong>{label}</strong></label>)}</fieldset> : <p className="auth-field-hint">Выбранные ранее бесплатные модули сохранятся. В Pro доступны все разделы.</p>}
       {user.plan !== 'pro' && <fieldset className="auth-plan-fieldset"><legend>Выберите, как начать</legend>
-        <label className={`auth-plan-option${plan === 'free' ? ' selected' : ''}`}><input type="radio" name="start-plan" value="free" checked={plan === 'free'} onChange={() => setPlan('free')} disabled={busy} /><span><strong>Бесплатно<span>Free</span></strong><small>Задачи, события и список покупок.</small></span></label>
-        <label className={`auth-plan-option${plan === 'trial' ? ' selected' : ''}${trialUsed ? ' unavailable' : ''}`}><input type="radio" name="start-plan" value="trial" checked={plan === 'trial'} onChange={() => setPlan('trial')} disabled={busy || trialUsed} /><span><strong>Попробовать Pro<span>72 часа</span></strong><small>{trialUsed ? 'Пробный период уже использован.' : 'ИИ-помощник, синхронизация и свои списки.'}</small></span><Sparkles size={17} /></label>
+        <label className={`auth-plan-option${plan === 'free' ? ' selected' : ''}`}><input type="radio" name="start-plan" value="free" checked={plan === 'free'} onChange={() => setPlan('free')} disabled={busy} /><span><strong>Бесплатно<span>Free</span></strong><small>Базовые возможности трёх выбранных модулей.</small></span></label>
+        <label className={`auth-plan-option${plan === 'trial' ? ' selected' : ''}${trialUsed ? ' unavailable' : ''}`}><input type="radio" name="start-plan" value="trial" checked={plan === 'trial'} onChange={() => setPlan('trial')} disabled={busy || trialUsed} /><span><strong>Попробовать Pro<span>72 часа</span></strong><small>{trialUsed ? 'Пробный период уже использован.' : 'Все модули, история и расширенные возможности.'}</small></span><Sparkles size={17} /></label>
         <p className="auth-field-hint">{plan === 'trial' ? 'Пробный период начнётся после нажатия кнопки. Через 72 часа — Free, без автоматического списания.' : 'Пробный период не запускается автоматически.'}</p>
       </fieldset>}
-      <button className="button primary auth-submit" type="submit" disabled={busy}>{busy ? <><span className="spinner" />Сохраняем…</> : <>Начать планировать<ArrowRight size={17} /></>}</button>
+      <button className="button primary auth-submit" type="submit" disabled={busy}>{busy ? <><span className="spinner" />Сохраняем…</> : <>Открыть Life Hub<ArrowRight size={17} /></>}</button>
     </form><button type="button" className="auth-onboarding-logout" disabled={busy} onClick={onLogout}>Выйти из аккаунта</button>
   </div></AuthShell>;
 }

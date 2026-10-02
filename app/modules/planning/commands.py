@@ -212,6 +212,9 @@ class PlanningCommandService:
             self.db.rollback()  # Do not hold a read transaction across the HTTP model call.
             generated = self.provider.generate(payload.message, context)
             action = ActionEnvelope.model_validate(generated).action
+            # Match reservation order (user, then command); executors also lock the user.
+            # A replay may already own that user row while waiting for this command.
+            user = self.db.scalar(select(User).where(User.id == self.user.id).with_for_update().execution_options(populate_existing=True))
             record = self.db.scalar(select(PlanningCommandRecord).where(PlanningCommandRecord.id == record_id).with_for_update().execution_options(populate_existing=True))
             if record.status != 'processing':
                 return self._replay(record, digest)

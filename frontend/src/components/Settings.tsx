@@ -4,6 +4,8 @@ import { api, ApiError, errorMessage, isDemo } from '../lib/api';
 import type { CalendarConnection, Notify, OtpChallenge, SyncJob, User } from '../lib/types';
 import { Modal } from './ui';
 import './settings.css';
+import { PushSettings } from './PushSettings';
+import { PrivacySettings } from './PrivacySettings';
 
 type Tab = 'profile' | 'connections' | 'plan';
 interface SettingsProps {
@@ -48,6 +50,7 @@ function PasswordInput({ id, value, onChange, label, autoComplete, description, 
 export function Settings({ user, onUserChange, onClose, onLogout, notify, initialTab = 'profile' }: SettingsProps) {
   const [tab, setTab] = useState<Tab>(initialTab);
   const [name, setName] = useState(user.name);
+  const [weightUnit,setWeightUnit]=useState(user.weight_unit||'kg');
   const [timezone, setTimezone] = useState(user.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone);
   const [busy, setBusy] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -143,7 +146,7 @@ export function Settings({ user, onUserChange, onClose, onLogout, notify, initia
     catch { setError('profile', 'Укажите часовой пояс, например Europe/Warsaw.'); return; }
     setBusy('profile');
     try {
-      const updated = await api<User>('/users/me', { method: 'PATCH', body: { name: name.trim(), timezone: timezone.trim() } });
+      const updated = await api<User>('/users/me', { method: 'PATCH', body: { name: name.trim(), timezone: timezone.trim(), weight_unit:weightUnit } });
       onUserChange(updated);
       notify('Профиль сохранён', 'success');
     } catch (error) { setError('profile', errorMessage(error)); }
@@ -323,10 +326,10 @@ export function Settings({ user, onUserChange, onClose, onLogout, notify, initia
             <div className="field"><label htmlFor="settings-name">Как вас называть</label><input className="input" id="settings-name" disabled={!!busy} value={name} onChange={event => setName(event.target.value)} autoComplete="name" maxLength={50} required placeholder="Ваше имя" /></div>
             <div className="field"><label htmlFor="settings-timezone">Часовой пояс</label><input className="input" id="settings-timezone" disabled={!!busy} list="settings-timezones" value={timezone} onChange={event => setTimezone(event.target.value)} autoComplete="off" required aria-describedby="settings-timezone-help" /><datalist id="settings-timezones">{['Europe/Warsaw', 'Europe/Moscow', 'Europe/Kyiv', 'Europe/Berlin', 'Europe/London', 'Europe/Paris', 'Asia/Tbilisi', 'Asia/Almaty', 'Asia/Dubai', 'America/New_York', 'America/Los_Angeles', 'UTC'].map(zone => <option key={zone} value={zone} />)}</datalist><span className="settings-help" id="settings-timezone-help">Используется для событий и напоминаний.</span></div>
             {errors.profile && <p className="field-error" role="alert">{errors.profile}</p>}
-            <div className="settings-form-actions"><button className="button primary" type="submit" disabled={!!busy || (name.trim() === user.name && timezone === user.timezone)}>{busy === 'profile' ? <Loader2 size={16} className="settings-spin" /> : <Check size={16} />}Сохранить изменения</button></div>
+            <div className="field"><label htmlFor="weight-unit">Единица веса</label><select id="weight-unit" className="input" value={weightUnit} onChange={e=>setWeightUnit(e.target.value as "kg"|"lb")}><option value="kg">Килограммы</option><option value="lb">Фунты</option></select></div><div className="settings-form-actions"><button className="button primary" type="submit" disabled={!!busy || (name.trim() === user.name && timezone === user.timezone && weightUnit === (user.weight_unit||"kg"))}>{busy === 'profile' ? <Loader2 size={16} className="settings-spin" /> : <Check size={16} />}Сохранить изменения</button></div>
           </form>
 
-          <div className="settings-section-divider" />
+          <PushSettings /><PrivacySettings user={user} onLogout={onLogout} notify={notify} /><div className="settings-section-divider" />
           <div className="settings-row"><span className="settings-row-icon"><Mail size={19} /></span><div className="settings-row-copy"><strong>Email</strong><span className="settings-email-address">{user.email}{user.email_verified && <CheckCircle2 size={14} aria-label="Подтверждён" />}</span></div>{passwordAccount && <button className="button ghost settings-small-button" type="button" disabled={!!busy} aria-expanded={emailExpanded} aria-controls="settings-email-form" onClick={() => { setEmailExpanded(!emailExpanded); setError('email'); }}>Изменить</button>}</div>
           {!passwordAccount && !demo && <p className="settings-social-note"><ShieldCheck size={15} />Вы входите через {user.auth_providers.includes('google') ? 'Google' : 'Apple'}. Email управляется этим аккаунтом.</p>}
           {emailExpanded && <div className="settings-expand" id="settings-email-form">
@@ -356,14 +359,14 @@ export function Settings({ user, onUserChange, onClose, onLogout, notify, initia
 
         {tab === 'plan' && <>
           <div className="settings-heading"><span className="settings-eyebrow">БОЛЬШЕ МЕСТА ДЛЯ ВАШИХ ПЛАНОВ</span><h2>Ваш план</h2><p>Выберите ритм, который подходит именно вам.</p></div>
-          <div className={`settings-plan-card ${hasPro ? 'settings-plan-pro' : ''}`}><div className="settings-plan-top"><span className="settings-plan-icon"><Crown size={25} /></span><span className="settings-plan-current"><CheckCircle2 size={14} />Текущий план</span></div><h3>{planName}</h3><p>{user.plan === 'pro' ? 'Все возможности планирования — каждый день.' : trialActive ? 'Все возможности Pro открыты на время пробного периода.' : 'Всё необходимое, чтобы спокойно спланировать день.'}</p>{trialActive && <div className="settings-trial-progress"><div><Clock3 size={15} /><span>Осталось около {trialHours} ч</span></div><progress value={Math.min(trialHours, 72)} max={72} aria-label="Оставшееся время пробного периода" /><span>До {prettyDate(user.trial_ends, user.timezone)}</span></div>}{trialExpired && <p className="settings-trial-ended">Пробный период завершён. Ваши планы сохранены.</p>}</div>
-          <div className="settings-feature-comparison"><div className="settings-feature-heading"><strong>Возможности планирования</strong><span>{hasPro ? 'Включено' : 'Free / Pro'}</span></div>{[
-            ['Задачи, события и календарь', true], ['Список покупок', true], ['Повторяющиеся задачи и события', hasPro], ['Приоритеты и свои списки', hasPro], ['Google и Apple Calendar', hasPro],
+          <div className={`settings-plan-card ${hasPro ? 'settings-plan-pro' : ''}`}><div className="settings-plan-top"><span className="settings-plan-icon"><Crown size={25} /></span><span className="settings-plan-current"><CheckCircle2 size={14} />Текущий план</span></div><h3>{planName}</h3><p>{user.plan === 'pro' ? 'Все модули, полная история и расширенные возможности.' : trialActive ? 'Все возможности Pro открыты на время пробного периода.' : 'Всё необходимое, чтобы спокойно спланировать день.'}</p>{trialActive && <div className="settings-trial-progress"><div><Clock3 size={15} /><span>Осталось около {trialHours} ч</span></div><progress value={Math.min(trialHours, 72)} max={72} aria-label="Оставшееся время пробного периода" /><span>До {prettyDate(user.trial_ends, user.timezone)}</span></div>}{trialExpired && <p className="settings-trial-ended">Пробный период завершён. Ваши планы сохранены.</p>}</div>
+          <div className="settings-feature-comparison"><div className="settings-feature-heading"><strong>Возможности Life Hub</strong><span>{hasPro ? 'Включено' : 'Free / Pro'}</span></div>{[
+            ['Задачи, события и календарь', true], ['Список покупок', true], ['Повторяющиеся задачи и события', hasPro], ['Приоритеты и свои списки', hasPro], ['Google Calendar', hasPro], ['Все пять модулей', hasPro], ['Безлимитные привычки и цели', hasPro], ['Полная история здоровья', hasPro], ['Бюджеты, накопления и долги', hasPro], ['Статистика книг и поиск по дневнику', hasPro],
           ].map(([label, included]) => <div className="settings-feature" key={String(label)}><span>{label}</span>{included ? <span className="settings-feature-check"><Check size={16} /><span className="settings-sr-only">Включено</span></span> : <span className="settings-pro-tag">Pro</span>}</div>)}</div>
           {!hasPro && !user.trial_ends && <div className="settings-trial-cta"><div><Sparkles size={21} /><strong>Попробуйте Pro в своём ритме</strong></div><p>72 часа полного доступа. Без банковской карты.</p><button className="button primary" type="button" onClick={() => void activateTrial()} disabled={!!busy}>{busy === 'trial' ? <Loader2 size={17} className="settings-spin" /> : <Sparkles size={17} />}Активировать 72 часа Pro<ArrowRight size={16} /></button></div>}
           {errors.plan && <p className="field-error" role="alert">{errors.plan}</p>}
           {!hasPro && <p className="settings-billing-note">Покупка подписки пока недоступна. Мы сообщим, когда её можно будет оформить.</p>}
-          <div className="settings-coming-soon"><span className="settings-coming-icon"><Sparkles size={19} /></span><div><strong>Life Hub будет расти вместе с вами</strong><p>Новые модули появятся позже. Сейчас всё внимание — планированию.</p></div></div>
+          <div className="settings-coming-soon"><span className="settings-coming-icon"><Sparkles size={19} /></span><div><strong>Life Hub будет расти вместе с вами</strong><p>Планирование, цели, здоровье, финансы и книги уже в одном пространстве. Новые интеграции будут появляться постепенно.</p></div></div>
         </>}
       </section>
     </div>

@@ -13,3 +13,7 @@ tests
 .docker-build.log
 scripts
 .env.*
+
+output/
+frontend/node_modules/
+frontend/dist/

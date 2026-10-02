@@ -18,6 +18,7 @@ def valid_free_modules(value) -> bool:
 
 
 class UserPatchRequest(RequestModel):
+    weight_unit: Literal["kg", "lb"] | None = None
     name: str | None = Field(default=None, max_length=50)
     timezone: str | None = Field(default=None, max_length=100)
     free_modules: list[Literal["planning", "goals_habits", "health", "finance", "books"]] | None = None

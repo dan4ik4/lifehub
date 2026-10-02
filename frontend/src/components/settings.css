@@ -177,3 +177,7 @@
   .settings-expand { padding: 15px; }
   .settings-trial-cta .button { width: 100%; }
 }
+
+.privacy-settings h3{font-size:15px;margin-bottom:12px}.privacy-avatar-row,.privacy-buttons{display:flex;gap:12px;align-items:center;margin:16px 0;flex-wrap:wrap}.privacy-avatar-row img{width:58px;height:58px;object-fit:cover;border-radius:50%}.privacy-export{display:flex;justify-content:space-between;align-items:center;padding:12px 0;font-size:12px;border-bottom:1px solid var(--line)}
+
+.user-avatar-image{width:100%;height:100%;object-fit:cover;border-radius:inherit}.profile-avatar{overflow:hidden;flex-shrink:0}

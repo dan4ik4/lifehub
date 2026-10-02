@@ -14,7 +14,7 @@ def user_response(user: User) -> UserAuthResponse:
     effective_plan = "free" if user.plan == "trial" and (not user.trial_ends or user.trial_ends <= utcnow()) else user.plan
     return UserAuthResponse(id=user.id, name=user.name, email=user.email, email_verified=user.email_verified,
         auth_providers=providers, plan=effective_plan, trial_ends=user.trial_ends,
-        onboarding_completed=user.onboarding_completed, free_modules=user.free_modules, timezone=user.timezone)
+        onboarding_completed=user.onboarding_completed, free_modules=user.free_modules, timezone=user.timezone, weight_unit=user.weight_unit)
 
 
 class UserService:

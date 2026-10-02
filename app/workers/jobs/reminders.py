@@ -16,23 +16,42 @@ def run_reminders(session, settings, delivery=None, now=None, batch_size=100):
     Crash retries reuse the same delivery key; transports must deduplicate it.
     """
     now = now or utcnow()
-    delivery = delivery or HttpReminderDelivery(settings)
-    due = list(session.scalars(select(Reminder).where(
-        Reminder.cancelled_at.is_(None), Reminder.next_trigger_at <= now,
-        or_(Reminder.next_attempt_at.is_(None), Reminder.next_attempt_at <= now),
-        or_(Reminder.lease_until.is_(None), Reminder.lease_until <= now),
-    ).order_by(Reminder.next_trigger_at, Reminder.id).limit(batch_size).with_for_update(skip_locked=True)))
+    from app.modules.notifications.service import WebPushReminderDelivery
+
+    delivery = delivery or WebPushReminderDelivery(session, settings)
+    due = list(
+        session.scalars(
+            select(Reminder)
+            .where(
+                Reminder.cancelled_at.is_(None),
+                Reminder.next_trigger_at <= now,
+                or_(Reminder.next_attempt_at.is_(None), Reminder.next_attempt_at <= now),
+                or_(Reminder.lease_until.is_(None), Reminder.lease_until <= now),
+            )
+            .order_by(Reminder.next_trigger_at, Reminder.id)
+            .limit(batch_size)
+            .with_for_update(skip_locked=True)
+        )
+    )
     claims = []
     for reminder in due:
         token = uuid4()
         # CAS also prevents duplicate claims in SQLite tests and non-locking DBs.
-        claimed = session.execute(update(Reminder).where(Reminder.id == reminder.id, or_(Reminder.lease_until.is_(None), Reminder.lease_until <= now)).values(lease_until=now + timedelta(minutes=2), lease_token=token))
+        claimed = session.execute(
+            update(Reminder)
+            .where(Reminder.id == reminder.id, or_(Reminder.lease_until.is_(None), Reminder.lease_until <= now))
+            .values(lease_until=now + timedelta(minutes=2), lease_token=token)
+        )
         if claimed.rowcount:
             claims.append((reminder.id, token))
     session.commit()
     result = {"delivered": 0, "failed": 0, "skipped": 0}
     for reminder_id, token in claims:
-        reminder = session.scalar(select(Reminder).where(Reminder.id == reminder_id, Reminder.lease_token == token).execution_options(populate_existing=True))
+        reminder = session.scalar(
+            select(Reminder)
+            .where(Reminder.id == reminder_id, Reminder.lease_token == token)
+            .execution_options(populate_existing=True)
+        )
         if reminder is None or reminder.cancelled_at:
             continue
         user = session.get(User, reminder.user_id)
@@ -47,9 +66,25 @@ def run_reminders(session, settings, delivery=None, now=None, batch_size=100):
         completed = reminder.entity_type == "task" and entity.completed_at is not None
         if reminder.occurrence_at:
             if reminder.entity_type == "task":
-                completed = session.scalar(select(TaskOccurrence.id).where(TaskOccurrence.task_id == entity.id, TaskOccurrence.occurrence_at == reminder.occurrence_at, TaskOccurrence.status.in_(["completed", "skipped"]))) is not None
+                completed = (
+                    session.scalar(
+                        select(TaskOccurrence.id).where(
+                            TaskOccurrence.task_id == entity.id,
+                            TaskOccurrence.occurrence_at == reminder.occurrence_at,
+                            TaskOccurrence.status.in_(["completed", "skipped"]),
+                        )
+                    )
+                    is not None
+                )
             else:
-                completed = session.scalar(select(EventException.id).where(EventException.event_id == entity.id, EventException.occurrence_at == reminder.occurrence_at)) is not None
+                completed = (
+                    session.scalar(
+                        select(EventException.id).where(
+                            EventException.event_id == entity.id, EventException.occurrence_at == reminder.occurrence_at
+                        )
+                    )
+                    is not None
+                )
         if completed:
             if not entity.rrule:
                 reminder.next_trigger_at = None
@@ -60,7 +95,9 @@ def run_reminders(session, settings, delivery=None, now=None, batch_size=100):
             result["skipped"] += 1
             continue
         try:
-            delivery.deliver(reminder=reminder, user=user, entity=entity, idempotency_key=f"lifehub-reminder/{reminder.delivery_key}")
+            delivery.deliver(
+                reminder=reminder, user=user, entity=entity, idempotency_key=f"lifehub-reminder/{reminder.delivery_key}"
+            )
         except Exception as exc:
             # Store only an error category; provider response bodies may contain secrets.
             reminder.attempts += 1
