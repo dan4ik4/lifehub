@@ -1,3 +1,20 @@
+# Release 2026-10-02 — full product expansion
+
+- Code commit `a54443c` pushed to `dan4ik4/lifehub` main and deployed to https://lifehapp.online.
+- API / worker / frontend replaced from prebuilt images. PostgreSQL, Redis and Caddy volumes/containers retained. Migration advanced from 0001 to 0008_weight_unit.
+- Verified: `/health/ready` 200; private module APIs reject anonymous requests with 401; manifest/sw 200; production Google sign-in button rendered. Worker has zero `Worker tick failed` messages after update. DB accepts connections.
+- VAPID generated privately on the server and accepted by py-vapid; environment mode remains 0600. Users opt in on their device. Actual notification delivery still requires a real subscribed device; no browser permissions were granted on behalf of users.
+- Accounts preserved: 8 total, stored plans 3 Pro / 2 Trial / 3 Free. No changes to entitlements, Free selections or account records beyond default kg display column.
+- Backup before migration: `/var/backups/lifehub/postgres-20261002T191828Z.dump`; source/settings backup `/var/backups/lifehub/source-before-product-20261002.tar.gz`, root-only. Previous images `lifehub-api:before-product-20261002` and `lifehub-frontend:before-product-20261002` retained.
+- Backend verification: full isolated PostgreSQL/Redis suite 165 passed; latest dashboard budget delta also passed. Frontend 59 tests passed, TypeScript/build pass. Migration parity and upgrade/downgrade/upgrade checked on isolated PostgreSQL and SQLite. Browser QA used synthetic local data only.
+- One pre-existing planning AI deadlock was found and fixed using consistent user-before-command row lock order.
+- Disposable remote QA DB/Redis containers and their anonymous volumes removed after checks; production volumes untouched.
+- Unresolved product decisions and AI approval block are recorded in [full-product-progress.md](full-product-progress.md).
+
+Rollback application code if needed: retag the two `before-product-20261002` images to `lifehub-api:production` / `lifehub-frontend:latest`, then recreate api/worker/frontend with `--no-build --no-deps`. The migration is additive; do not downgrade or restore the production database automatically after users have written new records.
+
+---
+
 # Развёртывание Life Hub — 7 сентября 2026, 11:26 UTC
 
 ## Обновление 8 сентября 2026 — GitHub и включение ИИ

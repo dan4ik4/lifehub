@@ -18,9 +18,9 @@ User authorized implementing remaining Figma requirements in order, collecting a
 ## Verification and release state
 - Full isolated PostgreSQL/Redis suite: 165 passed after fixing the planning AI race. No production data or third-party API credentials used in tests.
 - SQLite migration parity and upgrade/downgrade/upgrade passed. PostgreSQL upgrade/downgrade/upgrade and Alembic metadata parity passed.
-- Frontend TypeScript/Vite build and 59 tests passed, including exact formatting of large monetary values. Latest dashboard budget check: 10 passed / 1 PostgreSQL-only skip locally.
+- Frontend TypeScript/Vite build and 59 tests passed, including exact formatting of large monetary values. Latest dashboard budget check: 10 passed / 1 PostgreSQL-only skip locally; final changed finance/dashboard case also passed on isolated PostgreSQL.
 - Browser QA in a disposable local account: login, habit creation/check-in, expense save/totals, diary save/calendar counts, kg/lb preference and weight entry. Narrow viewport had no horizontal page overflow.
-- Production release is pending at this checkpoint; see deployment-progress.md for the verified release outcome.
+- Released code commit a54443c to https://lifehapp.online. API healthy, worker stable, migration 0008_weight_unit, push configured. All 8 accounts preserved (3 Pro, 2 stored Trial, 3 Free; expired Trials retain normal effective Free behavior). See deployment-progress.md.
 - Do not stage unrelated existing output/presentation-pl.
 
 ## Remaining requirements needing decisions/access
