@@ -174,6 +174,7 @@ EXPORT_TABLES = {
     "finance_transactions",
     "finance_csv_imports",
     "finance_csv_rows",
+    "finance_reviews",
     "finance_budgets",
     "finance_subscriptions",
     "finance_savings",

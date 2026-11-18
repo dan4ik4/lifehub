@@ -13,6 +13,7 @@ from app.core.resource_api import add_resource
 from app.modules.auth.dependencies import get_current_user
 from app.modules.planning.dependencies import EntitlementService
 from app.modules.finance.models import Transaction, Budget, Subscription, Savings, FinancialGoal, Debt, DebtPayment
+from app.modules.finance.review import invalidate as invalidate_review
 from app.modules.finance.schemas import (
     TransactionInput,
     BudgetInput,
@@ -263,5 +264,6 @@ for path, model, schema, paid, validator in [
         pro_only=paid,
         validate=validator,
         serialize=serialize,
-        after_write=record_savings_history if model is Savings else None,
+        after_write=record_savings_history if model is Savings else invalidate_review if model in (Transaction, Budget, Subscription) else None,
+        after_delete=invalidate_review if model in (Transaction, Budget, Subscription) else None,
     )

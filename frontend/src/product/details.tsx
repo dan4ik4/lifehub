@@ -8,6 +8,7 @@ import type { Row, Section } from "./schema";
 import { Modal } from "../components/ui";
 import { GoalLinks, MilestoneEditor } from "./Extras";
 import { isPro, text, amount, dateLabel, Progress } from "./Product";
+import { FinanceAnalysis } from "./FinanceAnalysis";
 export function FinanceOverview({
   user,
   revision,
@@ -68,7 +69,7 @@ export function FinanceOverview({
               {[
                 ["income", "Доходы"],
                 ["expense", "Расходы"],
-                ["balance", "Остаток за месяц"],
+                ["balance", "Разница за месяц"],
               ].map(([key, label]) => (
                 <div key={key}>
                   <small>{label}</small>
@@ -106,6 +107,7 @@ export function FinanceOverview({
           </>
         )
       )}
+      <FinanceAnalysis key={month+currency} user={user} month={month} currency={currency} pro={isPro(user)} revision={revision}/>
     </div>
   );
 }

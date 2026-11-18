@@ -356,5 +356,8 @@ def confirm(import_id: UUID, body: Confirm, user=Depends(require_planning_user),
         added.append(str(transaction.id))
     item.status = 'applied'
     item.result = {'added': len(added), 'skipped_duplicates': skipped, 'transaction_ids': added}
+    if added:
+        from app.modules.finance.review import invalidate
+        invalidate(db, user)
     db.commit()
     return preview(db, user, item)
