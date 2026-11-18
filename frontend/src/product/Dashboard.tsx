@@ -6,6 +6,7 @@ import {dayLabel,plural} from '../lib/dates';
 import type {Notify,User} from '../lib/types';
 import {formatAmount} from './format';
 import {displayWeight,weightLabel} from './weight';
+import {CrossInsights} from './CrossInsights';
 
 type DayValue={day:string;hours:number|null};
 type Habit={id:string;title:string;version:number;today_complete:boolean;target:string};
@@ -57,6 +58,7 @@ export function Dashboard({user,navigate,notify}:{user:User;navigate:(path:strin
     <section className="overview-hero"><div><span className="eyebrow"><span className="live-dot"/>{data?dayLabel(data.day,{weekday:'long',day:'numeric',month:'long'}):'ВАШ ЛИЧНЫЙ РИТМ'}</span><h2>Привет, {user.name?.split(' ')[0]||'друг'}.<br/><em>Всё важное — перед вами.</em></h2><p>Немного ясности для спокойного дня.</p><div className="hero-pills">{plans&&<span><CalendarDays size={14}/>{plural(plans.events.length,['событие','события','событий'])} сегодня</span>}{w?.habits&&<span><Target size={14}/>{w.habits.filter(h=>h.today_complete).length} / {w.habits.length} привычек</span>}</div></div><div className="hero-orbit" aria-hidden="true"><span/><span/><Sparkles size={36}/><i/></div><button className="icon-button hero-refresh" aria-label="Обновить сводку" disabled={busy} onClick={()=>void refresh()}><RefreshCw size={18} className={busy?'spinner':''}/></button></section>
     {error&&<div className="product-error" role="alert">{error}<button className="button ghost" onClick={()=>void refresh()}>Попробовать снова</button></div>}
     {!data&&busy&&<div className="overview-grid skeleton-grid" aria-label="Загружаем сводку" aria-busy="true">{[1,2,3,4].map(i=><div key={i} className="overview-skeleton"/>)}</div>}
+    <CrossInsights user={user} pro={user.plan==='pro'||(user.plan==='trial'&&!!user.trial_ends&&Date.parse(user.trial_ends)>Date.now())} navigate={navigate}/>
     <div className="overview-widgets">
       {plans&&<Widget title="План на сегодня" subtitle="Шаг за шагом, в своём темпе" icon={<CalendarDays size={20}/>} onOpen={()=>navigate('/planning')} className="plan-widget">
         <div className="plan-progress"><strong>{done}<span> / {plans.tasks.length} задач</span></strong><span>{plans.tasks.length?Math.round(done/plans.tasks.length*100):0}%</span></div><Meter value={plans.tasks.length?done/plans.tasks.length*100:0} label="Выполнено задач сегодня"/>

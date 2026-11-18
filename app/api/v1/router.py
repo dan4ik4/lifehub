@@ -19,6 +19,7 @@ from app.modules.books.routes import router as books_router
 from app.modules.books.weekly_review import router as diary_review_router
 
 from app.modules.dashboard.routes import router as dashboard_router
+from app.modules.dashboard.insights import router as insight_router
 
 from app.modules.users.privacy import router as privacy_router
 
@@ -42,6 +43,7 @@ for module in (
     books_router,
     diary_review_router,
     dashboard_router,
+    insight_router,
     privacy_router,
 ):
     router.include_router(module)

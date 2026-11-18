@@ -175,6 +175,7 @@ EXPORT_TABLES = {
     "finance_csv_imports",
     "finance_csv_rows",
     "finance_reviews",
+    "cross_module_reviews",
     "finance_budgets",
     "finance_subscriptions",
     "finance_savings",
@@ -268,6 +269,8 @@ def make_export(data, format):
 def run_privacy_jobs(db, settings):
     now = utcnow()
     from app.modules.finance.import_models import CsvImport
+    from app.modules.dashboard.insight_models import CrossReview
+    db.execute(delete(CrossReview).where(CrossReview.updated_at < now - timedelta(days=30)))
     db.execute(delete(CsvImport).where(CsvImport.created_at < now - timedelta(hours=24)))
     db.execute(delete(DataExport).where(DataExport.expires_at <= now))
     item = db.scalar(
