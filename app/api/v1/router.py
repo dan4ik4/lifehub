@@ -13,6 +13,7 @@ from app.modules.goals_habits.routes import router as goals_router
 from app.modules.health.routes import router as health_router
 from app.modules.finance.routes import router as finance_router
 from app.modules.finance.csv_import import router as finance_csv_router
+from app.modules.finance.pdf_import import router as finance_pdf_router
 from app.modules.books.routes import router as books_router
 from app.modules.books.weekly_review import router as diary_review_router
 
@@ -35,6 +36,7 @@ for module in (
     health_device_router,
     finance_router,
     finance_csv_router,
+    finance_pdf_router,
     books_router,
     diary_review_router,
     dashboard_router,

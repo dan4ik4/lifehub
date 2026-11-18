@@ -33,3 +33,4 @@ urllib3==2.7.0
 yarl==1.25.1
 
 Pillow==12.0.0
+pypdf==7.1.1

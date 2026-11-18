@@ -223,21 +223,24 @@ def duplicate(db, user, account, row):
 
 
 def preview(db, user, item):
-    return {'id': str(item.id), 'account': item.account, 'status': item.status, 'result': item.result,
+    return {'id': str(item.id), 'account': item.account, 'source_format': item.source_format, 'status': item.status, 'result': item.result,
         'expired': item.created_at < utcnow() - timedelta(hours=24),
         'rows': [{**{k: v for k, v in row.items() if k != 'fingerprint'},
-                  'duplicate': duplicate(db, user, item.account, row)} for row in item.rows]}
+                  'duplicate': item.status == 'pending' and duplicate(db, user, item.account, row)} for row in item.rows]}
 
 
 @router.post('')
 def prepare(body: CsvUpload, request: Request, idempotency_key: str = Header(min_length=1, max_length=128),
             user=Depends(require_planning_user), db=Depends(get_db)):
+    return prepare_statement(body, request, idempotency_key, user, db)
+
+
+def prepare_statement(body, request, idempotency_key, user, db, source_format='csv'):
     user = db.scalar(select(User).where(User.id == user.id).with_for_update().execution_options(populate_existing=True))
     access(user)
     if not body.account.strip():
         raise AppError(422, 'invalid_csv', 'Укажите название счёта.')
-    table = parse_table(body)
-    digest = hashlib.sha256(body.model_dump_json().encode()).hexdigest()
+    digest = hashlib.sha256(((source_format + ':') if source_format != 'csv' else '').encode() + body.model_dump_json().encode()).hexdigest()
     previous = db.scalar(select(CsvImport).where(CsvImport.user_id == user.id, CsvImport.request_key == idempotency_key))
     if previous:
         if previous.request_hash != digest:
@@ -247,6 +250,11 @@ def prepare(body: CsvUpload, request: Request, idempotency_key: str = Header(min
         if previous.status == 'failed':
             raise AppError(409, 'csv_failed', 'Предыдущий разбор не завершился. Можно повторить отправку.')
         return preview(db, user, previous)
+    if source_format == 'pdf':
+        from app.modules.finance.pdf_import import parse_pdf
+        table = parse_pdf(body)
+    else:
+        table = parse_table(body)
     now = utcnow()
     limit = 50 if EntitlementService.is_pro(user) else 3
     usage = db.get(PlanningAiUsage, (user.id, now.date()))
@@ -256,24 +264,29 @@ def prepare(body: CsvUpload, request: Request, idempotency_key: str = Header(min
     if usage.count >= limit:
         raise AppError(429, 'ai_limit', 'Лимит запросов к ИИ на сегодня исчерпан.')
     usage.count += 1
-    item = CsvImport(user_id=user.id, request_key=idempotency_key, request_hash=digest, account=body.account.strip())
+    item = CsvImport(user_id=user.id, request_key=idempotency_key, request_hash=digest, account=body.account.strip(), source_format=source_format)
     db.add(item)
     db.commit()
     item_id = item.id
     db.rollback()  # Release the connection while the provider processes the CSV.
     try:
-        provider = getattr(request.app.state, 'csv_import_provider', None)
-        mapping = CsvMapping.model_validate(provider(table) if provider else generate_mapping(request.app.state.settings, table))
+        if source_format == 'pdf':
+            from app.modules.finance.pdf_import import PdfMapping, generate_pdf_mapping, normalize_pdf
+            provider = getattr(request.app.state, 'pdf_import_provider', None)
+            mapping = PdfMapping.model_validate(provider(table) if provider else generate_pdf_mapping(request.app.state.settings, table))
+        else:
+            provider = getattr(request.app.state, 'csv_import_provider', None)
+            mapping = CsvMapping.model_validate(provider(table) if provider else generate_mapping(request.app.state.settings, table))
         # Recheck account, permissions and module entitlement after the external call.
         user = db.scalar(select(User).where(User.id == user.id).with_for_update().execution_options(populate_existing=True))
-        access(user)
-        if user.deleted_at is not None:
+        if not user or user.deleted_at is not None:
             raise AppError(403, 'account_unavailable', 'Аккаунт недоступен.')
+        access(user)
         item = db.get(CsvImport, item_id)
-        item.rows = normalize_rows(table, mapping, body.currency, user)
+        item.rows = normalize_pdf(table, mapping, body.currency, user) if source_format == 'pdf' else normalize_rows(table, mapping, body.currency, user)
         for row in item.rows:
             if row.get('transaction'):
-                row['transaction']['notes'] = 'Импорт CSV · ' + item.account
+                row['transaction']['notes'] = 'Импорт ' + source_format.upper() + ' · ' + item.account
         item.status = 'pending'
         db.commit()
         return preview(db, user, item)
@@ -325,7 +338,7 @@ def confirm(import_id: UUID, body: Confirm, user=Depends(require_planning_user),
     # Validate the whole selection before writing any transaction.
     for selected in body.rows:
         if selected.row not in source or not source[selected.row].get('fingerprint'):
-            raise AppError(422, 'invalid_csv', 'Выбрана некорректная строка CSV.')
+            raise AppError(422, 'invalid_csv', 'Выбрана некорректная строка выписки.')
         if selected.transaction.category not in BASE_CATEGORIES:
             EntitlementService.require_pro(user)
         transaction_valid(db, user, selected.transaction.model_dump(), None)

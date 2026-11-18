@@ -1,4 +1,4 @@
-"""Owner-scoped CSV previews and durable import fingerprints."""
+"""Owner-scoped CSV/PDF previews and shared durable import fingerprints."""
 from datetime import datetime
 from uuid import UUID, uuid4
 from sqlalchemy import ForeignKey, JSON, String, UniqueConstraint, Uuid
@@ -14,6 +14,7 @@ class CsvImport(Base):
     request_key: Mapped[str] = mapped_column(String(128))
     request_hash: Mapped[str] = mapped_column(String(64))
     account: Mapped[str] = mapped_column(String(100))
+    source_format: Mapped[str] = mapped_column(String(8), default='csv', server_default='csv')
     status: Mapped[str] = mapped_column(String(16), default='processing')
     rows: Mapped[list] = mapped_column(JSON, default=list)
     result: Mapped[dict | None] = mapped_column(JSON, nullable=True)

@@ -52,13 +52,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def request_metadata(request: Request, call_next):
         request.state.trace_id = uuid4().hex
         length = request.headers.get('content-length')
+        body_limit = 7_000_000 if request.url.path == '/api/v1/finance/pdf-imports' and request.method == 'POST' else 1_048_576
         if length:
             try:
-                too_large = int(length) > 1_048_576 or int(length) < 0
+                too_large = int(length) > body_limit or int(length) < 0
             except ValueError:
                 too_large = True
             if too_large:
-                return error_response(request, 413, 'request_too_large', 'Request body limit is 1 MiB')
+                return error_response(request, 413, 'request_too_large', 'Файл превышает допустимый размер запроса.')
+        if request.url.path == '/api/v1/finance/pdf-imports' and request.method == 'POST':
+            chunks, size = [], 0
+            async for chunk in request.stream():
+                size += len(chunk)
+                if size > body_limit:
+                    return error_response(request, 413, 'request_too_large', 'Файл превышает допустимый размер запроса.')
+                chunks.append(chunk)
+            # Starlette's CachedRequest replays this bounded body to FastAPI.
+            request._body = b''.join(chunks)
         response = await call_next(request)
         response.headers['X-Trace-ID'] = request.state.trace_id
         response.headers['X-Content-Type-Options'] = 'nosniff'
