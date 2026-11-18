@@ -1,7 +1,7 @@
 from datetime import date
 from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Depends, Query, Request
-from sqlalchemy import select, func
+from sqlalchemy import select, func, delete, or_
 from app.core.database import utcnow
 from app.core.dependencies import get_db
 from app.core.errors import AppError
@@ -9,7 +9,7 @@ from app.core.owned import record, require_module
 from app.core.resource_api import add_resource
 from app.modules.auth.dependencies import get_current_user
 from app.modules.planning.dependencies import EntitlementService
-from app.modules.books.models import Book, DiaryEntry
+from app.modules.books.models import Book, DiaryEntry, DiaryReview
 from app.modules.books.schemas import BookInput, DiaryInput
 from app.modules.books.catalog import search_catalog
 
@@ -142,4 +142,14 @@ def search(
 
 
 add_resource(router, "/books", Book, BookInput, "books", validate=book_valid, serialize=book_output)
-add_resource(router, "/diary/entries", DiaryEntry, DiaryInput, "books", validate=diary_valid)
+def invalidate_reviews(db, user, item, previous):
+    days = {item.day}
+    if previous:
+        days.add(previous['day'])
+    from datetime import timedelta
+    db.execute(delete(DiaryReview).where(DiaryReview.user_id == user.id,
+        or_(*[(DiaryReview.end_day >= day) & (DiaryReview.end_day <= day + timedelta(days=6)) for day in days])))
+
+
+add_resource(router, "/diary/entries", DiaryEntry, DiaryInput, "books", validate=diary_valid,
+             after_write=invalidate_reviews, after_delete=invalidate_reviews)

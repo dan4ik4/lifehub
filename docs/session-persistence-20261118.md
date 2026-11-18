@@ -23,11 +23,11 @@ Backend: 207 tests passed; 6 PostgreSQL/Redis integration tests skipped without 
 ## Requested order after item 1
 
 2. Health integration status explained. User explicitly deferred real-device Health Connect/HealthKit work until AFTER resolving Google sign-in in the APK (item 10). Return to health integration after that; do not request a phone test now.
-3. Save all intended project changes to GitHub (inspect secrets/build/test artifacts first).
-4. Discuss bank connections and easier finance tracking.
+3. Completed: current LifeHub source snapshot pushed to GitHub main, commit 913c595fda5d03476fc254736f66ebad66701feb. Remote SHA verified. Subsequent planning notes may remain local until the next requested publication.
+4. Bank options researched for Poland/EEA. User deferred banking APIs and selected CSV through AI as the interim direction. Research, sources and the decision saved to FigJam: https://www.figma.com/board/XeDJPNn8P1S8ZcwAxjcpur?node-id=257-763 . CSV upload/import is now implemented and tested locally; production rollout is not yet confirmed.
 5. Subscription payments deferred.
-6. Review remaining integration setup.
-7. Finish the agreed remaining AI functionality, clarifying concrete scope first.
+6. Google Calendar confirmed by the user: real bidirectional synchronization works and updates every five minutes. Treat this as verified; do not keep listing it as untested. Apple setup guidance provided. User explicitly deferred Sign in with Apple after learning that Apple Developer Program membership is paid; return when they decide to enroll, without creating Apple credentials or requesting payment now. iOS signing/build, EventKit calendar client and physical-device HealthKit checks remain unfinished, with health checks deferred as in item 2.
+7. CSV finance import and on-demand weekly diary review implemented and tested locally. Combined release uploaded but not yet deployed; see diary-review-20261118.md for validation and the single batch deployment command. Financial analytics/forecasting and cross-module insights remain unfinished; clarify concrete scope for each next piece.
 8. Present all outstanding product decisions for discussion.
 9. Configure and verify real push notifications.
 10. Diagnose Google sign-in in the Android APK. After this is resolved, return to the deferred real-device health integration checks from item 2.

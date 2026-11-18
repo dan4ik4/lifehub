@@ -13,6 +13,7 @@ from app.modules.goals_habits import models as goals_habits_models
 
 from app.modules.health import models as health_models
 from app.modules.finance import models as finance_models
+from app.modules.finance import import_models as finance_import_models
 from app.modules.books import models as books_models
 
 from app.modules.users import models as user_models

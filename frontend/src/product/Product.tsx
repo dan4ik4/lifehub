@@ -2,6 +2,7 @@ import {GoalsHabits} from './GoalsHabits';
 import {HealthConnection} from './HealthConnection';
 import {Navigation} from '../components/Navigation';
 import {Dashboard} from './Dashboard';
+import {DiaryReview} from './DiaryReview';
 import {formatAmount} from "./format";
 import { Avatar } from "../components/Avatar";
 import exerciseNames from "./exercises.json";
@@ -374,6 +375,9 @@ function Records({
             </select>
           </label>
         </div>
+      )}
+      {s.key === "diary" && (
+        <DiaryReview user={user} pro={pro} revision={data.rows} onSource={setFilterDay}/>
       )}
       {s.key === "diary" && (
         <DiaryCalendar

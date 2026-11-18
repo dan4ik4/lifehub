@@ -2,6 +2,7 @@
 import argparse
 import hashlib
 import json
+import re
 import tarfile
 from pathlib import Path
 
@@ -9,13 +10,14 @@ from pathlib import Path
 def build(tag):
     root = Path(__file__).resolve().parents[1]
     files = set()
-    for folder in ("app", "migrations", "deploy", "frontend/src", "frontend/public"):
+    for folder in ("app", "migrations", "frontend/src", "frontend/public"):
         for path in (root / folder).rglob("*"):
             if path.is_file() and "__pycache__" not in path.parts and path.suffix not in (".pyc", ".pyo"):
                 files.add(path.relative_to(root))
     for name in ("Dockerfile", ".dockerignore", "requirements.txt", "alembic.ini", "compose.production.yaml",
                  "frontend/Dockerfile", "frontend/.dockerignore", "frontend/package.json", "frontend/pnpm-lock.yaml",
-                 "frontend/index.html", "frontend/nginx.conf"):
+                 "frontend/index.html", "frontend/nginx.conf", "deploy/Caddyfile", "deploy/frontend.conf",
+                 "deploy/backup.sh", "deploy/lifehub-backup.service", "deploy/lifehub-backup.timer"):
         files.add(Path(name))
     for pattern in ("tsconfig*.json", "vite.config.*", "vitest.config.*"):
         files.update(p.relative_to(root) for p in (root / "frontend").glob(pattern))
@@ -44,6 +46,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("tag")
     args = parser.parse_args()
-    if not args.tag.isdigit() or len(args.tag) != 8:
-        parser.error("Use YYYYMMDD")
+    if not re.fullmatch(r"[0-9]{8}(?:-[a-z0-9]+(?:-[a-z0-9]+)*)?", args.tag):
+        parser.error("Use YYYYMMDD or YYYYMMDD-label")
     build(args.tag)

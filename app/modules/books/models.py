@@ -1,7 +1,8 @@
-from datetime import date
-from sqlalchemy import Date, Integer, String, Text
+from datetime import date, datetime
+from uuid import UUID, uuid4
+from sqlalchemy import Date, ForeignKey, Integer, JSON, String, Text, UniqueConstraint, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
-from app.core.database import Base
+from app.core.database import Base, UTCDateTime, utcnow
 from app.core.owned import OwnedRecord
 
 
@@ -26,3 +27,16 @@ class DiaryEntry(OwnedRecord, Base):
     day: Mapped[date] = mapped_column(Date, index=True)
     title: Mapped[str] = mapped_column(String(300), default="")
     text: Mapped[str] = mapped_column(Text)
+
+
+class DiaryReview(Base):
+    __tablename__ = 'diary_weekly_reviews'
+    __table_args__ = (UniqueConstraint('user_id', 'end_day', 'source_hash'),)
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    user_id: Mapped[UUID] = mapped_column(ForeignKey('users.id', ondelete='CASCADE'), index=True)
+    end_day: Mapped[date] = mapped_column(Date)
+    source_hash: Mapped[str] = mapped_column(String(64))
+    status: Mapped[str] = mapped_column(String(16), default='processing')
+    output: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, onupdate=utcnow)

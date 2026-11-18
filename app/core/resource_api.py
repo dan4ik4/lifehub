@@ -26,6 +26,7 @@ def add_resource(
     read_filter=None,
     serialize=None,
     after_write=None,
+    after_delete=None,
 ):
     RESOURCE_REGISTRY[module + path] = dict(model=model, schema=schema, module=module,
         pro_only=pro_only, validate=validate, read_filter=read_filter, after_write=after_write)
@@ -94,8 +95,12 @@ def add_resource(
         return output(item, user)
 
     def remove(item_id: UUID, version: int = Query(ge=1), user=Depends(member), db=Depends(get_db)):
+        if after_delete:
+            lock_user(db, user)
         item = owned(db, model, user, item_id, version)
         item.deleted_at = utcnow()
+        if after_delete:
+            after_delete(db, user, item, None)
         db.commit()
         return Response(status_code=204)
 
