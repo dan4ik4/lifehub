@@ -1,3 +1,48 @@
+## 2026-10-22: assistant update deployed, public checks passed
+
+User confirmed running the deployment command. Independent checks: `/` 200, `/health/ready` 200, `/api/v1/users/me/assistant-preferences` 401 unauthenticated. Served frontend assets `index-CSrET2Yl.js` and `index-BtoHz7g4.css`; bundle contains the new assistant preferences integration. Authenticated real-provider production behavior has not been tested.
+
+See [assistant-20261022.md](assistant-20261022.md) for scope and validation: backend 200 passed / 6 integration skips; frontend 70 passed; build and migration parity passed. Release target migration: `0012_assistant_preferences`. No GitHub push.
+
+## 2026-10-21: production deployment verified
+
+User terminal screenshot confirms migration `0011_device_health (head)`, API readiness OK, running frontend/API/worker and healthy database/Redis. Independent public checks after deployment: `/` 200, `/health/ready` 200, `/privacypolicy.html` 200, protected `/api/v1/health/device` 401 (previously 404). Served frontend assets: index-4xDH61EH.js and index-h-95cfRv.css.
+
+Web/backend release is deployed. Authenticated feature checks and native phone HealthKit/Health Connect permission/sync checks remain; browser access alone does not enable device health reads. Android debug APK is built locally; iOS still requires signing/build via Mac or macOS build service.
+
+## 2026-10-21: Compose environment parsing fix
+
+Next attempt passed module imports but failed Settings parsing `google_client_ids` in isolated migration verification. The QA container used `docker run --env-file`, unlike production Compose; literal dotenv quotes break JSON list decoding. Changed runtime settings/import smoke check and QA migrations to `sc run --rm --no-deps -T ... migrate`, using identical Compose env parsing. QA database URL remains explicitly overridden. Production env file unchanged.
+
+Verified quoted fake client IDs using local Compose config; JSON parsing passes after Compose decoding and fails with literal quotes. Updated script uploaded; remote bash syntax passed, public readiness 200. Full deployment still requires the user's interactive sudo command below. Do not mark deployed until DEPLOYMENT_OK and public endpoint checks pass.
+
+## 2026-10-21: deployment package permission fix
+
+Deployment failed importing `app.modules.auth`. Reproduced extraction with umask 077: implicit archive directories were 0700. Repacked the same 178 source files with 26 explicit directories (0755), files 0644, and changed extraction to `--same-permissions`. Added a model import smoke check as the image runtime user before migration checks.
+
+Corrected archive SHA256: `1a8ed0d743254e271085698c7ef4566a10e8591ad9481f650ba798ddc09cdb7e`.
+Uploaded archive and script to `/home/lifeadmin/lifehub-release-20261021/`. Remote checksum and bash syntax passed; remote extraction verified auth directory 0755 and model file 0644. Public readiness returns 200. Deployment is NOT yet completed: sudo still requires the user's password.
+
+Run from the user's terminal:
+```powershell
+ssh -t lifeadmin@104.248.254.176 "sudo bash /home/lifeadmin/lifehub-release-20261021/deploy-20261021.sh"
+```
+After `DEPLOYMENT_OK`, verify public readiness and protected `/api/v1/health/device` returns 401. Native health checks still require phones.
+
+# Release 2026-10-21 — prepared, deployment blocked
+
+- User explicitly authorized deploying all current changes to the server.
+- Fresh SSH check: `root@104.248.254.176` returns `Permission denied (publickey)`. No SSH agent or attached server terminal is available. Requested current SSH command/key path from user; no secrets requested.
+- Correct SSH user supplied by the user: `lifeadmin`. SSH works; sudo requires an interactive password. `/srv/lifehub` is root-only and Docker socket is not accessible to lifeadmin. No production files, environment, containers or database were changed.
+- Package and reviewed script uploaded to `/home/lifeadmin/lifehub-release-20261021/` (directory 0700). Remote archive SHA-256 matches; `bash -n` passed. Script: `deploy-20261021.sh`. It builds sequentially, tests migrations in a disposable PostgreSQL container, backs up DB/source, migrates production, replaces api/worker/frontend and checks public endpoints. On failure it restores old image tags/containers without downgrading/restoring production data.
+- Final local backend suite: 189 passed, 6 PostgreSQL/Redis integration checks skipped. Frontend: 70 passed and production build passed in prior verification.
+- Required user action: run `ssh -t lifeadmin@104.248.254.176 "sudo bash /home/lifeadmin/lifehub-release-20261021/deploy-20261021.sh"` in their own PowerShell and enter sudo password there, never in chat.
+- Source package prepared: `output/releases/lifehub-20261021-web-backend.tar.gz` (178 allowlisted files, 285232 bytes), SHA-256 `ec5c8e8035efea60ce59dde66b7e1e6213c7540a2f23ee834242f517ee463475`. Includes chat/media/overview/health, migrations 0009–0011, frontend sources and locked dependencies, Docker/compose/deploy config. Excludes all .env files, local data and native build output.
+- Next after SSH access: inspect actual server state and environment key presence without printing secrets; back up DB/source/settings and tag old images; upload package into staging; build using server production frontend OAuth args; run migrations with new API image; recreate API/worker/frontend; verify readiness, served assets, protected APIs and worker errors. Preserve server .env.production, user accounts and persistent volumes. Do not restore/downgrade DB automatically after new writes.
+- Android APK remains a separate local test artifact; deploying the website alone cannot grant browser access to HealthKit/Health Connect.
+
+---
+
 # Release 2026-10-02 — full product expansion
 
 - Code commit `a54443c` pushed to `dan4ik4/lifehub` main and deployed to https://lifehapp.online.

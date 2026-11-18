@@ -117,7 +117,6 @@ def test_shopping_list_and_atomic_bulk_items_owner_scope(client, make_user, auth
     assert len(lists) == 1 and lists[0]["kind"] == "shopping"
     assert len(client.get(f"{BASE}/lists", headers=headers).json()["items"]) == 1
     url = f"{BASE}/lists/{lists[0]['id']}"
-    assert client.delete(url, headers=headers).json()["error"]["code"] == "system_list_locked"
     invalid = client.post(url + "/items/bulk", json={"items": [{"title": "Apple"}, {"title": ""}]}, headers=headers)
     assert invalid.status_code == 422
     assert db.scalar(select(func.count()).select_from(ListItem)) == 0

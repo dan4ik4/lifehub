@@ -14,6 +14,12 @@ class Goal(OwnedRecord, Base):
     due_date: Mapped[date | None] = mapped_column(Date)
     status: Mapped[str] = mapped_column(String(16), default="active")
     progress: Mapped[int] = mapped_column(Integer, default=0)
+    target_value: Mapped[Decimal | None] = mapped_column(Numeric(14, 4))
+    current_value: Mapped[Decimal] = mapped_column(Numeric(14, 4), default=0, server_default="0")
+    unit: Mapped[str] = mapped_column(String(40), default="", server_default="")
+
+
+# Numeric goals retain manual starting progress separately from linked habits.
 
 
 class Milestone(OwnedRecord, Base):
@@ -32,6 +38,7 @@ class Habit(OwnedRecord, Base):
     weekdays: Mapped[list[int]] = mapped_column(JSON, default=lambda: list(range(7)))
     reminder_time: Mapped[str | None] = mapped_column(String(5))
     goal_id: Mapped[UUID | None] = mapped_column(ForeignKey("goals.id", ondelete="SET NULL"), index=True)
+    contributes: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     archived: Mapped[bool] = mapped_column(Boolean, default=False)
 
 

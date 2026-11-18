@@ -12,6 +12,8 @@ from app.modules.auth.dependencies import get_current_user
 from app.modules.planning.dependencies import EntitlementService
 
 
+RESOURCE_REGISTRY = {}
+
 def add_resource(
     router,
     path,
@@ -25,6 +27,8 @@ def add_resource(
     serialize=None,
     after_write=None,
 ):
+    RESOURCE_REGISTRY[module + path] = dict(model=model, schema=schema, module=module,
+        pro_only=pro_only, validate=validate, read_filter=read_filter, after_write=after_write)
     edit_schema = create_model(schema.__name__ + "Edit", __base__=schema, version=(int, Field(ge=1)))
 
     def member(user=Depends(get_current_user)):
@@ -99,6 +103,8 @@ def add_resource(
         item = owned(db, model, user, item_id)
         guard(item, user)
         return output(item, user)
+
+    RESOURCE_REGISTRY[module + path].update(create=create, edit=edit, remove=remove, edit_schema=edit_schema, output=output)
 
     for endpoint, suffix, methods, status in [
         (listing, "", ["GET"], 200),

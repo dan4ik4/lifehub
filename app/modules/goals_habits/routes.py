@@ -49,6 +49,21 @@ def check_quota(db, user, model, exclude=None):
         raise AppError(403, "pro_required", "Free limit reached")
 
 
+def goal_data(db, user, item):
+    result = record(item)
+    if item.target_value is not None:
+        contribution = db.scalar(select(func.coalesce(func.sum(HabitCheckin.value), 0)).join(
+            Habit, Habit.id == HabitCheckin.habit_id
+        ).where(Habit.user_id == user.id, Habit.goal_id == item.id, Habit.deleted_at.is_(None),
+                Habit.contributes.is_(True), Habit.unit == item.unit,
+                HabitCheckin.user_id == user.id, HabitCheckin.deleted_at.is_(None)))
+        total = item.current_value + contribution
+        result["linked_value"] = str(contribution)
+        result["total_value"] = str(total)
+        result["progress"] = min(100, int(total / item.target_value * 100))
+    return result
+
+
 def habit_data(db, user, item):
     result = record(item)
     checkin = db.scalar(select(HabitCheckin).where(HabitCheckin.habit_id == item.id, HabitCheckin.day == today(user)))
@@ -68,7 +83,7 @@ def goals(
         .offset(offset)
         .limit(limit + 1)
     ).all()
-    return {"items": [record(g) for g in items[:limit]], "has_more": len(items) > limit}
+    return {"items": [goal_data(db, user, g) for g in items[:limit]], "has_more": len(items) > limit}
 
 
 @router.post("/goals", status_code=201)
@@ -88,6 +103,15 @@ def create_goal(body: GoalInput, user=Depends(member), db=Depends(get_db)):
 def edit_goal(goal_id: UUID, body: GoalEdit, user=Depends(member), db=Depends(get_db)):
     lock_user(db, user)
     item = owned(db, Goal, user, goal_id, body.version)
+    # Older clients must not silently reset numeric goal settings.
+    for field in ("target_value", "current_value", "unit"):
+        if field not in body.model_fields_set:
+            body = body.model_copy(update={field: getattr(item, field)})
+    if body.target_value != item.target_value or body.unit != item.unit:
+        linked = db.scalar(select(Habit.id).where(Habit.user_id == user.id, Habit.goal_id == item.id,
+            Habit.deleted_at.is_(None), Habit.contributes.is_(True)).limit(1))
+        if linked and (body.target_value is None or body.unit != item.unit):
+            raise AppError(422, "invalid_contribution", "Сначала отключите автоматический вклад связанных привычек.")
     if body.status == "active":
         check_quota(db, user, Goal, item.id)
     for k, v in body.model_dump(exclude={"version"}).items():
@@ -100,7 +124,10 @@ def edit_goal(goal_id: UUID, body: GoalEdit, user=Depends(member), db=Depends(ge
 
 @router.delete("/goals/{goal_id}", status_code=204)
 def delete_goal(goal_id: UUID, version: int = Query(ge=1), user=Depends(member), db=Depends(get_db)):
+    lock_user(db, user)
     item = owned(db, Goal, user, goal_id, version)
+    for habit in db.scalars(select(Habit).where(Habit.user_id == user.id, Habit.goal_id == item.id)):
+        habit.goal_id, habit.contributes = None, False
     item.deleted_at = utcnow()
     db.commit()
     return Response(status_code=204)
@@ -109,7 +136,7 @@ def delete_goal(goal_id: UUID, version: int = Query(ge=1), user=Depends(member),
 @router.get("/goals/{goal_id}")
 def goal_detail(goal_id: UUID, user=Depends(member), db=Depends(get_db)):
     item = owned(db, Goal, user, goal_id)
-    result = record(item)
+    result = goal_data(db, user, item)
     result["milestones"] = (
         [
             record(m)
@@ -230,7 +257,11 @@ def validate_habit(db, user, body):
         values["target"] = 1
     if body.goal_id:
         pro(user)
-        owned(db, Goal, user, body.goal_id)
+        goal = owned(db, Goal, user, body.goal_id)
+        if body.contributes and (goal.target_value is None or body.kind == "boolean" or body.unit != goal.unit):
+            raise AppError(422, "invalid_contribution", "Для вклада нужна числовая цель с той же единицей измерения.")
+    elif body.contributes:
+        raise AppError(422, "invalid_contribution", "Сначала выберите связанную цель.")
     return values
 
 
@@ -248,6 +279,8 @@ def create_habit(body: HabitInput, user=Depends(member), db=Depends(get_db)):
 def edit_habit(habit_id: UUID, body: HabitEdit, user=Depends(member), db=Depends(get_db)):
     lock_user(db, user)
     item = owned(db, Habit, user, habit_id, body.version)
+    if "contributes" not in body.model_fields_set:
+        body = body.model_copy(update={"contributes": item.contributes if body.goal_id == item.goal_id else False})
     if not body.archived:
         check_quota(db, user, Habit, item.id)
     for k, v in validate_habit(db, user, body).items():
@@ -266,6 +299,7 @@ def delete_habit(habit_id: UUID, version: int = Query(ge=1), user=Depends(member
 
 @router.post("/habits/{habit_id}/checkins")
 def checkin(habit_id: UUID, body: CheckinInput, user=Depends(member), db=Depends(get_db)):
+    lock_user(db, user)
     habit = owned(db, Habit, user, habit_id, body.version)
     if habit.archived:
         raise AppError(409, "habit_archived", "Restore the habit before checking in")

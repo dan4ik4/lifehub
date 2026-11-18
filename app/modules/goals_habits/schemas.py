@@ -12,6 +12,9 @@ class GoalInput(InputModel):
     due_date: date | None = None
     status: Literal["active", "completed", "cancelled"] = "active"
     progress: int = Field(default=0, ge=0, le=100)
+    target_value: Decimal | None = Field(default=None, gt=0, max_digits=14, decimal_places=4)
+    current_value: Decimal = Field(default=Decimal(0), ge=0, max_digits=14, decimal_places=4)
+    unit: str = Field(default="", max_length=40)
 
 
 class GoalEdit(GoalInput):
@@ -35,6 +38,7 @@ class HabitInput(InputModel):
     weekdays: list[int] = Field(default_factory=lambda: list(range(7)), min_length=1, max_length=7)
     reminder_time: str | None = Field(default=None, pattern=r"^([01][0-9]|2[0-3]):[0-5][0-9]$")
     goal_id: UUID | None = None
+    contributes: bool = False
     archived: bool = False
 
     @field_validator("weekdays")

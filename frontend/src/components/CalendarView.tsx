@@ -129,7 +129,14 @@ export function CalendarView({ selected, onSelect, timezone, calendar, tasks, on
   const [view, setView] = useState<'day' | 'week'>(() => window.innerWidth < 800 ? 'day' : 'week');
   const scroll = useRef<HTMLDivElement>(null);
   const days = view === 'day' ? [selected] : weekDays(selected), today = todayKey(timezone);
-  useEffect(() => { if (scroll.current) scroll.current.scrollTop = 7.5 * 60; }, []);
+  const scrolled = useRef('');
+  useEffect(() => {
+    const key = `${view}:${selected}:${timezone}`;
+    if (!calendar || !scroll.current || scrolled.current === key) return;
+    const starts = days.flatMap(day => calendarDayBlocks(day, timezone, calendar, tasks).map(b => b.start));
+    scroll.current.scrollTop = starts.length ? Math.max(0, Math.floor(Math.min(...starts) / 60) * 60 - 60) : 8 * 60;
+    scrolled.current = key;
+  }, [view, selected, timezone, calendar, tasks]);
   const getEvents = (day: string) => (calendar?.events || []).filter(event => eventOccupiesDay(event, day, timezone));
   const getTasks = (day: string) => (calendar?.tasks || []).map(occurrence => ({ occurrence, task: tasks.find(task => task.id === occurrence.task_id) }))
     .filter((item): item is { occurrence: TaskOccurrence; task: Task } => Boolean(item.task) && taskOccupiesDay(item.task!, item.occurrence, day, timezone));

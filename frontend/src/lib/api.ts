@@ -1,3 +1,4 @@
+import {Capacitor} from '@capacitor/core';
 import type { AuthSession, TokenPair } from './types';
 import { createDemoSession, demoRequest, DemoError } from './demo';
 
@@ -29,6 +30,8 @@ let loaded = false;
 let session: AuthSession | null = null;
 let epoch = 0;
 let refreshFlight: { epoch: number; promise: Promise<void> } | null = null;
+let persistent = true;
+let storageSnapshot: string | null = null;
 
 function validTokens(value: unknown): value is TokenPair {
   if (!value || typeof value !== 'object') return false;
@@ -38,24 +41,64 @@ function validTokens(value: unknown): value is TokenPair {
     tokens.token_type === 'bearer' && typeof tokens.expires_in === 'number';
 }
 
+function readSession(raw: string | null): AuthSession | null {
+  try {
+    const saved = raw ? JSON.parse(raw) as AuthSession : null;
+    return saved?.user?.id && validTokens(saved.tokens) ? saved : null;
+  } catch { return null; }
+}
+
+// Cache the parsed object: useSyncExternalStore needs a stable snapshot.
+function syncSession(): void {
+  if (!persistent || session?.demo) return;
+  try {
+    const raw = localStorage.getItem(SESSION_KEY);
+    if (raw === storageSnapshot) return;
+    storageSnapshot = raw;
+    const saved = readSession(raw);
+    const next = saved?.demo ? null : saved;
+    if (session?.user.id !== next?.user.id) epoch += 1;
+    session = next;
+  } catch { /* Keep the in-memory session when storage is unavailable. */ }
+}
+
 export function getSession(): AuthSession | null {
   if (!loaded) {
     loaded = true;
     try {
-      const raw = sessionStorage.getItem(SESSION_KEY);
-      const saved = raw ? JSON.parse(raw) as AuthSession : null;
-      if (saved?.user?.id && validTokens(saved.tokens)) session = saved;
-    } catch { /* Storage can be disabled; the current tab still works in memory. */ }
+      storageSnapshot = localStorage.getItem(SESSION_KEY);
+      const saved = readSession(storageSnapshot);
+      if (saved && !saved.demo) session = saved;
+    } catch { persistent = false; }
+    try {
+      const legacy = readSession(sessionStorage.getItem(SESSION_KEY));
+      if (legacy?.demo) session = legacy;
+      else if (!session && legacy) { session = legacy; publish(); }
+      if (!session?.demo && persistent) sessionStorage.removeItem(SESSION_KEY);
+    } catch { /* The current session still works in memory. */ }
   }
+  syncSession();
   return session;
 }
 
 function publish(): void {
   try {
-    if (session) sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
+    storageSnapshot = session && !session.demo ? JSON.stringify(session) : null;
+    if (storageSnapshot) localStorage.setItem(SESSION_KEY, storageSnapshot);
+    else localStorage.removeItem(SESSION_KEY);
+  } catch { persistent = false; }
+  try {
+    if (session && (session.demo || !persistent)) sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
     else sessionStorage.removeItem(SESSION_KEY);
-  } catch { /* Never fall back to persistent storage for real credentials. */ }
+  } catch { /* Storage can be disabled; the current tab still works in memory. */ }
   for (const listener of listeners) listener();
+}
+
+function onStorage(event: StorageEvent): void {
+  if (event.key !== null && event.key !== SESSION_KEY) return;
+  const previous = session;
+  syncSession();
+  if (previous !== session) for (const listener of listeners) listener();
 }
 
 export function setSession(value: AuthSession): void {
@@ -78,8 +121,12 @@ export function clearSession(): void {
 }
 
 export function subscribeSession(listener: () => void): () => void {
+  if (!listeners.size && typeof window !== 'undefined') window.addEventListener('storage', onStorage);
   listeners.add(listener);
-  return () => { listeners.delete(listener); };
+  return () => {
+    listeners.delete(listener);
+    if (!listeners.size && typeof window !== 'undefined') window.removeEventListener('storage', onStorage);
+  };
 }
 
 export function startDemo(): AuthSession {
@@ -91,6 +138,11 @@ export function startDemo(): AuthSession {
 export function isDemo(): boolean { return getSession()?.demo === true; }
 
 const messages: Record<string, string> = {
+  voice_not_configured: 'Распознавание голоса не подключено на этом сервере. Требуется ключ OpenAI.',
+  transcription_failed: 'Не удалось распознать запись. Попробуйте ещё раз.',
+  invalid_audio: 'Запись повреждена или слишком большая. Запишите голос заново.',
+  empty_audio: 'Не удалось услышать речь. Попробуйте записать ещё раз.',
+  voice_too_long: 'Слишком длинная запись. Запишите более короткое сообщение.',
   invalid_credentials: 'Неверная почта или пароль.',
   invalid_current_password: 'Текущий пароль указан неверно.',
   invalid_otp: 'Код не подошёл. Проверьте шесть цифр из последнего письма.',
@@ -203,7 +255,7 @@ async function request(path: string, options: ApiOptions, token?: string): Promi
   if (token) headers.set('Authorization', `Bearer ${token}`);
   let response: Response;
   try {
-    response = await fetch(`/api/v1${path}`, {
+    response = await fetch(`${Capacitor.isNativePlatform()?'https://lifehapp.online':''}/api/v1${path}`, {
       method: options.method || 'GET', headers, signal: options.signal,
       body: options.body === undefined ? undefined : JSON.stringify(options.body),
       credentials: 'same-origin', redirect: 'error',
@@ -221,14 +273,21 @@ async function refresh(expectedEpoch: number): Promise<void> {
   if (epoch !== expectedEpoch || !session || session.demo) throw changedSession();
   if (refreshFlight?.epoch === expectedEpoch) return refreshFlight.promise;
   const refreshToken = session.tokens.refresh_token;
-  const promise = (async () => {
+  const rotate = async () => {
+    getSession();
+    if (epoch !== expectedEpoch || !session || session.demo) throw changedSession();
+    // Another tab may have rotated the token while we waited for its lock.
+    if (session.tokens.refresh_token !== refreshToken) return;
     try {
       const tokens = await request('/auth/refresh', { method: 'POST', body: { refresh_token: refreshToken } });
+      getSession();
       if (epoch !== expectedEpoch || !session) throw changedSession();
+      if (session.tokens.refresh_token !== refreshToken) return;
       if (!validTokens(tokens)) throw new ApiError(502, 'invalid_response', 'Не удалось обновить сессию. Попробуйте ещё раз.');
       session = { ...session, tokens };
       publish();
     } catch (error) {
+      getSession();
       if (epoch !== expectedEpoch) throw changedSession();
       if (error instanceof ApiError && error.status === 401) {
         clearSession();
@@ -236,6 +295,12 @@ async function refresh(expectedEpoch: number): Promise<void> {
       }
       throw error;
     }
+  };
+  // Refresh tokens are single-use. Serialize rotation across all tabs on HTTPS.
+  const promise = (async () => {
+    if (typeof navigator !== 'undefined' && navigator.locks) {
+      await navigator.locks.request('lifehub.auth.refresh', rotate);
+    } else await rotate();
   })();
   const flight = { epoch: expectedEpoch, promise };
   refreshFlight = flight;
@@ -251,6 +316,7 @@ export async function api<T>(rawPath: string, options: ApiOptions = {}): Promise
   if (current?.demo) {
     try {
       const result = await demoRequest(path, options, current.user);
+      getSession();
       if (epoch !== expectedEpoch) throw changedSession();
       if (path.split('?')[0] === '/users/me' && options.method === 'PATCH') {
         session = { ...current, user: result as AuthSession['user'] };
@@ -270,21 +336,26 @@ export async function api<T>(rawPath: string, options: ApiOptions = {}): Promise
   const token = current?.tokens.access_token;
   try {
     const result = await request(path, options, token);
+    getSession();
     if (epoch !== expectedEpoch) throw changedSession();
     return result as T;
   } catch (error) {
+    getSession();
     if (epoch !== expectedEpoch) throw changedSession();
     if (!accessFailure(error) || !current) throw error;
     // A late 401 can arrive after another request has already rotated tokens.
     if (session?.tokens.access_token === token) await refresh(expectedEpoch);
     options.signal?.throwIfAborted();
+    getSession();
     if (epoch !== expectedEpoch || !session) throw changedSession();
     const retryToken = session.tokens.access_token;
     try {
       const result = await request(path, options, retryToken);
+      getSession();
       if (epoch !== expectedEpoch) throw changedSession();
       return result as T;
     } catch (retryError) {
+      getSession();
       if (epoch !== expectedEpoch) throw changedSession();
       if (accessFailure(retryError) && session?.tokens.access_token === retryToken) clearSession();
       throw retryError;

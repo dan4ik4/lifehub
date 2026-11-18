@@ -152,6 +152,8 @@ def delete_account(body: DeleteInput, request: Request, user=Depends(get_current
 
 # Explicit allowlist prevents future auth/token tables from silently entering an export.
 EXPORT_TABLES = {
+    "health_connections",
+    "health_device_days",
     "tasks",
     "task_occurrences",
     "calendar_events",
@@ -197,10 +199,16 @@ def collect_data(db, user):
         },
         "exported_at": utcnow().isoformat(),
     }
+    from app.modules.planning.command_models import PlanningCommandRecord
+    conversation = db.scalars(select(PlanningCommandRecord).where(PlanningCommandRecord.user_id == user.id,
+        PlanningCommandRecord.request_text.is_not(None)).order_by(PlanningCommandRecord.created_at)).all()
+    result['assistant_history'] = jsonable_encoder([{'created_at': r.created_at, 'message': r.request_text, 'photos': r.request_photos or [],
+        'reply': (r.response or {}).get('message'), 'confirmation': (r.response or {}).get('confirmation'),
+        'status': r.status} for r in conversation])
     for name in sorted(EXPORT_TABLES):
         table = Base.metadata.tables[name]
         columns = [
-            c for c in table.c if c.name not in ("user_id", "lease_token", "lease_until", "delivery_key", "last_error")
+            c for c in table.c if c.name not in ("user_id", "sync_token", "lease_token", "lease_until", "delivery_key", "last_error")
         ]
         rows = db.execute(select(*columns).where(table.c.user_id == user.id)).mappings().all()
         result[name] = jsonable_encoder([dict(r) for r in rows], custom_encoder={__import__("decimal").Decimal: str})

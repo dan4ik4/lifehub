@@ -19,6 +19,7 @@ class User(Base):
     trial_started_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     onboarding_completed: Mapped[bool] = mapped_column(Boolean, default=False)
     free_modules: Mapped[list[str]] = mapped_column(JSON, default=list)
+    chat_preferences: Mapped[dict] = mapped_column(JSON, default=dict, server_default="{}")
     timezone: Mapped[str] = mapped_column(String(100), default="UTC")
     weight_unit: Mapped[str] = mapped_column(String(2), default="kg", server_default="kg")
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)

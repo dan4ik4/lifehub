@@ -145,14 +145,14 @@ class PlanningService:
         self.finish(commit)
         return item
 
-    def delete_task(self, task_id, version=None):
+    def delete_task(self, task_id, version=None, commit=True):
         item = self.tasks.get(task_id, lock=True)
         check_version(item, version)
         item.deleted_at = item.updated_at = utcnow()
         self._reminders("task", item, [])
-        self.finish()
+        self.finish(commit)
 
-    def complete_task(self, task_id, payload, reopen=False):
+    def complete_task(self, task_id, payload, reopen=False, commit=True):
         item = self.tasks.get(task_id, lock=True)
         check_version(item, payload.version)
         occurrence_at = payload.occurrence_at
@@ -183,7 +183,7 @@ class PlanningService:
             if reopen:
                 self._reminders("task", item)
         item.updated_at = now
-        self.finish()
+        self.finish(commit)
         return self.occurrence_response(item, occurrence_at, record)
 
     def create_event(self, payload: CalendarEventCreate, commit=True):
@@ -223,7 +223,7 @@ class PlanningService:
         if item.external_read_only:
             raise AppError(409, "sync_conflict", "The connected calendar marks this event read-only")
 
-    def delete_event(self, event_id, scope="all", occurrence_at=None, version=None):
+    def delete_event(self, event_id, scope="all", occurrence_at=None, version=None, commit=True):
         item = self.events.get(event_id, lock=True)
         self._event_writable(item)
         check_version(item, version)
@@ -250,10 +250,10 @@ class PlanningService:
         item.updated_at = utcnow()
         self.session.flush()
         self._reminders("event", item, [] if item.deleted_at else None)
-        self.finish()
+        self.finish(commit)
 
     def ensure_shopping_list(self, *, commit=True):
-        item = self.session.scalar(self.lists.query().where(PlanningList.system_key == "shopping"))
+        item = self.session.scalar(select(PlanningList).where(PlanningList.user_id == self.user.id, PlanningList.system_key == "shopping"))
         if item is None:
             try:
                 with self.session.begin_nested():
@@ -261,7 +261,7 @@ class PlanningService:
                     self.session.add(item)
                     self.session.flush()
             except IntegrityError:
-                item = self.session.scalar(self.lists.query().where(PlanningList.system_key == "shopping"))
+                item = self.session.scalar(select(PlanningList).where(PlanningList.user_id == self.user.id, PlanningList.system_key == "shopping"))
                 if item is None:
                     raise
             self.finish(commit)
@@ -273,14 +273,14 @@ class PlanningService:
             require_pro(self.user)
         return item
 
-    def create_list(self, payload):
+    def create_list(self, payload, *, commit=True):
         require_pro(self.user)
         item = PlanningList(user_id=self.user.id, name=payload.name)
         self.session.add(item)
-        self.finish()
+        self.finish(commit)
         return item
 
-    def update_list(self, list_id, payload):
+    def update_list(self, list_id, payload, *, commit=True):
         item = self.lists.get(list_id, lock=True)
         if item.is_system:
             raise AppError(409, "system_list_locked", "The shopping list cannot be renamed")
@@ -288,16 +288,15 @@ class PlanningService:
         check_version(item, payload.version)
         item.name = payload.name
         item.updated_at = utcnow()
-        self.finish()
+        self.finish(commit)
         return item
 
-    def delete_list(self, list_id):
+    def delete_list(self, list_id, *, commit=True):
         item = self.lists.get(list_id, lock=True)
-        if item.is_system:
-            raise AppError(409, "system_list_locked", "The shopping list cannot be deleted")
-        require_pro(self.user)
+        if not item.is_system:
+            require_pro(self.user)
         item.deleted_at = item.updated_at = utcnow()
-        self.finish()
+        self.finish(commit)
 
     def add_list_items(self, list_id: UUID, payload: list[ListItemCreate], commit=True):
         parent = self.get_list(list_id, edit_items=True)
@@ -317,7 +316,7 @@ class PlanningService:
         self.finish(commit)
         return items
 
-    def update_list_item(self, list_id, item_id, payload):
+    def update_list_item(self, list_id, item_id, payload, *, commit=True):
         parent = self.get_list(list_id, edit_items=True)
         item = self.items.get(item_id, lock=True)
         if item.list_id != parent.id:
@@ -327,16 +326,16 @@ class PlanningService:
         for key, value in changes.items():
             setattr(item, key, value)
         item.updated_at = parent.updated_at = utcnow()
-        self.finish()
+        self.finish(commit)
         return item
 
-    def delete_list_item(self, list_id, item_id):
+    def delete_list_item(self, list_id, item_id, *, commit=True):
         parent = self.get_list(list_id, edit_items=True)
         item = self.items.get(item_id, lock=True)
         if item.list_id != parent.id:
             raise AppError(404, "not_found", "Resource not found")
         item.deleted_at = item.updated_at = parent.updated_at = utcnow()
-        self.finish()
+        self.finish(commit)
 
     def recurrence_response(self, item, start):
         if not item.rrule:

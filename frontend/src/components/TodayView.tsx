@@ -3,7 +3,7 @@ import { ArrowRight, CalendarDays, Check, CheckCheck, ChevronDown, ChevronLeft, 
 import { api, errorMessage } from '../lib/api';
 import { dateKey, dayLabel, plural, shiftDay, startOfDay, timeText, todayKey, weekDays } from '../lib/dates';
 import type { CalendarEvent, CalendarRange, Notify, Task, TaskOccurrence, User } from '../lib/types';
-import { AiComposer } from './AiComposer';
+
 import { EmptyState } from './ui';
 import { MiniCalendar } from './MiniCalendar';
 import { TaskRow } from './TaskRow';
@@ -62,7 +62,7 @@ export function TodayView({ user, selected, onSelect, tasks, calendar, busyIds, 
       {filter !== 'done' && completed.length > 0 && <div className="completed-section"><button className="completed-toggle" onClick={() => setShowDone(!showDone)} aria-expanded={showDone}><ChevronDown size={15} className={showDone ? 'rotate' : ''} />Выполнено<span>{completed.length}</span></button>{showDone && filter !== 'day' && <p className="agenda-date">{completedScope}</p>}{showDone && completed.map(row)}</div>}
       {filter === 'day' && unscheduled.length > 0 && <div className="unscheduled-section"><div className="section-heading"><span>Без даты</span><span className="count-badge">{unscheduled.length}</span></div>{unscheduled.map(task => row({ task }))}</div>}
       {filter === 'day' && overdue > 0 && <button className="overdue-hint" onClick={() => setFilter('all')}><Clock3 size={14} />{plural(overdue, ['задача ждёт', 'задачи ждут', 'задач ждут'])} с прошлых дней<ArrowRight size={14} /></button>}
-    </section><AiComposer onCreated={refresh} notify={notify} /></div>
+    </section></div>
       <aside className="day-aside"><section className="panel agenda-panel"><header className="section-heading"><h2>В расписании</h2><button className="icon-button small" aria-label="Добавить событие в расписание" onClick={onCreateEvent}><Plus size={18} /></button></header><p className="agenda-date">{dayLabel(selected, { weekday: 'long', day: 'numeric', month: 'long' })}</p>{dayEvents.length ? <div className="agenda-list">{dayEvents.map((event, index) => <button className={`agenda-event agenda-${index % 3}`} key={`${event.id}:${event.occurrence_at}`} onClick={() => onEvent(event)}><div className="agenda-time"><span>{event.all_day ? 'Весь день' : timeText(event.start_at, timezone)}</span>{!event.all_day && <small>{timeText(event.end_at, timezone)}</small>}</div><div><strong>{event.title}</strong><p>{event.notes || (event.recurrence ? 'Повторяющееся событие' : 'Личный календарь')}</p></div></button>)}</div> : <div className="agenda-empty"><Coffee size={27} strokeWidth={1.4} /><strong>Есть место для спонтанности</strong><p>На этот день пока нет событий.</p><button className="text-button" onClick={onCreateEvent}>Запланировать событие<Plus size={13} /></button></div>}<button className="agenda-calendar-link" onClick={onCalendar}>Открыть календарь<ArrowRight size={15} /></button></section>
       <section className="panel mini-panel"><MiniCalendar key={selected.slice(0, 7)} selected={selected} timezone={timezone} onSelect={onSelect} marked={(calendar?.events || []).map(event => dateKey(event.start_at, event.all_day ? event.timezone : timezone))} /></section>
       <div className="gentle-note"><Sparkles size={17} /><p>Не обязательно успеть всё.<br /><strong>Достаточно сделать важное.</strong></p></div>

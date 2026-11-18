@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     google_calendar_client_secret: str = ""
     calendar_redirect_uris: list[str] = Field(default_factory=list)
     openai_api_key: str = ""
+    openai_transcription_model: str = "gpt-4o-transcribe"
     openai_model: str = "gpt-5.6-luna"
     cors_origins: list[str] = Field(default_factory=list)
     allowed_hosts: list[str] = Field(default_factory=lambda: ["localhost", "127.0.0.1", "testserver"])

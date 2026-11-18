@@ -18,6 +18,8 @@ from app.modules.dashboard.routes import router as dashboard_router
 
 from app.modules.users.privacy import router as privacy_router
 
+from app.modules.health.device_routes import router as health_device_router
+
 router = APIRouter()
 for module in (
     auth_router,
@@ -28,6 +30,7 @@ for module in (
     notification_router,
     goals_router,
     health_router,
+    health_device_router,
     finance_router,
     books_router,
     dashboard_router,

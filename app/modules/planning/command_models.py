@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import Date, ForeignKey, Integer, JSON, String, UniqueConstraint, Uuid
+from sqlalchemy import Date, ForeignKey, Integer, JSON, String, Text, UniqueConstraint, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base, UTCDateTime, utcnow
@@ -20,6 +20,8 @@ class PlanningCommandRecord(Base):
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
     user_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey('users.id'), index=True)
     idempotency_key: Mapped[str] = mapped_column(String(128))
+    request_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    request_photos: Mapped[list | None] = mapped_column(JSON, nullable=True)
     request_hash: Mapped[str] = mapped_column(String(64))
     status: Mapped[str] = mapped_column(String(16), default='processing')
     response: Mapped[dict | None] = mapped_column(JSON, nullable=True)

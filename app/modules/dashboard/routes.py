@@ -9,9 +9,10 @@ from app.modules.auth.dependencies import get_current_user
 from app.modules.planning.dependencies import EntitlementService
 from app.modules.planning.service import PlanningService
 from app.modules.planning.models import Task
-from app.modules.goals_habits.models import Habit
+from app.modules.goals_habits.models import Habit, Goal
+from app.modules.goals_habits.routes import goal_data
 from app.modules.goals_habits.routes import habit_data
-from app.modules.health.models import SleepEntry
+from app.modules.health.models import SleepEntry, WeightEntry, Workout
 from app.modules.books.models import Book
 from app.modules.finance.models import Transaction, Budget
 
@@ -50,8 +51,17 @@ def dashboard(user=Depends(get_current_user), db=Depends(get_db)):
             .limit(100)
         ).all()
         widgets["habits"] = [habit_data(db, user, h) for h in habits if day.weekday() in h.weekdays]
+        goals = db.scalars(
+            select(Goal)
+            .where(Goal.user_id == user.id, Goal.deleted_at.is_(None), Goal.status == "active")
+            .order_by(Goal.updated_at.desc())
+            .limit(3)
+        ).all()
+        widgets["goals"] = [
+            {"id": g.id, "title": g.title, "progress": goal_data(db, user, g)["progress"], "due_date": g.due_date} for g in goals
+        ]
     if "health" in modules:
-        sleep = db.scalar(
+        sleeps = db.scalars(
             select(SleepEntry)
             .where(
                 SleepEntry.user_id == user.id,
@@ -59,14 +69,51 @@ def dashboard(user=Depends(get_current_user), db=Depends(get_db)):
                 SleepEntry.end_at >= start - timedelta(days=6),
                 SleepEntry.end_at < end,
             )
-            .order_by(SleepEntry.end_at.desc())
-            .limit(1)
-        )
+            .order_by(SleepEntry.end_at)
+        ).all()
+        sleep = sleeps[-1] if sleeps else None
         widgets["sleep"] = (
             {**record(sleep), "hours": round((sleep.end_at - sleep.start_at).total_seconds() / 3600, 1)}
             if sleep
             else None
         )
+        daily = {}
+        for item in sleeps:
+            key = item.end_at.astimezone(ZoneInfo(user.timezone)).date()
+            daily[key] = daily.get(key, 0) + (item.end_at - item.start_at).total_seconds() / 3600
+        from app.modules.health.device_routes import device_days
+        imported = device_days(db, user, day - timedelta(days=6), day)
+        widgets["device_health"] = imported
+        # Manual sleep is an explicit user entry and takes precedence for that day.
+        for snapshot in imported:
+            if snapshot["sleep_seconds"] is not None and snapshot["day"] not in daily:
+                daily[snapshot["day"]] = snapshot["sleep_seconds"] / 3600
+        latest = next((s for s in reversed(imported) if s["sleep_seconds"] is not None), None)
+        if latest and (not sleep or latest["day"] > sleep.end_at.astimezone(ZoneInfo(user.timezone)).date()):
+            widgets["sleep"] = {"hours": round(latest["sleep_seconds"] / 3600, 1), "day": latest["day"], "source": latest["provider"]}
+        widgets["sleep_week"] = [
+            {
+                "day": day - timedelta(days=i),
+                "hours": round(daily[day - timedelta(days=i)], 1) if day - timedelta(days=i) in daily else None,
+            }
+            for i in range(6, -1, -1)
+        ]
+        weights = db.scalars(
+            select(WeightEntry)
+            .where(WeightEntry.user_id == user.id, WeightEntry.deleted_at.is_(None), WeightEntry.day <= day)
+            .order_by(WeightEntry.day.desc(), WeightEntry.created_at.desc())
+            .limit(7)
+        ).all()
+        widgets["weight"] = [{"day": w.day, "kg": str(w.kg)} for w in reversed(weights)]
+        workout_rows = db.execute(
+            select(func.count(), func.coalesce(func.sum(Workout.minutes), 0)).where(
+                Workout.user_id == user.id,
+                Workout.deleted_at.is_(None),
+                Workout.day >= day - timedelta(days=6),
+                Workout.day <= day,
+            )
+        ).one()
+        widgets["workouts"] = {"count": workout_rows[0], "minutes": workout_rows[1]}
     if "books" in modules:
         books = db.scalars(
             select(Book)

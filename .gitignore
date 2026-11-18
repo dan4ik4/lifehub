@@ -55,6 +55,10 @@ test-results/
 .test-sync-temp/
 dump.sql
 
+# Local release packages, presentations and disposable test workspaces.
+/output/
+/tmp/
+
 # Machine-specific editor and operating-system files.
 .idea/
 .vscode/

@@ -102,6 +102,8 @@ def summary(from_: date = Query(alias="from"), to: date = Query(), user=Depends(
             .limit(5000)
         )
     ]
+    from app.modules.health.device_routes import device_days
+    result["device_days"] = device_days(db, user, from_, to)
     return result
 
 

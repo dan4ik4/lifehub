@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
-from sqlalchemy import Date, Integer, JSON, Numeric, String, Text, ForeignKey, UniqueConstraint
+from sqlalchemy import Date, Integer, JSON, Numeric, String, Text, ForeignKey, UniqueConstraint, Boolean, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 from app.core.database import Base, UTCDateTime
 from app.core.owned import OwnedRecord
@@ -63,3 +63,24 @@ class WorkoutProgram(OwnedRecord, Base):
 class WeightTarget(OwnedRecord, Base):
     __tablename__ = "health_weight_targets"
     kg: Mapped[Decimal] = mapped_column(Numeric(7, 3))
+
+
+class HealthConnection(Base):
+    __tablename__ = "health_connections"
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    provider: Mapped[str] = mapped_column(String(20))
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    sync_token: Mapped[UUID] = mapped_column(Uuid)
+    revision: Mapped[int] = mapped_column(Integer, default=0)
+    last_synced_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+
+
+class HealthDaily(Base):
+    __tablename__ = "health_device_days"
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    provider: Mapped[str] = mapped_column(String(20), primary_key=True)
+    day: Mapped[date] = mapped_column(Date, primary_key=True)
+    timezone: Mapped[str] = mapped_column(String(100))
+    steps: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    sleep_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime)

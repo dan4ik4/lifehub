@@ -47,8 +47,9 @@ export function usePlanning(timezone: string, from: string, to: string) {
   useEffect(() => {
     const refreshWhenVisible = () => { if (document.visibilityState === 'visible') void refresh(); };
     document.addEventListener('visibilitychange', refreshWhenVisible);
+    window.addEventListener('lifehub:data-changed', refreshWhenVisible);
     const timer = window.setInterval(refreshWhenVisible, 60_000);
-    return () => { document.removeEventListener('visibilitychange', refreshWhenVisible); clearInterval(timer); };
+    return () => { document.removeEventListener('visibilitychange', refreshWhenVisible); window.removeEventListener('lifehub:data-changed', refreshWhenVisible); clearInterval(timer); };
   }, [refresh]);
   return { tasks, lists, calendar, loading, refreshing, error, refresh };
 }

@@ -1,3 +1,7 @@
+import {GoalsHabits} from './GoalsHabits';
+import {HealthConnection} from './HealthConnection';
+import {Navigation} from '../components/Navigation';
+import {Dashboard} from './Dashboard';
 import {formatAmount} from "./format";
 import { Avatar } from "../components/Avatar";
 import exerciseNames from "./exercises.json";
@@ -28,7 +32,7 @@ import { Modal, ConfirmDialog, EmptyState, Logo } from "../components/ui";
 import { Settings } from "../components/Settings";
 import { sections, bodyFor } from "./schema";
 import type { Row, Field, Section } from "./schema";
-import { Dashboard, FinanceOverview, RecordDetail } from "./details";
+import { FinanceOverview, RecordDetail } from "./details";
 import "./product.css";
 import {
   HealthChart,
@@ -39,18 +43,12 @@ import {
   DiaryCalendar,
 } from "./Extras";
 const names: Record<string, string> = {
-  dashboard: "Моё пространство",
+  dashboard: "Главная",
+  planning: "Планирование",
   goals_habits: "Цели и привычки",
   health: "Здоровье",
   finance: "Финансы",
   books: "Книги и дневник",
-};
-const icons = {
-  dashboard: LayoutGrid,
-  goals_habits: Target,
-  health: Heart,
-  finance: Wallet,
-  books: BookOpen,
 };
 export const isPro = (user: User) =>
   user.plan === "pro" ||
@@ -87,6 +85,8 @@ export function Product({
 }) {
   const [tab, setTab] = useState(sections[module]?.[0]?.key ?? ""),
     [settings, setSettings] = useState<"profile" | "plan" | null>(null);
+  const [dataRevision,setDataRevision]=useState(0);
+  useEffect(()=>{const changed=()=>setDataRevision(n=>n+1);window.addEventListener('lifehub:data-changed',changed);return()=>window.removeEventListener('lifehub:data-changed',changed);},[]);
   const pro = isPro(user),
     allowed =
       pro || user.free_modules.includes(module) || module === "dashboard";
@@ -97,7 +97,9 @@ export function Product({
   const section =
     sections[module]?.find((s) => s.key === tab) ?? sections[module]?.[0];
   return (
-    <div className="product-layout">
+    <div className="app-layout">
+      <Navigation user={user} path={module === 'dashboard' ? '/home' : module === 'planning' ? '/planning' : '/modules/'+module} navigate={navigate} onSettings={() => setSettings('profile')}/>
+      <div className="app-main product-layout">
       <a className="skip-link" href="#product-main">
         Перейти к содержимому
       </a>
@@ -112,32 +114,10 @@ export function Product({
           <span>{user.name?.split(" ")[0] || "Профиль"}</span>
         </button>
       </header>
-      <nav className="product-nav" aria-label="Разделы приложения">
-        <button onClick={() => navigate("/planning")}>
-          <ArrowLeft size={17} />
-          Планирование
-        </button>
-        {Object.entries(names).map(([key, label]) => {
-          const Icon = icons[key as keyof typeof icons];
-          return (
-            <button
-              key={key}
-              aria-current={key === module ? "page" : undefined}
-              className={key === module ? "active" : ""}
-              onClick={() =>
-                navigate(key === "dashboard" ? "/home" : "/modules/" + key)
-              }
-            >
-              <Icon size={18} />
-              {label}
-            </button>
-          );
-        })}
-      </nav>
       <main id="product-main" className="product-main">
         <header className="product-title">
           <div>
-            <span className="eyebrow">ВАША ЖИЗНЬ В ОДНОМ МЕСТЕ</span>
+            <span className="eyebrow">{module === "dashboard" ? "ВАША ЖИЗНЬ В ОДНОМ МЕСТЕ" : "МОИ МОДУЛИ"}</span>
             <h1>
               {names[module]}
               <span className="heading-dot">.</span>
@@ -156,10 +136,13 @@ export function Product({
           />
         ) : !allowed ? (
           <Locked onPlan={() => setSettings("plan")} module />
+        ) : module === "goals_habits" ? (
+          <GoalsHabits user={user} notify={notify}/>
         ) : module === "dashboard" ? (
           <Dashboard user={user} navigate={navigate} notify={notify} />
         ) : (
           <>
+            {module === "health" && <HealthConnection user={user}/> }
             <nav className="product-tabs" aria-label="Подразделы">
               {sections[module]?.map((s) => (
                 <button
@@ -178,7 +161,7 @@ export function Product({
                 <Locked onPlan={() => setSettings("plan")} />
               ) : (
                 <Records
-                  key={section.path}
+                  key={`${section.path}:${dataRevision}`}
                   section={section}
                   user={user}
                   notify={notify}
@@ -187,6 +170,7 @@ export function Product({
           </>
         )}
       </main>
+      </div>
       {settings && (
         <Settings
           user={user}

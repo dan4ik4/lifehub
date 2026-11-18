@@ -166,7 +166,7 @@ def test_programs_targets_and_dashboard_gates(client, make_user, auth_headers):
     assert client.get("/api/v1/health/programs", headers=free).status_code == 403
     dashboard = client.get("/api/v1/dashboard", headers=free)
     assert dashboard.status_code == 200, dashboard.text
-    assert set(dashboard.json()["widgets"]) == {"books", "finance", "sleep"}
+    assert set(dashboard.json()["widgets"]) == {"books", "finance", "sleep", "sleep_week", "weight", "workouts", "device_health"}
 
 
 def test_diary_day_filter_and_book_status(client, make_user, auth_headers):

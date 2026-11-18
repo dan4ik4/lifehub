@@ -30,29 +30,138 @@ beforeEach(async () => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('API session lifecycle', () => {
-  it('stores real credentials only for the current browser tab and notifies subscribers', () => {
+  it('persists login across browser restarts and clears it on logout', async () => {
     const listener = vi.fn();
     const unsubscribe = client.subscribeSession(listener);
     client.setSession(auth());
-    expect(JSON.stringify([...tabStorage.values.values()])).toContain('refresh-old');
-    expect(persistentStorage.values.size).toBe(0);
+    expect(JSON.stringify([...persistentStorage.values.values()])).toContain('refresh-old');
+    expect(tabStorage.values.size).toBe(0);
+    tabStorage.clear();
+    vi.resetModules();
+    const reopened = await import('./api');
+    expect(reopened.getSession()?.tokens.refresh_token).toBe('refresh-old');
     expect(client.getSession()?.user.id).toBe('user-old');
     client.clearSession();
     expect(tabStorage.values.size).toBe(0);
+    expect(persistentStorage.values.size).toBe(0);
+    expect(reopened.getSession()).toBeNull();
     expect(listener).toHaveBeenCalledTimes(2);
     unsubscribe();
     client.setSession(auth());
     expect(listener).toHaveBeenCalledTimes(2);
   });
 
-  it('restores a valid tab session but ignores malformed persisted state', async () => {
+  it('restores persistent login but ignores malformed persisted state', async () => {
     client.setSession(auth());
     vi.resetModules();
     const restored = await import('./api');
     expect(restored.getSession()?.tokens.refresh_token).toBe('refresh-old');
-    tabStorage.setItem('lifehub.session.v1', '{not-json');
+    persistentStorage.setItem('lifehub.session.v1', '{not-json');
     vi.resetModules();
     expect((await import('./api')).getSession()).toBeNull();
+  });
+
+  it('migrates an existing tab login without overwriting a newer shared session', async () => {
+    tabStorage.setItem('lifehub.session.v1', JSON.stringify(auth()));
+    expect(client.getSession()?.user.id).toBe('user-old');
+    expect(tabStorage.values.size).toBe(0);
+    expect(persistentStorage.getItem('lifehub.session.v1')).toContain('refresh-old');
+    tabStorage.setItem('lifehub.session.v1', JSON.stringify(auth('stale')));
+    vi.resetModules();
+    expect((await import('./api')).getSession()?.user.id).toBe('user-old');
+  });
+
+  it('refreshes expired access after reopening and saves the rotated refresh token', async () => {
+    client.setSession(auth());
+    tabStorage.clear();
+    vi.resetModules();
+    const reopened = await import('./api');
+    vi.stubGlobal('fetch', vi.fn(async (url: string, options: RequestInit) => {
+      if (url.endsWith('/refresh')) return response(tokens('new'));
+      return new Headers(options.headers).get('Authorization') === 'Bearer access-old' ? unauthorized() : response({ ok: true });
+    }));
+    expect(await reopened.api('/users/me')).toEqual({ ok: true });
+    expect(persistentStorage.getItem('lifehub.session.v1')).toContain('refresh-new');
+  });
+
+  it('serializes single-use refresh tokens across independent tabs', async () => {
+    let queue = Promise.resolve();
+    vi.stubGlobal('navigator', { locks: { request: vi.fn((_name: string, action: () => Promise<void>) => {
+      const result = queue.then(action);
+      queue = result.catch(() => {});
+      return result;
+    }) } });
+    client.setSession(auth());
+    vi.resetModules();
+    const otherTab = await import('./api');
+    const rotated = deferred<Response>();
+    const fetcher = vi.fn(async (url: string, options: RequestInit) => {
+      if (url.endsWith('/refresh')) return rotated.promise;
+      return new Headers(options.headers).get('Authorization') === 'Bearer access-old' ? unauthorized() : response({ ok: true });
+    });
+    vi.stubGlobal('fetch', fetcher);
+    const first = client.api('/planning/tasks');
+    const second = otherTab.api('/planning/lists');
+    await vi.waitFor(() => expect(navigator.locks.request).toHaveBeenCalledTimes(2));
+    rotated.resolve(response(tokens('new')));
+    expect(await Promise.all([first, second])).toEqual([{ ok: true }, { ok: true }]);
+    expect(fetcher.mock.calls.filter(([url]) => url.endsWith('/refresh'))).toHaveLength(1);
+    expect(otherTab.getSession()?.tokens.refresh_token).toBe('refresh-new');
+  });
+
+  it('does not restore credentials when another tab logs out during refresh', async () => {
+    client.setSession(auth());
+    vi.resetModules();
+    const otherTab = await import('./api');
+    const rotated = deferred<Response>();
+    const fetcher = vi.fn(async (url: string) => url.endsWith('/refresh') ? rotated.promise : unauthorized());
+    vi.stubGlobal('fetch', fetcher);
+    const pending = client.api('/planning/tasks');
+    const rejected = expect(pending).rejects.toMatchObject({ code: 'session_changed' });
+    await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(2));
+    otherTab.clearSession();
+    rotated.resolve(response(tokens('new')));
+    await rejected;
+    expect(client.getSession()).toBeNull();
+    expect(persistentStorage.values.size).toBe(0);
+  });
+
+  it('continues in memory when browser storage is blocked', async () => {
+    const blocked = { getItem() { throw new Error('Blocked'); }, setItem() { throw new Error('Blocked'); }, removeItem() { throw new Error('Blocked'); } };
+    vi.stubGlobal('localStorage', blocked);
+    vi.stubGlobal('sessionStorage', blocked);
+    client.setSession(auth());
+    expect(client.getSession()?.user.id).toBe('user-old');
+    client.clearSession();
+    expect(client.getSession()).toBeNull();
+  });
+
+  it('keeps React snapshots stable and notifies the UI of logout in another tab', () => {
+    const browser = new EventTarget();
+    vi.stubGlobal('window', browser);
+    client.setSession(auth());
+    expect(client.getSession()).toBe(client.getSession());
+    const listener = vi.fn();
+    const unsubscribe = client.subscribeSession(listener);
+    persistentStorage.removeItem('lifehub.session.v1');
+    browser.dispatchEvent(Object.assign(new Event('storage'), { key: 'lifehub.session.v1' }));
+    expect(client.getSession()).toBeNull();
+    expect(listener).toHaveBeenCalledTimes(1);
+    unsubscribe();
+  });
+
+  it('rejects private data in flight when another tab changes the account', async () => {
+    client.setSession(auth());
+    vi.resetModules();
+    const otherTab = await import('./api');
+    const result = deferred<Response>();
+    vi.stubGlobal('fetch', vi.fn(() => result.promise));
+    const pending = client.api('/planning/tasks');
+    const rejected = expect(pending).rejects.toMatchObject({ code: 'session_changed' });
+    otherTab.setSession(auth('other'));
+    result.resolve(response({ items: ['previous-account-data'] }));
+    await rejected;
+    expect(client.getSession()?.user.id).toBe('user-other');
   });
 
   it('shares one refresh between concurrent requests and retries both with rotated tokens', async () => {

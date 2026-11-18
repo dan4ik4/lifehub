@@ -1,3 +1,5 @@
+> Update 2026-10-21: main overview, shared navigation and persistent planning chat are implemented locally; server publication is blocked by SSH authentication. See [overview-chat-progress.md](overview-chat-progress.md). Cross-module health/finance AI remains deferred.
+
 # Full product implementation — 2026-10-02
 
 User authorized implementing remaining Figma requirements in order, collecting ambiguities at the end. Reference: Life Hub FigJam XeDJPNn8P1S8ZcwAxjcpur, Development takes priority over Back when they conflict. This is a working expansion, not a claim that every Figma integration is finished.

@@ -50,7 +50,7 @@ pnpm dev
 
 Откройте [http://127.0.0.1:5173](http://127.0.0.1:5173). Если этот порт уже занят Docker-фронтендом, сначала выполните `docker compose stop frontend` из корня проекта. Vite и Docker-фронтенд проксируют `/api` к бэкенду: браузер работает с одним origin, отдельная настройка CORS для этого запуска не нужна.
 
-Для внешнего доступа используйте HTTPS reverse proxy и настройте `LIFEHUB_ALLOWED_HOSTS`; `LIFEHUB_CORS_ORIGINS` нужен при отдельных origin фронтенда и API. По умолчанию порты доступны только локально. Приложение использует Bearer-токены. Веб-клиент хранит реальные токены в `sessionStorage` вкладки, без постоянного сохранения в `localStorage`. Если прокси передаёт IP клиента, доверяйте forwarded headers только адресу этого прокси, чтобы сохранить корректность лимитов по IP.
+Для внешнего доступа используйте HTTPS reverse proxy и настройте `LIFEHUB_ALLOWED_HOSTS`; `LIFEHUB_CORS_ORIGINS` нужен при отдельных origin фронтенда и API. По умолчанию порты доступны только локально. Приложение использует Bearer-токены. Веб-клиент сохраняет вход между запусками в `localStorage`; старые сессии вкладки переносятся при первом открытии. Refresh-токен обновляется автоматически; на HTTPS обновление между вкладками сериализуется через Web Locks. Выход удаляет сохранённую сессию и синхронизируется между вкладками. При запрете хранилища доступна только сессия вкладки или память текущей страницы. Если прокси передаёт IP клиента, доверяйте forwarded headers только адресу этого прокси, чтобы сохранить корректность лимитов по IP.
 
 ## Что реализовано
 
@@ -58,7 +58,7 @@ pnpm dev
 
 **Планирование:** задачи и отдельные состояния их повторений, выполнение/отмена выполнения, календарь дня/недели, события, RRULE, удаление вхождения/будущих вхождений/серии, напоминания, системный список «Покупки», пользовательские списки, массовое добавление пунктов, версии объектов, Free/Trial/Pro-проверки, Google Calendar и Apple device bridge. Быстрый ввод через Luna обслуживает только команды планирования.
 
-**Веб-интерфейс:** вход и регистрация, ввод шестизначного кода, восстановление пароля, настройка имени и часового пояса, раздел «Мой день» с фильтрами задач, календарь, списки, ИИ-ввод, настройки профиля и подключений. Free выбран по умолчанию; пробные 72 часа запускаются только явным выбором пользователя. Кнопка «Сначала осмотреться» включает отдельное демо с примерами в `localStorage`; оно не создаёт реальный аккаунт и не отправляет запросы внешним провайдерам.
+**Веб-интерфейс:** вход и регистрация, ввод шестизначного кода, восстановление пароля, настройка имени и часового пояса, раздел «Мой день» с фильтрами задач, календарь, списки, общий чат с историей, главная со сводками и графиком сна, настройки профиля и подключений. Free выбран по умолчанию; пробные 72 часа запускаются только явным выбором пользователя. Кнопка «Сначала осмотреться» включает отдельное демо с примерами в `localStorage`; оно не создаёт реальный аккаунт и не отправляет запросы внешним провайдерам.
 
 Запросы к объектам ограничены владельцем. Чужой UUID возвращает 404. Привилегии проверяет бэкенд, включая команды ИИ и фоновые задания. Ошибки используют единый формат:
 
@@ -151,7 +151,7 @@ Email доставляется через Resend. Для push задайте HTT
 
 Подробные Google OAuth и Apple EventKit/Flutter контракты: [docs/calendar-sync.md](docs/calendar-sync.md). Apple Calendar подключается через клиент на iPhone: браузер не имеет доступа к EventKit. В этом проекте реализованы серверный device-протокол и его отображение в веб-настройках; приложения iPhone пока нет. Без подключённого клиента Apple-задание ожидает его подтверждения.
 
-## Быстрый ввод через Luna
+## Общий чат планирования
 
 ```http
 POST /api/v1/ai/chat
@@ -159,10 +159,16 @@ Authorization: Bearer ACCESS_TOKEN
 Idempotency-Key: UNIQUE-REQUEST-ID
 Content-Type: application/json
 
-{"context":"planning","mode":"command","message":"Завтра в 16:00 к врачу"}
+{"context":"planning","mode":"chat","planning_context_allowed":true,"selected_day":"2026-10-21","message":"Что у меня сегодня?"}
 ```
 
-Модель возвращает типизированный черновик одной команды: `create_task`, `update_task`, `create_event`, `add_list_items`. Его проверяют обычные сервисы планирования. При неоднозначности возвращается `422 ambiguous_command` без записи объектов. Данные других модулей модели не передаются.
+Чат доступен с главной и из всех модулей, но пока управляет только планированием. `mode=chat` сохраняет вопрос и ответ в аккаунте. Уточнение — обычная реплика, после которой можно продолжить разговор. История: `GET /api/v1/ai/chat/history` (`limit`, `before`). Существующий `mode=command` сохранён для совместимости; в нём уточнение по-прежнему возвращает `422 ambiguous_command`.
+
+После явного согласия в интерфейсе `planning_context_allowed=true` добавляет до 20 последних реплик (10 пар вопрос/ответ), события выбранного периода, их серии и видимые задачи. Без этого флага дополнительный календарный контекст и переписка во внешний сервис не отправляются. Данные других модулей автоматически не передаются. Период: семь дней до выбранной даты и 31 день от неё; контекст ограничен 150 событиями и 150 повторениями задач, с явным признаком усечения.
+
+Поддержаны ответы и уточнения, создание событий/задач/покупок, изменение и удаление событий/задач, выполнение и возврат задач. Изменение отдельного повторения сохраняет остальные; удаление поддерживает одно, последующие или все повторения. В режиме чата изменения существующих записей сначала возвращают `confirmation=pending`. Пользователь подтверждает точное предложение: `POST /api/v1/ai/chat/{message_id}/confirm` с `{"apply":true}` или отменяет с `{"apply":false}`. Владение, версия, права и доступность внешнего календаря проверяются повторно. Подтверждение идемпотентно; предложения старше 24 часов нельзя применить.
+
+Переписка входит в личный экспорт данных. Для обновления нужна миграция `0009_chat_history` до запуска нового API. Статус текущего обновления: [docs/overview-chat-progress.md](docs/overview-chat-progress.md).
 
 Free: 3 сообщения в сутки; Trial/Pro: 50. Сброс по UTC-полуночи. Резервирование лимита атомарно до модели; отказ/ошибка модели тоже считается сообщением. Один и тот же `Idempotency-Key` и тело возвращают сохранённый результат без нового вызова/записи. Повтор ключа с другим телом — 409. После прерванного процесса команда считается незавершённой, а по истечении 2 минут — ошибкой; новый запрос использует новый ключ.
 
@@ -177,7 +183,7 @@ Free: 3 сообщения в сутки; Trial/Pro: 50. Сброс по UTC-п�
 | Apple login | `LIFEHUB_APPLE_CLIENT_IDS` — JSON-массив допустимых audience |
 | Google Calendar | `LIFEHUB_GOOGLE_CALENDAR_CLIENT_ID`, `LIFEHUB_GOOGLE_CALENDAR_CLIENT_SECRET`, `LIFEHUB_CALENDAR_REDIRECT_URIS` |
 | Apple Calendar | Allowlisted redirect URI и Flutter-клиент по описанному device-контракту |
-| Luna quick add | `LIFEHUB_OPENAI_API_KEY`, `LIFEHUB_OPENAI_MODEL` |
+| Общий помощник планирования | `LIFEHUB_OPENAI_API_KEY`, `LIFEHUB_OPENAI_MODEL` |
 | Push reminders | `LIFEHUB_REMINDER_WEBHOOK_URL`, `LIFEHUB_REMINDER_WEBHOOK_TOKEN` |
 
 Для Google/Apple-входа в браузере дополнительно нужны публичные `VITE_GOOGLE_CLIENT_ID`, `VITE_APPLE_CLIENT_ID`, `VITE_APPLE_REDIRECT_URI`. При разработке они задаются в `frontend/.env.local`, при Docker-сборке — в корневом `.env` и передаются через build args. Ключи API и client secrets во фронтенд не передаются. Подробные значения и порядок подключения — [docs/frontend.md](docs/frontend.md).
@@ -220,3 +226,14 @@ pnpm build
 Экспорт JSON или CSV запрашивается в профиле, готовится worker, шифруется на сервере и доступен владельцу 24 часа. По готовности отправляется письмо без содержимого экспорта. Фото нормализуется в JPEG без исходных метаданных. Удаление аккаунта с паролем закрывает доступ сразу и очищает данные через 30 дней. Для восстановления после подтверждения личности администратор использует `python scripts/restore_user.py UUID`, проверяет результат и только затем запускает с `--apply`. Восстановление старых сессий не происходит. Для аккаунтов только Google/Apple способ повторного подтверждения ещё требует решения.
 
 На Docker-сервере инструмент восстановления можно запустить без установки Python на хост: `docker compose --env-file .env.production -f compose.production.yaml run --rm --no-deps -v "$PWD/scripts:/ops:ro" -e PYTHONPATH=/srv/lifehub api python /ops/restore_user.py UUID`. Это проверка; для изменения после подтверждения личности добавьте `--apply`.
+
+
+### Chat photos and voice input
+
+The global assistant supports one JPG/PNG/WebP photo per message and microphone recording up to 60 seconds in the browser. Users opt in to OpenAI media processing separately. The send arrow stops recording, transcribes and sends the message directly to chat; the cross cancels recording or transcription. There is no playback or intermediate confirmation screen. Transcription uses `POST /api/v1/ai/transcribe`; recordings are not stored by Life Hub. The route accepts bounded base64 audio (650 KB), checks the media container, requires planning access and allows 20 attempts per user/day. Configure `LIFEHUB_OPENAI_TRANSCRIPTION_MODEL` (default `gpt-4o-mini-transcribe`) with the existing server-side OpenAI API key. Microphone access requires HTTPS or localhost and a compatible browser.
+
+Photos are resized and re-encoded on both client and server. Only a small 320px preview persists in the private chat history and personal export; the full photo is sent only with the current request. Earlier photo originals are not resent during follow-up messages. File documents are not supported. Photo-based writes require confirmation. Apply migration `0010_chat_photos` before running the new API/worker. See the progress document for test coverage and deployment status.
+
+## Mobile health (local development)
+
+See [mobile health progress and device checks](docs/mobile-health-progress.md). Apple Health and Health Connect require the installed native app; the browser only displays synced values.

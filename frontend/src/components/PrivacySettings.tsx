@@ -3,6 +3,7 @@ import { Download, LoaderCircle, Trash2, Upload } from "lucide-react";
 import { api, errorMessage, isDemo } from "../lib/api";
 import type { Notify, User } from "../lib/types";
 import { Modal } from "./ui";
+import {AssistantPreferences} from "./AssistantPreferences";
 type ExportJob = {
   id: string;
   format: "json" | "csv";
@@ -93,6 +94,7 @@ export function PrivacySettings({
   }
   return (
     <section className="privacy-settings">
+      <AssistantPreferences userId={user.id}/>
       <div className="settings-divider" />
       <h3>Фото профиля</h3>
       <div className="privacy-avatar-row">
