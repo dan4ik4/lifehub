@@ -27,6 +27,8 @@ class DiaryEntry(OwnedRecord, Base):
     day: Mapped[date] = mapped_column(Date, index=True)
     title: Mapped[str] = mapped_column(String(300), default="")
     text: Mapped[str] = mapped_column(Text)
+    mood: Mapped[int | None] = mapped_column(Integer)
+    tags: Mapped[list[str]] = mapped_column(JSON, default=list, server_default="[]")
 
 
 class DiaryReview(Base):

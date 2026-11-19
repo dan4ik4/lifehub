@@ -92,8 +92,8 @@ export function entityPayload(kind: EntityKind, item: Entity | undefined, fields
   return body;
 }
 
-export function EntityEditor({ kind, item, day, initialTime, timezone, pro, onClose, onSaved, onUpgrade }: {
-  kind: 'task' | 'event'; item?: Task | CalendarEvent; day: string; initialTime?: string; timezone: string;
+export function EntityEditor({ kind, item, day, initialTime, initialEndTime, timezone, pro, onClose, onSaved, onUpgrade }: {
+  kind: 'task' | 'event'; item?: Task | CalendarEvent; day: string; initialTime?: string; initialEndTime?: string; timezone: string;
   pro: boolean; onClose: () => void; onSaved: () => void; onUpgrade: () => void;
 }) {
   const isTask = kind === 'task', task = isTask ? item as Task | undefined : undefined;
@@ -101,7 +101,7 @@ export function EntityEditor({ kind, item, day, initialTime, timezone, pro, onCl
   const [initial] = useState(() => initialEntityFields(kind, item, day, timezone, initialTime));
   const [title, setTitle] = useState(initial.title), [notes, setNotes] = useState(initial.notes);
   const [date, setDate] = useState(initial.date), [time, setTime] = useState(initial.time);
-  const [endDate, setEndDate] = useState(initial.endDate), [endTime, setEndTime] = useState(initial.endTime);
+  const [endDate, setEndDate] = useState(initial.endDate), [endTime, setEndTime] = useState(initialEndTime ?? initial.endTime);
   const [hasDate, setHasDate] = useState(initial.hasDate), [allDay, setAllDay] = useState(initial.allDay);
   const [priority, setPriority] = useState<Priority>(initial.priority), [rrule, setRrule] = useState(initial.rrule);
   const [reminder, setReminder] = useState(initial.reminder), [hasStart, setHasStart] = useState(initial.hasStart);

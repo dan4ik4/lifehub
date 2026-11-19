@@ -652,13 +652,13 @@ export function DiaryCalendar({
 }) {
   const today = todayKey(user.timezone),
     [month, setMonth] = useState(today.slice(0, 7)),
-    [days, setDays] = useState<{ day: string; count: number }[]>([]),
+    [days, setDays] = useState<{ day: string; count: number; mood?: number }[]>([]),
     [error, setError] = useState("");
   useEffect(() => {
     const c = new AbortController();
     setError("");
     setDays([]);
-    api<{ days: { day: string; count: number }[] }>(
+    api<{ days: { day: string; count: number; mood?:number }[] }>(
       "/diary/calendar?month=" + month,
       { signal: c.signal },
     )
@@ -672,8 +672,8 @@ export function DiaryCalendar({
     offset = (first.getDay() + 6) % 7,
     count = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
   return (
-    <details className="diary-calendar">
-      <summary>Календарь записей</summary>
+    <details className="diary-calendar" open>
+      <summary>Настроение по дням</summary>
       <label>
         Месяц
         <input
@@ -695,15 +695,16 @@ export function DiaryCalendar({
         ))}
         {Array.from({ length: count }, (_, i) => {
           const day = month + "-" + String(i + 1).padStart(2, "0"),
-            entries = days.find((d) => d.day === day)?.count || 0;
+            snapshot=days.find(d=>d.day===day),entries=snapshot?.count||0;
           return (
             <button
               type="button"
               key={day}
               disabled={day > today}
               className={entries ? "has-entry" : ""}
+              data-mood={snapshot?.mood?Math.round(snapshot.mood):undefined}
               aria-pressed={selected === day}
-              aria-label={`${dateLabel(day)}: записей ${entries}`}
+              aria-label={`${dateLabel(day)}: записей ${entries}${snapshot?.mood?'; настроение '+snapshot.mood+' из 5':''}`}
               onClick={() => onSelect(selected === day ? "" : day)}
             >
               {i + 1}

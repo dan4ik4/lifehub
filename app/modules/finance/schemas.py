@@ -27,6 +27,11 @@ class BudgetInput(InputModel):
     currency: Currency
 
 
+class BudgetCopy(InputModel):
+    month: str = Field(pattern=r"^[1-8][0-9]{3}-(0[1-9]|1[0-2])$")
+    currency: Currency
+
+
 class SubscriptionInput(InputModel):
     title: Title
     amount: Money

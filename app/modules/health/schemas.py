@@ -22,11 +22,18 @@ class WeightInput(InputModel):
     kg: Decimal = Field(gt=0, le=1000, max_digits=7, decimal_places=3)
 
 
+class WorkoutEffort(InputModel):
+    name: str = Field(min_length=1, max_length=200)
+    reps: int = Field(ge=1, le=1000)
+    kg: float | None = Field(default=None, ge=0, le=1000, allow_inf_nan=False)
+
+
 class WorkoutInput(InputModel):
     day: date
     title: str = Field(min_length=1, max_length=300)
     minutes: int = Field(gt=0, le=1440)
     notes: str = Field(default="", max_length=20000)
+    efforts: list[WorkoutEffort] = Field(default_factory=list, max_length=500)
 
 
 class NutritionInput(InputModel):

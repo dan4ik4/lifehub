@@ -1,5 +1,5 @@
 from datetime import date
-from typing import Literal
+from typing import Annotated, Literal
 from pydantic import Field, model_validator
 from app.modules.planning.schemas import InputModel
 
@@ -33,3 +33,5 @@ class DiaryInput(InputModel):
     day: date
     title: str = Field(default="", max_length=300)
     text: str = Field(min_length=1, max_length=100000)
+    mood: int | None = Field(default=None, ge=1, le=5)
+    tags: list[Annotated[str, Field(min_length=1, max_length=32)]] = Field(default_factory=list, max_length=12)

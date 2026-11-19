@@ -8,7 +8,7 @@ from sqlalchemy import select, func
 from app.core.database import utcnow
 from app.core.dependencies import get_db
 from app.core.errors import AppError
-from app.core.owned import owned, record, require_module
+from app.core.owned import lock_user, owned, record, require_module
 from app.core.resource_api import add_resource
 from app.modules.auth.dependencies import get_current_user
 from app.modules.planning.dependencies import EntitlementService
@@ -17,6 +17,7 @@ from app.modules.finance.review import invalidate as invalidate_review
 from app.modules.finance.schemas import (
     TransactionInput,
     BudgetInput,
+    BudgetCopy,
     SubscriptionInput,
     SavingsInput,
     FinancialGoalInput,
@@ -92,6 +93,7 @@ def transaction_history(
     currency: str = Query(pattern=r"^[A-Z]{3}$"),
     category: str | None = Query(None, max_length=100),
     kind: str | None = Query(None, pattern=r"^(income|expense)$"),
+    q: str | None = Query(None, max_length=120),
     offset: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
     user=Depends(member),
@@ -107,9 +109,31 @@ def transaction_history(
         query = query.where(Transaction.category == category)
     if kind:
         query = query.where(Transaction.kind == kind)
+    if q and q.strip():
+        pattern = "%" + q.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+        query = query.where(Transaction.title.ilike(pattern, escape="\\") | Transaction.category.ilike(pattern, escape="\\"))
     rows = db.scalars(query.order_by(Transaction.day.desc(), Transaction.created_at.desc(), Transaction.id)
         .offset(offset).limit(limit + 1)).all()
     return {"items": [record(row) for row in rows[:limit]], "has_more": len(rows) > limit}
+
+
+@router.post("/budgets/copy")
+def copy_budgets(body: BudgetCopy, user=Depends(member), db=Depends(get_db)):
+    EntitlementService.require_pro(user)
+    lock_user(db, user)
+    previous = (date.fromisoformat(body.month + "-01") - timedelta(days=1)).strftime("%Y-%m")
+    budgets = db.scalars(select(Budget).where(
+        Budget.user_id == user.id, Budget.deleted_at.is_(None), Budget.currency == body.currency,
+        Budget.month.in_([previous, body.month]),
+    )).all()
+    current_categories = {row.category for row in budgets if row.month == body.month}
+    new = [Budget(user_id=user.id, month=body.month, category=row.category, currency=row.currency, amount=row.amount)
+           for row in budgets if row.month == previous and row.category not in current_categories]
+    db.add_all(new)
+    if new:
+        invalidate_review(db, user)
+    db.commit()
+    return {"copied": len(new)}
 
 
 @router.get("/overview")

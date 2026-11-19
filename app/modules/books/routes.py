@@ -52,6 +52,7 @@ def book_valid(db, user, values, item):
 def diary_valid(db, user, values, item):
     if values["day"] > today(user):
         raise AppError(422, "invalid_date", "Diary dates cannot be in the future")
+    values["tags"] = list(dict.fromkeys(tag.strip() for tag in values["tags"] if tag.strip()))
 
 
 @router.get("/books/search")
@@ -100,7 +101,7 @@ def diary_calendar(
     start = date.fromisoformat(month + "-01")
     end = (start.replace(day=28) + timedelta(days=4)).replace(day=1)
     rows = db.execute(
-        select(DiaryEntry.day, func.count())
+        select(DiaryEntry.day, func.count(), func.avg(DiaryEntry.mood))
         .where(
             DiaryEntry.user_id == user.id,
             DiaryEntry.deleted_at.is_(None),
@@ -109,7 +110,8 @@ def diary_calendar(
         )
         .group_by(DiaryEntry.day)
     ).all()
-    return {"days": [{"day": day, "count": count} for day, count in rows]}
+    return {"days": [{"day": day, "count": count, **({"mood": round(float(mood), 1)} if mood is not None else {})}
+                     for day, count, mood in rows]}
 
 
 @router.get("/diary/entries/search")
@@ -123,6 +125,9 @@ def search(
 ):
     EntitlementService.require_pro(user)
     escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    tagged = (func.json_array_elements_text(DiaryEntry.tags) if db.bind.dialect.name == "postgresql"
+              else func.json_each(DiaryEntry.tags)).table_valued("value")
+    matching_tag = select(1).select_from(tagged).where(tagged.c.value.ilike("%" + escaped + "%", escape="\\")).exists()
     items = db.scalars(
         select(DiaryEntry)
         .where(
@@ -132,6 +137,7 @@ def search(
             (
                 DiaryEntry.text.ilike("%" + escaped + "%", escape="\\")
                 | DiaryEntry.title.ilike("%" + escaped + "%", escape="\\")
+                | matching_tag
             ),
         )
         .order_by(DiaryEntry.day.desc(), DiaryEntry.id)
@@ -152,4 +158,4 @@ def invalidate_reviews(db, user, item, previous):
 
 
 add_resource(router, "/diary/entries", DiaryEntry, DiaryInput, "books", validate=diary_valid,
-             after_write=invalidate_reviews, after_delete=invalidate_reviews)
+             after_write=invalidate_reviews, after_delete=invalidate_reviews, preserve_omitted=("mood", "tags"))

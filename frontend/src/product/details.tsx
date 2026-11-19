@@ -1,6 +1,7 @@
+import {LifeCard,LifeLink} from '../components/LifeCard';
 import { useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { ArrowRight, Check, LoaderCircle, RefreshCw } from "lucide-react";
+import { ArrowRight, Check, Clock3, LoaderCircle, RefreshCw, Wallet } from "lucide-react";
 import { api, errorMessage } from "../lib/api";
 import { todayKey, shiftDay } from "../lib/dates";
 import type { User, Notify } from "../lib/types";
@@ -16,18 +17,19 @@ type FinanceSnapshot = {
   categories:{category:string;amount:string}[];
   budgets?:Row[];
 };
-export function FinanceOverview({user,revision,preferences,onSelect,onCategory,analysis=false}: {
+export function FinanceOverview({user,revision,preferences,onSelect,onCategory,analysis=false,home=false,goto}: {
   user:User;
   revision:unknown;
   preferences:URLSearchParams;
   onSelect:(params:URLSearchParams)=>void;
   onCategory:(params:URLSearchParams)=>void;
-  analysis?:boolean;
+  analysis?:boolean;home?:boolean;goto?:(path:string)=>void;
 }) {
   const currency = /^[A-Z]{3}$/.test(preferences.get('currency')??'') ? preferences.get('currency')! : 'PLN';
   const month = /^[1-8]\d{3}-(0[1-9]|1[0-2])$/.test(preferences.get('month')??'') ? preferences.get('month')! : todayKey(user.timezone).slice(0,7);
   const [data,setData] = useState<FinanceSnapshot|null>(null);
   const [error,setError] = useState('');
+  const [upcoming,setUpcoming]=useState<Row[]>([]);
   const [reload,setReload] = useState(0);
   useEffect(() => {
     const controller = new AbortController();
@@ -40,6 +42,16 @@ export function FinanceOverview({user,revision,preferences,onSelect,onCategory,a
     });
     return () => controller.abort();
   }, [month,currency,revision,reload,user.id]);
+  const pro=isPro(user), today=todayKey(user.timezone);
+  useEffect(()=>{
+    if(!home||!pro)return;
+    const controller=new AbortController();
+    api<{items:Row[]}>('/finance/subscriptions?limit=100',{signal:controller.signal}).then(result=>{
+      if(!controller.signal.aborted)setUpcoming(result.items.filter(row=>row.currency===currency&&row.active!==false&&String(row.next_due??row.next_payment)>=today)
+        .sort((a,b)=>String(a.next_due??a.next_payment).localeCompare(String(b.next_due??b.next_payment))).slice(0,4));
+    }).catch(()=>{if(!controller.signal.aborted)setUpcoming([]);});
+    return ()=>controller.abort();
+  },[home,pro,today,currency,revision]);
   const select = (name:string,value:string) => {
     const next = new URLSearchParams({month,currency});
     next.set(name,value);
@@ -47,7 +59,8 @@ export function FinanceOverview({user,revision,preferences,onSelect,onCategory,a
   };
   const categories = [...(data?.categories??[])].sort((a,b) => Number(b.amount)-Number(a.amount));
   const largest = Number(categories[0]?.amount??1);
-  return <section className="finance-overview" aria-label="Сводка финансов">
+  const displayCurrency=currency==='PLN'?'zł':currency;
+  return <section className={'finance-overview'+(home?' life-finance-overview':'')} aria-label="Сводка финансов">
     <div className="overview-controls">
       <label>Месяц <input type="month" value={month} max={analysis?todayKey(user.timezone).slice(0,7):undefined}
         onChange={event => {if (event.target.value) select('month',event.target.value);}}/></label>
@@ -58,7 +71,31 @@ export function FinanceOverview({user,revision,preferences,onSelect,onCategory,a
     {error ? <p className="product-error" role="alert">{error}<button className="text-button" onClick={() => setReload(value=>value+1)}>Повторить</button></p>
       : !data ? <p className="product-loading" role="status">Загружаем сводку…</p>
       : <>
-        <div className="finance-totals">
+        {home?<><div className="life-finance-totals">
+          <LifeCard className="life-finance-balance"><small>Осталось в этом месяце</small><strong>{Number(data.balance)>0?'+':''}{amount(data.balance)} <span>{displayCurrency}</span></strong>
+            <div><span>Доходы <b>{amount(data.income)} {displayCurrency}</b></span><span>Расходы <b>{amount(data.expense)} {displayCurrency}</b></span></div>
+          </LifeCard>
+          <LifeCard className="life-finance-number"><h3><Wallet size={18}/>Расходы</h3><strong>{amount(data.expense)} <small>{displayCurrency}</small></strong>
+            <p>{categories.length} категорий</p></LifeCard>
+          {pro&&<LifeCard className="life-finance-number"><h3><Clock3 size={18}/>Подписки</h3><strong>{upcoming.length||'—'}</strong><p>{upcoming.length?'Ближайшие платежи':'Нет предстоящих платежей'}</p>
+            <LifeLink action={()=>goto?.('/modules/finance/subscriptions')}>Подписки</LifeLink></LifeCard>}
+        </div><div className="life-finance-panels">
+          <LifeCard className="life-finance-categories"><header className="life-card-head"><div><h3>Куда ушли деньги</h3><p>{amount(data.expense)} {displayCurrency} · {categories.length} категорий</p></div>
+            {pro&&<LifeLink action={()=>goto?.('/modules/finance/budgets?'+new URLSearchParams({month,currency}))}>Бюджеты</LifeLink>}</header>
+            {categories.length>0?<><div className="life-spend-stack" aria-hidden="true">{categories.map(({category,amount},index)=><i key={category} style={{flex:Number(amount),background:['#89600e','#484f94','#895934','#245447','#b59347'][index%5]}}/>)}</div>
+              <div className="hub-categories">{categories.map(({category,amount:total},index)=>{
+                const budget=data.budgets?.find(row=>row.category===category);
+                const max=budget?Number(budget.amount):largest,pct=max?100*Number(total)/max:0;
+                return <button key={category} onClick={()=>onCategory(new URLSearchParams({month,currency,category,kind:'expense'}))}>
+                  <span>{categoryLabels[category]??category}</span><strong>{amount(total)} {displayCurrency}{budget?<small> / {amount(budget.amount)}</small>:null}</strong>
+                  <span className="hub-category-bar"><i style={{width:Math.min(100,pct)+'%',background:pct>100?'#b74832':['#89600e','#484f94','#895934','#245447'][index%4]}}/></span>
+                </button>;
+              })}</div></>:<p>Расходы за этот месяц пока не записаны.</p>}
+          </LifeCard>
+          {pro&&<aside className="life-finance-side"><LifeCard><header className="life-card-head"><h3>Ближайшие платежи</h3><LifeLink action={()=>goto?.('/modules/finance/subscriptions')}>Подписки</LifeLink></header>
+            {upcoming.length?upcoming.map(row=><button className="life-payment" key={row.id} onClick={()=>goto?.('/modules/finance/subscriptions/'+row.id)}><i>{String(row.title).slice(0,1)}</i><span>{String(row.title)}<small>{dateLabel(row.next_due??row.next_payment)}</small></span><strong>{amount(row.amount)} {displayCurrency}</strong></button>):<p>Ближайших платежей пока нет.</p>}</LifeCard>
+            <LifeCard><h3>Прогноз до конца месяца</h3><p>Откройте аналитику и укажите период полного учёта.</p><LifeLink action={()=>goto?.('/modules/finance/analysis?'+new URLSearchParams({month,currency}))}>Открыть аналитику</LifeLink></LifeCard></aside>}
+        </div></>:<>        <div className="finance-totals">
           {([['expense','Расходы'],['income','Доходы'],['balance','Разница']] as const).map(([key,label]) => <div key={key}>
             <small>{label}</small><strong>{amount(data[key])} <span>{currency}</span></strong>
           </div>)}
@@ -80,6 +117,7 @@ export function FinanceOverview({user,revision,preferences,onSelect,onCategory,a
             <small>{amount(b.spent)} / {amount(b.amount)} {currency}</small>
           </button>)}</div>
         </details>}
+</>}
       </>}
     {analysis && <FinanceAnalysis key={month+':'+currency} user={user} month={month} currency={currency} pro={isPro(user)} revision={revision}/>}
   </section>;
@@ -170,11 +208,17 @@ export function RecordDetail({
             const row = exercise as Record<string,unknown>;
             return <p key={index}>{text(row.name)}{row.sets ? ' · '+text(row.sets)+' подходов' : ''}{row.reps ? ' × '+text(row.reps) : ''}</p>;
           }) : '—'}</dd></div>}
+          {s.key==='workouts'&&Array.isArray(item.efforts)&&item.efforts.length>0&&<div><dt>Выполненные подходы</dt>
+            <dd><ul className="life-efforts">{item.efforts.map((effort,index)=><li key={index}>
+              <strong>{text(effort.name)}</strong><span>{text(effort.reps)}{effort.kg!=null?' × '+amount(effort.kg)+' кг':' повторов'}</span>
+            </li>)}</ul></dd></div>}
         </dl>}
         {s.key === "diary" && (
           <>
             <span className="eyebrow">{dateLabel(item.day)}</span>
+            {item.mood!=null&&<p>Настроение · {text(item.mood)} из 5</p>}
             <p className="diary-full">{text(item.text)}</p>
+            {Array.isArray(item.tags)&&item.tags.length>0&&<div className="life-diary-tags">{item.tags.map((tag,index)=><span className="life-tag" key={index}>{text(tag)}</span>)}</div>}
           </>
         )}
         {s.key === "habits" && (

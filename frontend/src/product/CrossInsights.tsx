@@ -1,5 +1,6 @@
+import {LifeCard,LifeRings} from '../components/LifeCard';
 import {useCallback,useEffect,useRef,useState} from 'react';
-import {ArrowRight,Layers,LoaderCircle,RefreshCw,Sparkles,Trash2} from 'lucide-react';
+import {ArrowRight,BookOpen,CalendarDays,Heart,LoaderCircle,RefreshCw,Sparkles,Target,Trash2,Wallet} from 'lucide-react';
 import {api,errorMessage} from '../lib/api';
 import {dayLabel,shiftDay,todayKey} from '../lib/dates';
 import {useAssistantPreferences} from '../lib/assistantPreferences';
@@ -14,7 +15,7 @@ type Metric={key:string;module:Module;label:string;unit:string;recorded_days:num
 type Comparison={id:string;modules:Module[];x:string;y:string;text:string;paired_days:number;threshold:string;evidence:{day:string;x:string;y:string;group:'lower'|'upper'}[]};
 type Data={start_day:string;end_day:string;days:number;modules:Module[];currency:string;metrics:Metric[];comparisons:Comparison[];coverage:{x:string;y:string;paired_days:number;comparable:boolean}[];notes:string[];limitation:string;source_hash:string;review:{id:string;status:string;updated_at:string;output:{comparison_ids:string[]}|null}|null};
 
-export function CrossInsights({user,pro,navigate}:{user:User;pro:boolean;navigate:(path:string)=>void}){
+export function CrossInsights({user,pro,navigate,view}:{user:User;pro:boolean;navigate:(path:string)=>void;view?:string}){
   const yesterday=shiftDay(todayKey(user.timezone),-1);
   const [end,setEnd]=useState(yesterday),[days,setDays]=useState(14),[selected,setSelected]=useState<Module[]>(['planning','goals_habits']),[currency,setCurrency]=useState('PLN');
   const [data,setData]=useState<Data|null>(null),[error,setError]=useState(''),[loading,setLoading]=useState(false),[busy,setBusy]=useState(false);
@@ -45,25 +46,47 @@ export function CrossInsights({user,pro,navigate}:{user:User;pro:boolean;navigat
   const running=data?.review?.status==='processing'&&Date.now()-Date.parse(data.review.updated_at)<180000;
   const permitted=preferences.messages&&preferences.modules;
   const comparison=(value:Comparison)=><article className="cross-comparison" key={value.id}><p>{value.text}</p><div className="cross-source-links">{value.modules.map(module=><button key={module} type="button" onClick={()=>navigate(module==='planning'?'/planning':'/modules/'+module)}>{modules[module]}<ArrowRight size={13}/></button>)}</div><details><summary>Основания по дням · {value.paired_days} дней</summary><p className="cross-note">Группы определены относительно личной медианы первого показателя: {value.threshold} {metric(value.x)?.unit}. Ниже — только даты с записями обоих показателей.</p><div className="cross-evidence"><table><caption>Дневные показатели из записей</caption><thead><tr><th>Дата</th><th>{metric(value.x)?.label}, {metric(value.x)?.unit}</th><th>{metric(value.y)?.label}, {metric(value.y)?.unit}</th><th>Группа</th></tr></thead><tbody>{value.evidence.map(row=><tr key={row.day}><td>{dayLabel(row.day,{day:'numeric',month:'short'})}</td><td>{row.x}</td><td>{row.y}</td><td>{row.group==='lower'?'Ниже':'Не ниже'} медианы</td></tr>)}</tbody></table></div></details></article>;
-  return <section className="cross-insights" aria-label="Межмодульный обзор">
-    <header><span className="cross-icon"><Layers size={22}/></span><div><h2>Что видно вместе</h2><p>Сравнение записей разных модулей за один период</p></div><button type="button" className="button secondary" disabled={busy||loading||!pro||selected.length<2} onClick={()=>{setData(null);setConsent(false);void load();}}><RefreshCw size={15}/>Обновить данные</button></header>
-    {!pro?<p className="cross-note">Обзор доступен с Pro или в пробном периоде.</p>:<>
-      <fieldset disabled={busy}><legend>Модули для обзора · выберите минимум два</legend><div className="cross-module-options">{Object.entries(modules).map(([key,label])=><label key={key}><input type="checkbox" checked={selected.includes(key as Module)} onChange={()=>moduleChange(key as Module)}/>{label}</label>)}</div></fieldset>
-      <div className="cross-controls"><label>Последний день<input type="date" value={end} min="1900-01-28" max={yesterday} disabled={busy} onChange={e=>setEnd(e.target.value)}/></label><label>Период<select value={days} disabled={busy} onChange={e=>setDays(Number(e.target.value))}><option value={14}>14 дней</option><option value={28}>28 дней</option></select></label>{selected.includes('finance')&&<label>Валюта расходов<select value={currency} disabled={busy} onChange={e=>setCurrency(e.target.value)}>{['PLN','EUR','USD','RUB','UAH','GBP'].map(code=><option key={code}>{code}</option>)}</select></label>}</div>
-      <p className="cross-note">Сравниваются завершённые дни. Пропуски не превращаются в нули. Это наблюдения по вашим записям, а не доказательство связи или причины. Диагнозы и рекомендации по лечению, инвестициям или кредитам не формируются.</p>
-      {selected.length<2&&<p className="cross-note">Выберите ещё один модуль, чтобы сравнить записи.</p>}
-      {error&&<p className="field-error" role="alert">{error}</p>}
-      {loading&&!data&&<p role="status"><LoaderCircle size={16} className="spinner"/>Сопоставляю записи…</p>}
+  useEffect(()=>{
+    if(view==='review'&&data)document.getElementById('life-ai-review')?.scrollIntoView({block:'start'});
+    if(view==='comparisons'&&data)document.getElementById('life-comparisons')?.scrollIntoView({block:'start'});
+  },[view,data?.source_hash]);
+  const best=Math.max(0,...(data?.coverage.map(pair=>pair.paired_days)??[]));
+  const icons={planning:CalendarDays,goals_habits:Target,health:Heart,finance:Wallet,books:BookOpen};
+  const themes={planning:'plans',goals_habits:'habits',health:'health',finance:'finance',books:'books'};
+  return <section className="cross-insights life-cross" aria-label="Межмодульный обзор">
+    <button type="button" className="button secondary life-cross-refresh" disabled={busy||loading||!pro||selected.length<2} onClick={()=>{setData(null);setConsent(false);void load();}}><RefreshCw size={15}/>Обновить</button>
+    {!pro?<LifeCard><p>Обзор доступен с Pro или в пробном периоде.</p></LifeCard>:<>
+      <div className="life-cross-grid">
+        <LifeCard><h3><i>1</i>Что сравнить</h3><div className="cross-module-options">
+          {(Object.keys(modules) as Module[]).map(key=>{const Icon=icons[key];return <button type="button" key={key} disabled={busy} aria-pressed={selected.includes(key)} className={'theme-'+themes[key]} onClick={()=>moduleChange(key)}><Icon size={15}/>{modules[key]}</button>;})}
+        </div><p>Выберите минимум два модуля.</p></LifeCard>
+        <LifeCard><h3><i>2</i>Период</h3><div className="segmented">{[14,28].map(value=><button key={value} disabled={busy} aria-pressed={days===value} className={days===value?'selected':''} onClick={()=>setDays(value)}>{value} дней</button>)}</div>
+          <div className="cross-controls"><label>Последний день<input type="date" value={end} min="1900-01-28" max={yesterday} disabled={busy} onChange={e=>{if(e.target.value)setEnd(e.target.value);}}/></label>{selected.includes('finance')&&<label>Валюта<select value={currency} disabled={busy} onChange={e=>setCurrency(e.target.value)}>{['PLN','EUR','USD','RUB','UAH','GBP'].map(code=><option key={code}>{code}</option>)}</select></label>}</div>
+          {data&&<p>{dayLabel(data.start_day)} — {dayLabel(data.end_day)} · завершённые дни</p>}</LifeCard>
+        <LifeCard><h3><i>3</i>Данные</h3><div className="life-cross-days"><LifeRings size={70} label={best+' общих дней'} values={[{value:best/8,color:'#89600e',track:'#f3ead3'}]}/>
+          <div><strong>{best>=8?best:best+' из 8'} дней</strong><p>Общих дней с записями</p></div></div><p>{best<8?'Ещё '+(8-best)+' дней с записями для первого сравнения.':'Доступность зависит от записей и различий между группами.'}</p></LifeCard>
+      </div>
+      <div className="life-cross-results" id="life-comparisons">
+        <h2>{view==='comparisons'?'Все сравнения':'Что видно'}</h2>
+        {selected.length<2&&<p className="cross-note">Выберите ещё один модуль.</p>}
+        {error&&<p className="field-error" role="alert">{error}</p>}
+        {loading&&!data&&<p role="status"><LoaderCircle size={16} className="spinner"/>Сопоставляю записи…</p>}
+        {data&&<>
+          {!data.comparisons.length&&<p className="cross-note">Нужны 8 общих дней и минимум по 3 дня в каждой группе.</p>}
+          <div className="life-comparisons">{data.comparisons.map(comparison)}</div>
+          <details className="cross-coverage"><summary>Какие данные есть</summary>
+            <ul>{data.metrics.map(value=><li key={value.key}>{value.label}: {value.recorded_days} дней с записями из {days}.</li>)}</ul>
+            <ul>{data.coverage.map(pair=><li key={pair.x+':'+pair.y}>{metric(pair.x)?.label} + {metric(pair.y)?.label}: общих дней {pair.paired_days}{pair.comparable?' · можно сравнить':''}.</li>)}</ul>
+            {data.notes.map(note=><p className="cross-note" key={note}>{note}</p>)}
+          </details>
+        </>}
+      </div>
       {data&&<>
-        <p className="cross-note">{dayLabel(data.start_day)} — {dayLabel(data.end_day)}. Выбранные показатели: {data.metrics.length}.</p>
-        <details className="cross-coverage"><summary>Какие данные есть</summary><ul>{data.metrics.map(value=><li key={value.key}>{value.label}: {value.recorded_days} дней с записями из {days}.</li>)}</ul><ul>{data.coverage.map(pair=><li key={pair.x+':'+pair.y}>{metric(pair.x)?.label} + {metric(pair.y)?.label}: общих дней {pair.paired_days}{pair.comparable?' · можно сравнить':' · пока недостаточно общих дней или различий'}.</li>)}</ul>{data.notes.map(note=><p className="cross-note" key={note}>{note}</p>)}</details>
-        {!data.comparisons.length&&<p className="cross-note">Пока недостаточно данных для наблюдений. Для каждой пары нужны хотя бы 8 общих дней; после разделения по личной медиане — минимум по 3 дня в каждой группе. Ничего не достраивается за пропущенные дни.</p>}
-        {data.comparisons.length>0&&<details className="cross-coverage"><summary>Все доступные сравнения ({data.comparisons.length})</summary>{data.comparisons.map(comparison)}</details>}
-        <div className="cross-ai"><h3><Sparkles size={18}/>Наблюдения с ИИ</h3><p className="cross-note">ИИ выбирает до трёх готовых сравнений. Числа, ограничения и таблицы оснований рассчитаны Life Hub; новые объяснения причин ИИ не добавляет.</p>
+        <div className="cross-ai" id="life-ai-review"><h3><Sparkles size={18}/>Наблюдения с ИИ</h3><p className="cross-note">ИИ выбирает до трёх готовых сравнений. Числа, ограничения и таблицы оснований рассчитаны Life Hub; новые объяснения причин ИИ не добавляет.</p>
           {output?<>{output.comparison_ids.map(id=>{const value=data.comparisons.find(item=>item.id===id);return value?comparison(value):null;})}<button type="button" className="button ghost" disabled={busy} onClick={()=>setDeleting(true)}><Trash2 size={15}/>Удалить обзор</button></>:<>
             {!permitted&&!preferencesLoading&&<p className="cross-note">Для ИИ включите сообщения и доступ к модулям. <button type="button" className="text-button" onClick={()=>setSettings(!settings)}>Настройки доступа</button></p>}{settings&&<AssistantPreferences userId={user.id}/>}
             {data.review?.status==='failed'&&<p className="cross-note">Предыдущая попытка не завершилась. Можно повторить.</p>}
-            <label className="cross-consent"><input type="checkbox" checked={consent} disabled={busy||running} onChange={e=>setConsent(e.target.checked)}/>Разрешаю отправить в OpenAI рассчитанные сравнения выбранных модулей: периоды, средние значения, медианы и число общих дней.{selected.includes('health')?' Включая выбранные показатели здоровья — длительность сна и тренировок.':''} Тексты дневника, названия задач и покупок, заметки, лекарства, вес, исходные файлы и другие модули не передаются.</label>
+            <label className="cross-consent"><input type="checkbox" checked={consent} disabled={busy||running} onChange={e=>setConsent(e.target.checked)}/>Разрешаю отправить в OpenAI рассчитанные сравнения выбранных модулей: периоды, средние значения, медианы и число общих дней.{selected.includes('health')?' Включая выбранные показатели здоровья — длительность сна и тренировок.':''}{selected.includes('books')?' Включая средние оценки настроения, если вы их отмечали.':''} Тексты дневника, названия задач и покупок, заметки, лекарства, вес, исходные файлы и другие модули не передаются.</label>
             <button type="button" className="button primary" disabled={busy||loading||running||preferencesLoading||!permitted||!consent||!data.comparisons.length} onClick={()=>void generate()}>{busy||running?<LoaderCircle size={16} className="spinner"/>:<Sparkles size={16}/>} {busy||running?'Выбираю наблюдения…':'Подготовить обзор с ИИ'}</button>
           </>}
           <p className="cross-note">Расчёты бесплатны по лимиту ИИ; генерация использует один общий запрос, повторное открытие готового обзора — без нового запроса. При обновлении данных изменённые записи скрывают старый обзор. Кэш удаляется после 30 дней без генерации. Записи и расписание автоматически не меняются.</p>

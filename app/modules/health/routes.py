@@ -182,6 +182,7 @@ for path, model, schema, paid, validator in [
         pro_only=paid,
         validate=validator,
         read_filter=history_filter(model) if not paid else None,
+        preserve_omitted=("efforts",) if model is Workout else (),
     )
 
 from app.modules.health.models import WorkoutProgram, WeightTarget

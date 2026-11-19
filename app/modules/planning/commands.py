@@ -47,6 +47,9 @@ class AiChatRequest(InputModel):
     media_allowed: bool = False
     photos: list[ChatPhoto] = Field(default_factory=list, max_length=3)
     message: str = Field(min_length=1, max_length=4000)
+    screen: Literal["home", "planning", "free_time", "habits", "health", "finance", "books", "diary", "insights"] | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
 
 class CreateTaskAction(InputModel):

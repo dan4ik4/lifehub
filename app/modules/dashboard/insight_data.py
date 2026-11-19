@@ -158,11 +158,16 @@ def build(db, user, end_day, days, modules, currency):
 
     if 'books' in selected:
         values = defaultdict(Decimal)
-        for _, day, _ in rows(select(DiaryEntry.id, DiaryEntry.day, DiaryEntry.version).where(DiaryEntry.user_id == user.id,
+        moods = defaultdict(list)
+        for _, day, mood, _ in rows(select(DiaryEntry.id, DiaryEntry.day, DiaryEntry.mood, DiaryEntry.version).where(DiaryEntry.user_id == user.id,
             DiaryEntry.deleted_at.is_(None), DiaryEntry.day >= start, DiaryEntry.day <= end_day)
             .order_by(DiaryEntry.id), 'diary_entries'):
             values[str(day)] += 1
+            if mood is not None:
+                moods[str(day)].append(Decimal(mood))
         metric('diary_entries', 'books', 'Записи дневника', 'записей', values)
+        if moods:
+            metric('diary_mood', 'books', 'Оценка настроения', 'из 5', {day: sum(entries) / len(entries) for day, entries in moods.items()})
 
     comparisons, coverage = [], []
     for left, right in itertools.combinations(metrics, 2):

@@ -1,18 +1,36 @@
-import {useCallback, useEffect, useRef, useState} from 'react';
-import type {ReactNode} from 'react';
-import {ArrowRight, BookOpen, CalendarDays, Check, Heart, Layers, Moon, RefreshCw, Target, Wallet} from 'lucide-react';
-import {api, errorMessage} from '../lib/api';
-import {dayLabel, todayKey} from '../lib/dates';
-import type {CalendarEvent, Notify, Task, TaskOccurrence, User} from '../lib/types';
+import {useCallback,useEffect,useRef,useState} from 'react';
+import {ArrowRight,BookOpen,CalendarDays,Check,ChevronDown,Clock3,Layers,Moon,Plus,Scale,Target,Wallet} from 'lucide-react';
+import type {CalendarEvent,Notify,Task,TaskOccurrence,User} from '../lib/types';
+import {api,errorMessage} from '../lib/api';
+import {dayLabel,todayKey} from '../lib/dates';
 import {openQuickAdd} from '../lib/workspace';
+import {LifeBars,LifeCard,LifeLink,LifeRings} from '../components/LifeCard';
+import {Modal,ConfirmDialog} from '../components/ui';
+import {Avatar} from '../components/Avatar';
 import {formatAmount} from './format';
-import {displayWeight, weightLabel} from './weight';
+import {displayWeight,weightLabel} from './weight';
+import {openWorkout,useActiveWorkout} from './WorkoutSession';
+
+const widgetTitles = {sleep:'Сон',weight:'Вес',finance:'Расходы',books:'Читаю',free:'Свободное время',insights:'Что видно вместе'} as const;
+type HomeWidget = keyof typeof widgetTitles;
+const defaults:HomeWidget[]=['sleep','weight','finance','books'];
+const duration=(minutes:number)=>[Math.floor(minutes/60)?Math.floor(minutes/60)+' ч':'',minutes%60?minutes%60+' мин':''].filter(Boolean).join(' ')||'0 мин';
+const sleepTime=(hours:number)=>Math.floor(Math.round(hours*60)/60)+':'+String(Math.round(hours*60)%60).padStart(2,'0');
+function widgetSelection(id:string):HomeWidget[] {
+  try {
+    const value:unknown=JSON.parse(localStorage.getItem('lifehub.home.widgets.'+id)??'null');
+    if(Array.isArray(value)) return [...new Set(value.filter((key):key is HomeWidget=>typeof key==='string'&&Object.hasOwn(widgetTitles,key)))];
+  } catch {}
+  return defaults;
+}
 
 type DashboardData = {
   day:string;
   widgets:{
     planning?:{tasks:{task:Task;occurrence:TaskOccurrence}[];events:CalendarEvent[]};
     habits?:{id:string;title:string;version:number;today_complete:boolean;target:string;kind:string}[];
+    sleep_week?:{day:string;hours:number|null}[];
+    budgets?:{currency:string;amount:string;percent:number}[];
     sleep?:{hours:number;end_at?:string;day?:string}|null;
     weight?:{day:string;kg:string}[];
     workouts?:{count:number;minutes:number};
@@ -21,22 +39,28 @@ type DashboardData = {
   };
 };
 
-function Card({title, icon, action, onOpen, children, className=''}: {
-  title:string;icon:ReactNode;action:string;onOpen:()=>void;children:ReactNode;className?:string;
-}) {
-  return <section className={'hub-card '+className}>
-    <header><span className="hub-card-icon">{icon}</span><h2>{title}</h2></header>
-    <div className="hub-card-body">{children}</div>
-    <button className="hub-card-link" onClick={onOpen}>{action}<ArrowRight size={16}/></button>
-  </section>;
-}
-
-export function Dashboard({user,navigate,notify}: {user:User;navigate:(path:string)=>void;notify:Notify}) {
+export function Dashboard({user,navigate,notify,onProfile}: {user:User;navigate:(path:string)=>void;notify:Notify;onProfile:()=>void}) {
+  const workout=useActiveWorkout(user.id);
   const [data,setData] = useState<DashboardData|null>(null);
   const [error,setError] = useState('');
   const [loading,setLoading] = useState(true);
   const [acting,setActing] = useState('');
-  const [currency,setCurrency] = useState('');
+  const [customize,setCustomize]=useState(false);
+  const [selectedWidgets,setSelectedWidgets]=useState(()=>widgetSelection(user.id));
+  const [liveDetails,setLiveDetails]=useState(false);
+  const [finishEvent,setFinishEvent]=useState<CalendarEvent|null>(null);
+  const [now,setNow]=useState(Date.now);
+  useEffect(()=>{
+    const timer=window.setInterval(()=>setNow(Date.now()),30_000);
+    const configure=()=>setCustomize(true);
+    window.addEventListener('lifehub:customize-home',configure);
+    return ()=>{window.clearInterval(timer);window.removeEventListener('lifehub:customize-home',configure);};
+  },[]);
+  function toggleWidget(key:HomeWidget){
+    const next=selectedWidgets.includes(key)?selectedWidgets.filter(w=>w!==key):[...selectedWidgets,key];
+    setSelectedWidgets(next);
+    try {localStorage.setItem('lifehub.home.widgets.'+user.id,JSON.stringify(next));} catch {}
+  }
   const controller = useRef<AbortController|null>(null);
   const mutation = useRef(false);
   const refresh = useCallback(async () => {
@@ -89,89 +113,123 @@ export function Dashboard({user,navigate,notify}: {user:User;navigate:(path:stri
   const events=[...new Map((plans?.events??[]).map(event => [event.id+':'+event.occurrence_at,event])).values()]
     .sort((a,b) => Date.parse(a.start_at)-Date.parse(b.start_at));
   const tasks=[...new Map((plans?.tasks??[]).map(record => [record.task.id+':'+record.occurrence.occurrence_at,record])).values()];
-  const nextEvent=events.find(event => !event.all_day && Date.parse(event.start_at)>Date.now());
-  const nextTask=tasks.find(({occurrence}) => occurrence.status==='pending');
-  const completed=tasks.filter(({occurrence}) => occurrence.status==='completed').length;
-  const currencies=[...new Set(widgets?.finance?.map(row => row.currency)??[])];
-  const activeCurrency=currencies.includes(currency)?currency:currencies[0];
-  const expense=widgets?.finance?.find(row => row.currency===activeCurrency&&row.kind==='expense')?.amount??'0';
-  const income=widgets?.finance?.find(row => row.currency===activeCurrency&&row.kind==='income')?.amount??'0';
-  const book=widgets?.books?.[0];
-  const weight=widgets?.weight?.at(-1);
-  const pro=user.plan==='pro'||(user.plan==='trial'&&!!user.trial_ends&&Date.parse(user.trial_ends)>Date.now());
-  const eventLink=(event:CalendarEvent) => '/planning/calendar?'+new URLSearchParams({day,event:event.id,...(event.occurrence_at?{occurrence:event.occurrence_at}:{})});
-  const taskLink=(task:Task,occurrence:TaskOccurrence) => '/planning?'+new URLSearchParams({day,task:task.id,
-    ...(occurrence.occurrence_at?{occurrence:occurrence.occurrence_at}:{})});
-  return <div className="hub-home">
-    <section className="hub-hero" aria-label="Сегодня">
-      <div className="hub-hero-copy">
-        <p>{dayLabel(day,{weekday:'long', day:'numeric', month:'long'})}</p>
-        <h1>Привет, {user.name?.trim().split(/\s+/)[0] || 'друг'}</h1>
-      </div>
-      <button className="icon-button hub-hero-refresh" onClick={() => void refresh()} disabled={loading} aria-label="Обновить сводку">
-        <RefreshCw size={18} className={loading?'spinner':''}/>
-      </button>
-      {nextEvent ? <button className="hub-hero-next" onClick={() => navigate(eventLink(nextEvent))}>
-        <CalendarDays size={20}/><span><small>Следующее событие · {time(nextEvent.start_at)}</small><strong>{nextEvent.title}</strong></span><ArrowRight size={18}/>
-      </button> : nextTask ? <button className="hub-hero-next" onClick={() => navigate(taskLink(nextTask.task,nextTask.occurrence))}>
-        <Target size={20}/><span><small>Дальше по плану</small><strong>{nextTask.task.title}</strong></span><ArrowRight size={18}/>
-      </button> : null}
-    </section>
-    {error && <div className="product-error" role="alert">{error}<button className="button secondary" onClick={() => void refresh()}>Повторить</button></div>}
-    {!data && loading && <div className="hub-home-grid" role="status" aria-label="Загружаем сводку"><div className="hub-card hub-placeholder"/><div className="hub-card hub-placeholder"/></div>}
-    {widgets && <div className="hub-home-grid">
-      {plans && <Card title="План на сегодня" icon={<CalendarDays size={20}/>} action="Открыть мой день" onOpen={() => navigate('/planning')} className="hub-plan-card">
-        {!!tasks.length && <p className="hub-muted">Выполнено {completed} из {tasks.length} задач</p>}
-        {events.slice(0,2).map(event => <button className="hub-event-row" key={event.id+':'+event.occurrence_at} onClick={() => navigate(eventLink(event))}>
-          <time>{event.all_day?'Весь день':time(event.start_at)}</time><strong>{event.title}</strong><ArrowRight size={16}/>
-        </button>)}
-        {tasks.slice().sort((a,b) => Number(a.occurrence.status==='completed')-Number(b.occurrence.status==='completed')).slice(0,4).map(({task,occurrence}) => {
-          const done=occurrence.status==='completed';
-          return <div className="hub-task-row" key={task.id+':'+occurrence.occurrence_at}>
-            <button className="hub-check" aria-label={task.title} role="checkbox" aria-checked={done} disabled={!!acting}
-              onClick={() => void mark('/planning/tasks/'+task.id+'/'+(done?'reopen':'complete'),{version:task.version,occurrence_at:occurrence.occurrence_at},task.id)}>
-              <span>{done && <Check size={15}/>}</span>
-            </button>
-            <button className="hub-task-title" onClick={() => navigate(taskLink(task,occurrence))}>{task.title}</button>
-          </div>;
-        })}
-        {!events.length && !tasks.length && <p>На сегодня пока нет планов. <button className="text-button" onClick={() => openQuickAdd('task')}>Добавить задачу</button></p>}
-      </Card>}
-      {widgets.habits && <Card title="Привычки" icon={<Target size={20}/>} action="Цели и привычки" onOpen={() => navigate('/modules/goals_habits')} className="hub-habits-card">
-        {widgets.habits.length ? <>
-          <div className="hub-metric">{widgets.habits.filter(habit => habit.today_complete).length}<small> / {widgets.habits.length} сегодня</small></div>
-          {widgets.habits.slice(0,2).map(habit => <button className="hub-habit-row" key={habit.id} disabled={!!acting}
-            onClick={() => habit.kind==='boolean' ? void mark('/habits/'+habit.id+'/checkins',{version:habit.version,day,value:habit.today_complete?0:habit.target},habit.id) : navigate('/modules/goals_habits')}>
-            <span className={'hub-habit-mark '+(habit.today_complete?'complete':'')}>{habit.today_complete?<Check size={14}/>:<span/>}</span>{habit.title}
-          </button>)}
-        </> : <p>На сегодня нет запланированных привычек.</p>}
-      </Card>}
-      {widgets.workouts && <Card title="Здоровье" icon={<Heart size={20}/>} action="Показатели здоровья" onOpen={() => navigate('/modules/health')} className="hub-health-card">
-        {widgets.sleep ? <><div className="hub-metric">{formatAmount(widgets.sleep.hours)} <small>ч сна</small></div>
-          <p className="hub-muted"><Moon size={14}/> Последняя запись{widgets.sleep.day ? ' · '+dayLabel(widgets.sleep.day) : widgets.sleep.end_at ? ' · '+new Date(widgets.sleep.end_at).toLocaleDateString('ru-RU',{day:'numeric',month:'short',timeZone:user.timezone}) : ''}</p></>
-          : weight ? <><div className="hub-metric">{formatAmount(displayWeight(weight.kg,user.weight_unit))} <small>{weightLabel(user.weight_unit)}</small></div><p className="hub-muted">Последнее измерение · {dayLabel(weight.day)}</p></>
-          : <p>Пока нет записей сна или веса.</p>}
-        <p className="hub-muted">Тренировки за неделю · {widgets.workouts.count} · {widgets.workouts.minutes} мин</p>
-      </Card>}
-      {widgets.finance && <Card title="Финансы" icon={<Wallet size={20}/>} action="Открыть финансы"
-        onOpen={() => navigate('/modules/finance'+(activeCurrency?'?currency='+activeCurrency:''))} className="hub-finance-card">
-        {activeCurrency ? <>
-          <div className="hub-finance-amount"><div><small>Расходы с начала месяца</small><div className="hub-metric">{formatAmount(expense)} <small>{activeCurrency}</small></div></div>
-            {currencies.length>1 && <select aria-label="Валюта сводки" value={activeCurrency} onChange={event => setCurrency(event.target.value)}>{currencies.map(code => <option key={code}>{code}</option>)}</select>}
-          </div>
-          <div className="hub-comparison"><span>Доходы</span><strong>{formatAmount(income)} {activeCurrency}</strong></div>
-        </> : <p>Пока нет операций в этом месяце.</p>}
-      </Card>}
-      {widgets.books && <Card title="Книги" icon={<BookOpen size={20}/>} action={book?'Открыть книгу':'Книжная полка'}
-        onOpen={() => navigate('/modules/books/books'+(book?'/'+book.id:''))} className="hub-books-card">
-        {book ? <div className="hub-reading"><span className="hub-book-emblem"><BookOpen size={26}/>{book.cover_id && <img alt="" loading="lazy" src={`https://covers.openlibrary.org/b/id/${book.cover_id}-M.jpg`} onError={event => {event.currentTarget.hidden = true;}}/>}</span><div><strong>{book.title}</strong><p>{book.author}</p>
-          {book.total_pages ? <progress value={book.current_page} max={book.total_pages} aria-label="Прогресс чтения"/> : null}
-          <small>{book.current_page}{book.total_pages?' / '+book.total_pages:''} стр.</small></div></div>
-        : <p>Пока нет книг в чтении.</p>}
-      </Card>}
-      {pro && <Card title="Что видно вместе" icon={<Layers size={20}/>} action="Открыть обзор" onOpen={() => navigate('/modules/insights')} className="hub-insights-card">
-        <p>Сравните записи из разных модулей за один период.</p>
-      </Card>}
-    </div>}
+  const current=events.find(event=>!event.all_day&&Date.parse(event.start_at)<=now&&Date.parse(event.end_at)>now);
+  const completed=tasks.filter(({occurrence})=>occurrence.status==='completed').length;
+  const habits=widgets?.habits??[];
+  const habitsDone=habits.filter(h=>h.today_complete).length;
+  const currencies=[...new Set(widgets?.finance?.map(row=>row.currency)??[])];
+  const activeCurrency=currencies.includes('PLN')?'PLN':currencies[0];
+  const expense=widgets?.finance?.find(row=>row.currency===activeCurrency&&row.kind==='expense')?.amount;
+  const budgets=widgets?.budgets?.filter(row=>row.currency===activeCurrency)??[];
+  const budgetSum=budgets.reduce((sum,row)=>sum+Number(row.amount),0);
+  const book=widgets?.books?.[0], weight=widgets?.weight?.at(-1), workoutMinutes=widgets?.workouts?.minutes??0;
+  const reading=book?.total_pages?Math.min(100,Math.round(100*book.current_page/book.total_pages)):null;
+  const doneRatio=tasks.length?completed/tasks.length:0, habitRatio=habits.length?habitsDone/habits.length:0;
+  const progressRatios=[...(plans?[doneRatio]:[]),...(widgets?.habits?[habitRatio]:[])];
+  const progress=progressRatios.length?Math.round(100*progressRatios.reduce((sum,ratio)=>sum+ratio,0)/progressRatios.length):0;
+  const eventLink=(event:CalendarEvent)=>'/planning/calendar?'+new URLSearchParams({day,event:event.id,...(event.occurrence_at?{occurrence:event.occurrence_at}:{})});
+  const taskLink=(task:Task,occurrence:TaskOccurrence)=>'/planning?'+new URLSearchParams({day,task:task.id,...(occurrence.occurrence_at?{occurrence:occurrence.occurrence_at}:{})});
+  const movement=widgets?.workouts;
+  const timeline=[
+    ...events.map(event=>({type:'event' as const,event,order:event.all_day?-1:Date.parse(event.start_at)})),
+    ...tasks.filter(row=>row.occurrence.status!=='skipped').map(({task,occurrence})=>{
+      const stamp=occurrence.effective_start_at??occurrence.effective_due_at;
+      return {type:'task' as const,task,occurrence,stamp,order:task.all_day||!stamp?Infinity:Date.parse(stamp)};
+    }),
+  ].sort((a,b)=>a.order-b.order);
+  const metric=(key:HomeWidget)=>{
+    if(key==='sleep'&&widgets?.workouts) return {icon:Moon,theme:'plans',value:widgets.sleep?sleepTime(widgets.sleep.hours):'—',unit:widgets.sleep?'ч':'',path:'/modules/health/sleep',hint:widgets.sleep?'Сон за последнюю ночь':'Нет записи о сне',bars:widgets.sleep_week?.map(x=>x.hours)};
+    if(key==='weight'&&widgets?.weight) return {icon:Scale,theme:'health',value:weight?formatAmount(displayWeight(weight.kg,user.weight_unit)):'—',unit:weight?weightLabel(user.weight_unit):'',path:'/modules/health/weight',hint:weight?'Последнее измерение · '+dayLabel(weight.day):'Нет измерений',bars:widgets.weight.map(x=>displayWeight(x.kg,user.weight_unit))};
+    if(key==='finance'&&widgets?.finance) return {icon:Wallet,theme:'finance',value:expense?formatAmount(expense):'—',unit:expense?(activeCurrency==='PLN'?'zł':activeCurrency):'',path:'/modules/finance'+(activeCurrency?'?currency='+activeCurrency:''),hint:expense?'Расходы с начала месяца':'Нет операций в этом месяце',progress:budgetSum?100*Number(expense??0)/budgetSum:0};
+    if(key==='books'&&widgets?.books) return {icon:BookOpen,theme:'books',value:reading??(book?book.current_page:'—'),unit:reading!==null?'%':book?'стр.':'',path:'/modules/books/books'+(book?'/'+book.id:''),hint:book?book.title+' · '+book.current_page+(book.total_pages?' из '+book.total_pages:''):'Нет книг в чтении',progress:reading??0};
+    if(key==='free'&&plans) return {icon:Clock3,theme:'habits',value:'Окна',unit:'',path:'/planning/free-time',hint:'Найдите свободное время в календаре'};
+    if(key==='insights'&&(user.plan==='pro'||(user.plan==='trial'&&Date.parse(user.trial_ends??'')>now))) return {icon:Target,theme:'insights',value:'Связи',unit:'',path:'/modules/insights',hint:'Сравните свои записи'};
+    return null;
+  };
+  const liveProgress=current?Math.max(0,Math.min(100,(now-Date.parse(current.start_at))*100/(Date.parse(current.end_at)-Date.parse(current.start_at)))):0;
+  return <div className="life-home">
+    {workout&&widgets?.workouts&&<div className="life-live-wrapper"><button className="life-live" onClick={()=>openWorkout()}>
+      <span className="life-live-icon"><Clock3 size={17}/></span><strong>Идёт тренировка · {workout.title}</strong><small>{duration(Math.floor((now-workout.started)/60000))}</small><ArrowRight size={16}/>
+    </button></div>}
+    {current && !workout && <div className="life-live-wrapper"><button className="life-live" aria-expanded={liveDetails} onClick={()=>setLiveDetails(open=>!open)}>
+      <span className="life-live-icon"><CalendarDays size={17}/></span>
+      <span><strong>Сейчас · {current.title}</strong><progress value={liveProgress} max={100} aria-label="Прогресс события"/></span>
+      <small>ещё {duration(Math.ceil((Date.parse(current.end_at)-now)/60000))}</small><ChevronDown size={16}/>
+    </button>{liveDetails&&<LifeCard className="life-live-details"><h3>{current.title}</h3><p>{time(current.start_at)}–{time(current.end_at)}</p><LifeLink action={()=>navigate(eventLink(current))}>Открыть событие</LifeLink>
+      {!current.recurrence&&!current.external_read_only&&<button className="button secondary" onClick={()=>setFinishEvent(current)}>Завершить раньше</button>}</LifeCard>}</div>}
+    <header className="life-home-title">
+      <div><span className="life-page-eyebrow">{dayLabel(day,{weekday:'long',day:'numeric',month:'long'})}</span>
+      <h1>Добрый день, {user.name?.trim().split(/\s+/)[0]||'друг'}</h1></div>
+      <div className="life-home-actions"><button className="button secondary" onClick={()=>setCustomize(true)}><Layers size={17}/>Настроить</button>
+        <button className="button primary" onClick={()=>openQuickAdd()}><Plus size={17}/>Добавить<kbd>N</kbd></button></div>
+      <button className="life-home-avatar life-rail-avatar" onClick={onProfile} aria-label="Настройки профиля"><Avatar user={user}/></button>
+    </header>
+    {error&&<div className="product-error" role="alert">{error}<button className="button secondary" onClick={()=>void refresh()}>Повторить</button></div>}
+    {!data&&loading&&<div className="life-home-primary" role="status" aria-label="Загружаем сводку"><div className="life-card hub-placeholder"/><div className="life-card hub-placeholder"/></div>}
+    {widgets&&<>
+      {(plans||widgets.habits)&&<div className={'life-home-primary'+(!plans?' no-plans':'')}>
+        {plans&&<LifeCard className="life-agenda">
+          <header className="life-card-head"><div><h2>Сегодня</h2><p>{events.length} событий · {tasks.length} задач</p></div><LifeLink action={()=>navigate('/planning')}>Мой день</LifeLink></header>
+          <div className="life-home-timeline">{timeline.length?timeline.slice(0,8).map(row=>{
+            if(row.type==='event'){
+              const {event}=row, passed=Date.parse(event.end_at)<=now, active=event===current;
+              return <button key={event.id+':'+event.occurrence_at} className={'life-home-event'+(active?' current':'')+(passed?' passed':'')} onClick={()=>navigate(eventLink(event))}>
+                <time>{event.all_day?'Весь день':time(event.start_at)}</time><i/><span><strong>{event.title}</strong><small>{active?'Идёт · до '+time(event.end_at):time(event.start_at)+'–'+time(event.end_at)+(passed?' · прошло':'')}</small>
+                {active&&<progress value={liveProgress} max={100} aria-label="Прогресс события"/>}</span>{active&&<em>Сейчас</em>}
+              </button>;
+            }
+            const {task,occurrence,stamp}=row,done=occurrence.status==='completed';
+            return <div className={'life-home-task'+(done?' done':'')} key={task.id+':'+occurrence.occurrence_at}>
+              <time>{stamp&&!task.all_day?time(stamp):''}</time><i/>
+              <button className="life-task-check" role="checkbox" aria-label={task.title} aria-checked={done} disabled={!!acting}
+                onClick={()=>void mark('/planning/tasks/'+task.id+'/'+(done?'reopen':'complete'),{version:task.version,occurrence_at:occurrence.occurrence_at},task.id)}>{done&&<Check size={13}/>}</button>
+              <button className="life-task-name" onClick={()=>navigate(taskLink(task,occurrence))}>{task.title}<small>{done?'Готово':'Задача'}</small></button>
+            </div>;
+          }):<p>На сегодня пока нет планов.</p>}</div>
+          <button className="life-agenda-add" onClick={()=>openQuickAdd('task')}><Plus size={17}/>Добавить на сегодня<kbd>N</kbd></button>
+        </LifeCard>}
+        <div className="life-home-side">
+          <LifeCard className="life-day-progress"><header className="life-card-head"><h3>Прогресс дня</h3><strong>{progress}%</strong></header>
+            <div className="life-progress-body"><LifeRings label={'Прогресс дня: '+progress+'%'} size={138} values={[
+              ...(widgets.habits?[{value:habitRatio,color:'#245447'}]:[]),
+              ...(plans?[{value:doneRatio,color:'#484f94',track:'#e6e7f5'}]:[]),
+              ...(movement?[{value:0,color:'#895934',track:'#f3e4d6'}]:[]),
+            ]}/><dl>
+              {widgets.habits&&<div><dt><i/>Привычки</dt><dd>{habitsDone} <small>/ {habits.length}</small></dd></div>}
+              {plans&&<div><dt><i className="indigo"/>Задачи</dt><dd>{completed} <small>/ {tasks.length}</small></dd></div>}
+              {movement&&<div><dt><i className="brown"/>Тренировки</dt><dd>{workoutMinutes} <small>мин за неделю</small></dd></div>}
+            </dl></div>
+          </LifeCard>
+          {widgets.habits&&<LifeCard className="life-home-habits"><header className="life-card-head"><h3>Привычки</h3><span>{habitsDone} из {habits.length}</span></header>
+            <div className="life-habit-icons">
+              {habits.slice(0,2).map(habit=><button key={habit.id} disabled={!!acting} aria-pressed={habit.today_complete} onClick={()=>habit.kind==='boolean'?void mark('/habits/'+habit.id+'/checkins',{version:habit.version,day,value:habit.today_complete?0:habit.target},habit.id):navigate('/modules/goals_habits')}>
+                <span>{habit.today_complete?<Check size={25}/>:<Target size={24}/>}</span><strong>{habit.title}</strong>
+              </button>)}
+              <button className="new" onClick={()=>navigate('/modules/goals_habits?new=habit')}><span><Plus size={23}/></span><strong>Новая</strong></button>
+            </div>
+            <LifeLink action={()=>navigate('/modules/goals_habits')}>Цели и привычки</LifeLink>
+          </LifeCard>}
+        </div>
+      </div>}
+      <div className="life-home-widgets">{selectedWidgets.map(key=>{
+        const item=metric(key);
+        if(!item)return null;
+        const Icon=item.icon;
+        return <button className={'life-metric theme-'+item.theme} key={key} onClick={()=>navigate(item.path)}>
+          <span className="life-metric-heading"><span><Icon size={17}/></span>{widgetTitles[key]}<ArrowRight size={14}/></span>
+          {'bars'in item&&item.bars?.length?<LifeBars values={item.bars} format={v=>formatAmount(v)}/>:null}
+          {'progress'in item&&typeof item.progress==='number'&&<progress value={item.progress} max={100} aria-label={widgetTitles[key]}/>}
+          <strong>{item.value} <small>{item.unit}</small></strong><span className="life-metric-hint">{item.hint}</span>
+        </button>;
+      })}</div><button className="life-text-link life-mobile-customize" onClick={()=>setCustomize(true)}><Layers size={16}/>Настроить главную</button>
+    </>}
+    {customize&&<Modal title="Настроить главную" onClose={()=>setCustomize(false)}>
+      <div className="modal-body life-widget-options">{(Object.keys(widgetTitles) as HomeWidget[]).filter(key=>!widgets||metric(key)).map(key=><label key={key}>
+        <input type="checkbox" checked={selectedWidgets.includes(key)} onChange={()=>toggleWidget(key)}/>{widgetTitles[key]}</label>)}
+        <p>Выбор хранится на этом устройстве.</p></div>
+      <footer className="modal-footer"><button className="button primary" onClick={()=>setCustomize(false)}>Готово</button></footer>
+    </Modal>}
+    {finishEvent&&<ConfirmDialog title="Завершить событие раньше?" description={finishEvent.title} onClose={()=>setFinishEvent(null)}
+      onConfirm={async()=>{await api('/planning/events/'+finishEvent.id,{method:'PATCH',body:{version:finishEvent.version,end_at:new Date().toISOString()}});setLiveDetails(false);await refresh();notify('Время окончания обновлено');}}/>}
   </div>;
 }

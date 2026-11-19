@@ -505,6 +505,8 @@ export const sections: Record<string, Section[]> = {
         { ...title, optional: true },
         day,
         { key: "text", label: "Что хочется сохранить", type: "textarea" },
+        { key: "mood", label: "Настроение от 1 до 5", type: "number", min: 1, max: 5, optional: true },
+        { key: "tags", label: "Теги через запятую", optional: true },
       ],
     },
   ],
@@ -559,6 +561,9 @@ export function bodyFor(
     body.open_library_key = row.open_library_key ?? null;
     body.notes = row.notes ?? "";
     if (body.status !== "read") body.rating = null;
+  }
+  if (section.key === "diary") {
+    body.tags = Array.isArray(body.tags) ? body.tags : String(body.tags ?? "").split(",").map(tag => tag.trim()).filter(Boolean);
   }
   return body;
 }

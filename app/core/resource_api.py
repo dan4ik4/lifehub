@@ -27,6 +27,7 @@ def add_resource(
     serialize=None,
     after_write=None,
     after_delete=None,
+    preserve_omitted=(),
 ):
     RESOURCE_REGISTRY[module + path] = dict(model=model, schema=schema, module=module,
         pro_only=pro_only, validate=validate, read_filter=read_filter, after_write=after_write)
@@ -85,6 +86,9 @@ def add_resource(
         guard(item, user)
         previous = record(item)
         values = body.model_dump(exclude={"version"})
+        for field in preserve_omitted:
+            if field not in body.model_fields_set:
+                values[field] = getattr(item, field)
         if validate:
             validate(db, user, values, item)
         for key, value in values.items():

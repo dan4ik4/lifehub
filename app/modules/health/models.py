@@ -26,6 +26,7 @@ class Workout(OwnedRecord, Base):
     title: Mapped[str] = mapped_column(String(300))
     minutes: Mapped[int] = mapped_column(Integer)
     notes: Mapped[str] = mapped_column(Text, default="")
+    efforts: Mapped[list[dict]] = mapped_column(JSON, default=list, server_default="[]")
 
 
 class NutritionEntry(OwnedRecord, Base):

@@ -1,3 +1,4 @@
+import type {DragEvent} from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { CalendarDays, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { dateKey, dayLabel, minutesOfDay, monthDays, parts, shiftDay, todayKey, weekDays, zonedISO } from '../lib/dates';
@@ -121,12 +122,38 @@ export function layoutBlocks<T extends { start: number; end: number }>(blocks: T
   for (const block of sorted) { if (group.length && block.start >= groupEnd) flush(); group.push(block); groupEnd = group.length === 1 ? block.end : Math.max(groupEnd, block.end); }
   if (group.length) flush(); return result;
 }
-export function CalendarView({ selected, onSelect, timezone, calendar, tasks, onEvent, onTask, onCreate }: {
+export function CalendarView({ selected, onSelect, timezone, calendar, tasks, onEvent, onTask, onCreate, onMove }: {
   selected: string; onSelect: (day: string) => void; timezone: string; calendar: CalendarRange | null; tasks: Task[];
   onEvent: (event: CalendarEvent) => void; onTask: (task: Task, occurrence?: TaskOccurrence) => void;
-  onCreate: (day: string, time?: string) => void;
+  onCreate: (day: string, time?: string) => void; onMove?:(event:CalendarEvent,day:string,time:string)=>void;
 }) {
   const [view, setView] = useState<'agenda' | 'day' | 'week' | 'month'>(() => window.innerWidth < 800 ? 'agenda' : 'week');
+  useEffect(()=>{
+    const shortcuts=(event:KeyboardEvent)=>{
+      if(event.ctrlKey||event.metaKey||event.altKey||document.querySelector('dialog[open]')||
+        (event.target instanceof HTMLElement&&(event.target.isContentEditable||['INPUT','TEXTAREA','SELECT'].includes(event.target.tagName))))return;
+      const key=event.key.toLowerCase();
+      if(key==='t')onSelect(todayKey(timezone));
+      if(key==='d')setView('day');
+      if(key==='w')setView('week');
+      if(key==='m')setView('month');
+    };
+    window.addEventListener('keydown',shortcuts);
+    return ()=>window.removeEventListener('keydown',shortcuts);
+  },[onSelect,timezone]);
+  const dragged=useRef<CalendarEvent|null>(null);
+  const beginDrag=(event:DragEvent<HTMLElement>,value:CalendarEvent)=>{
+    dragged.current=value;
+    event.dataTransfer.effectAllowed='move';
+    event.dataTransfer.setData('text/plain',value.title);
+  };
+  const drop=(event:DragEvent<HTMLDivElement>,day:string)=>{
+    const moved=dragged.current;
+    if(!moved||!onMove)return;
+    event.preventDefault();dragged.current=null;
+    const offset=Math.max(0,Math.min(1425,Math.floor((event.clientY-event.currentTarget.getBoundingClientRect().top)/15)*15));
+    onMove(moved,day,String(Math.floor(offset/60)).padStart(2,'0')+':'+String(offset%60).padStart(2,'0'));
+  };
   const scroll = useRef<HTMLDivElement>(null);
   const days = view === 'day' ? [selected] : weekDays(selected), today = todayKey(timezone);
   const scrolled = useRef('');
@@ -177,6 +204,7 @@ export function CalendarView({ selected, onSelect, timezone, calendar, tasks, on
           {['Список','День','Неделя','Месяц'][index]}
         </button>)}
       </div>
+      <button className="button primary" onClick={()=>onCreate(selected)}><Plus size={16}/>Событие</button>
     </header>
     {view==='agenda' ? <div className="hub-agenda">
       {agendaItems.map(item => <button key={item.key} className="hub-agenda-item" onClick={item.run}>
@@ -197,7 +225,7 @@ export function CalendarView({ selected, onSelect, timezone, calendar, tasks, on
     </div> : <>
     <div className={`calendar-overflow ${view}`}><div className="calendar-inner"><div className="calendar-day-heads" style={{ gridTemplateColumns: `58px repeat(${days.length}, minmax(0,1fr))` }}><span className="timezone-abbr" title={timezone}>{calendarOffsetLabel(selected, timezone)}</span>{days.map(day => <button className={`day-head ${day === today ? 'is-today' : ''}`} key={day} onClick={() => onSelect(day)} aria-label={`Выбрать ${dayLabel(day)}`}><span>{dayLabel(day, { weekday: 'short' })}</span><strong>{Number(day.slice(-2))}</strong></button>)}</div>
       <div className="all-day-grid" style={{ gridTemplateColumns: `58px repeat(${days.length}, minmax(0,1fr))` }}><span className="all-day-label">Весь<br />день</span>{days.map(day => <div className="all-day-cell" key={day}>{getEvents(day).filter(e => e.all_day).map(event => <button className="all-day-event" key={`${event.id}:${event.occurrence_at}`} onClick={() => onEvent(event)}>{event.title}</button>)}{getTasks(day).filter(({ task }) => task.all_day).map(({ task, occurrence }) => <button className={`all-day-task ${occurrence.status === 'completed' ? 'done' : ''}`} key={`${task.id}:${occurrence.occurrence_at}`} onClick={() => onTask(task, occurrence)}>{task.title}</button>)}</div>)}</div>
-      <div className="calendar-scroll" ref={scroll}><div className="calendar-time-grid" style={{ gridTemplateColumns: `58px repeat(${days.length}, minmax(0,1fr))` }}><div className="hour-axis">{Array.from({ length: 24 }, (_, h) => <span key={h} style={{ top: h * 60 }}>{String(h).padStart(2, '0')}:00</span>)}</div>{days.map(day => <div className="calendar-day-column" key={day}>{Array.from({ length: 24 }, (_, h) => <button className="hour-slot" key={h} aria-label={`Создать событие ${dayLabel(day)} в ${h}:00`} style={{ top: h * 60 }} onClick={() => onCreate(day, `${String(h).padStart(2, '0')}:00`)}><Plus size={13} /></button>)}{layoutBlocks(calendarDayBlocks(day, timezone, calendar, tasks)).map(block => <button key={block.id} className={`calendar-block block-${block.color} ${block.completed ? 'done' : ''}`} style={{ top: block.start, height: Math.max(1, block.end - block.start - (block.end - block.start > 6 ? 3 : 0)), padding: block.end - block.start < 24 ? '0 4px' : undefined, boxSizing: 'border-box', left: `calc(${block.lane / block.lanes * 100}% + 4px)`, width: `calc(${100 / block.lanes}% - 8px)` }} onClick={() => block.event ? onEvent(block.event) : onTask(block.task!, block.occurrence)} title={`${block.title} · ${dayLabel(day)} · ${blockLabel(block)}`} aria-label={`${block.title}, ${dayLabel(day)}, ${blockLabel(block)}`}><strong>{block.title}</strong>{block.end - block.start > 38 && <span>{blockLabel(block)}{block.kind === 'task' ? ' · Задача' : ''}</span>}{block.event?.notes && block.end - block.start > 70 && <p>{block.event.notes}</p>}</button>)}{day === today && <div className="current-time-line" style={{ top: minutesOfDay(new Date().toISOString(), timezone) }}><i /></div>}</div>)}</div></div>
+      <div className="calendar-scroll" ref={scroll}><div className="calendar-time-grid" style={{ gridTemplateColumns: `58px repeat(${days.length}, minmax(0,1fr))` }}><div className="hour-axis">{Array.from({ length: 24 }, (_, h) => <span key={h} style={{ top: h * 60 }}>{String(h).padStart(2, '0')}:00</span>)}</div>{days.map(day => <div className="calendar-day-column" key={day} onDragOver={event=>{if(dragged.current)event.preventDefault();}} onDrop={event=>drop(event,day)}>{Array.from({ length: 24 }, (_, h) => <button className="hour-slot" key={h} aria-label={`Создать событие ${dayLabel(day)} в ${h}:00`} style={{ top: h * 60 }} onClick={() => onCreate(day, `${String(h).padStart(2, '0')}:00`)}><Plus size={13} /></button>)}{layoutBlocks(calendarDayBlocks(day, timezone, calendar, tasks)).map(block => <button key={block.id} draggable={!!onMove&&!!block.event&&!block.event.external_read_only&&!block.event.recurrence} onDragStart={event=>{if(block.event)beginDrag(event,block.event);}} onDragEnd={()=>{dragged.current=null;}} className={`calendar-block block-${block.color} ${block.completed ? 'done' : ''}`} style={{ top: block.start, height: Math.max(1, block.end - block.start - (block.end - block.start > 6 ? 3 : 0)), padding: block.end - block.start < 24 ? '0 4px' : undefined, boxSizing: 'border-box', left: `calc(${block.lane / block.lanes * 100}% + 4px)`, width: `calc(${100 / block.lanes}% - 8px)` }} onClick={() => block.event ? onEvent(block.event) : onTask(block.task!, block.occurrence)} title={`${block.title} · ${dayLabel(day)} · ${blockLabel(block)}`} aria-label={`${block.title}, ${dayLabel(day)}, ${blockLabel(block)}`}><strong>{block.title}</strong>{block.end - block.start > 38 && <span>{blockLabel(block)}{block.kind === 'task' ? ' · Задача' : ''}</span>}{block.event?.notes && block.end - block.start > 70 && <p>{block.event.notes}</p>}</button>)}{day === today && <div className="current-time-line" style={{ top: minutesOfDay(new Date().toISOString(), timezone) }}><i /></div>}</div>)}</div></div>
     </div></div><footer className="calendar-legend"><span><i className="green" />События</span><span><i className="gold" />Задачи</span><span className="calendar-hint"><CalendarDays size={13} />Нажмите на свободное время, чтобы добавить событие</span></footer>
     </>}
   </section>;

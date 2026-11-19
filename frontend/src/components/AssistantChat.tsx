@@ -14,14 +14,25 @@ type History = {items:Entry[];next_before:string|null};
 import {AssistantPreferences} from './AssistantPreferences';
 import {useAssistantPreferences} from '../lib/assistantPreferences';
 
-export function AssistantChat({user, path}: {user:User; path:string}) {
+const screenLabel={home:'Главная',planning:'Планирование',free_time:'Свободное время',habits:'Цели и привычки',
+  health:'Здоровье',finance:'Финансы',books:'Книжная полка',diary:'Дневник',insights:'Что видно вместе'};
+function currentScreen(path:string):keyof typeof screenLabel {
+  if(path==='/planning/free-time')return 'free_time';
+  if(path.startsWith('/planning'))return 'planning';
+  if(path.startsWith('/modules/books/diary'))return 'diary';
+  const module=path.split('/')[2];
+  if(module==='goals_habits')return 'habits';
+  return module&&Object.hasOwn(screenLabel,module)?module as keyof typeof screenLabel:'home';
+}
+
+export function AssistantChat({user, path, navigate}: {user:User; path:string;navigate:(path:string)=>void}) {
   const [preferencesOpen,setPreferencesOpen]=useState(false);
   const [open,setOpen]=useState(false), [entries,setEntries]=useState<Entry[]>([]), [cursor,setCursor]=useState<string|null>(null);
   const [message,setMessage]=useState(''), [busy,setBusy]=useState(false), [loading,setLoading]=useState(false), [error,setError]=useState('');
   const {preferences,loading:preferencesLoading,save:savePreferences}=useAssistantPreferences(user.id);
   const consent=preferences.messages, mediaConsent=preferences.media;
   const [selectedDay,setSelectedDay]=useState(todayKey(user.timezone));
-  const [retry,setRetry]=useState<{text:string;key:string;day:string;photo:PhotoDraft|null}|null>(null);
+  const [retry,setRetry]=useState<{text:string;key:string;day:string;photo:PhotoDraft|null;screen:keyof typeof screenLabel}|null>(null);
   const [photo,setPhoto]=useState<PhotoDraft|null>(null),[mediaActive,setMediaActive]=useState(false);
 
   const draft=useRef(message);
@@ -43,9 +54,23 @@ export function AssistantChat({user, path}: {user:User; path:string}) {
   const lock=useRef(false), alive=useRef(true), log=useRef<HTMLDivElement>(null), input=useRef<HTMLTextAreaElement>(null);
   const allowed=user.plan==='pro'||(user.plan==='trial'&&!!user.trial_ends&&Date.parse(user.trial_ends)>Date.now())||user.free_modules.includes('planning');
   useEffect(() => {
-    const show = () => setOpen(true);
+    const show = (event:Event) => {
+      const prompt = (event as CustomEvent<string|undefined>).detail;
+      if (prompt) setMessage(prompt);
+      setOpen(true);
+    };
+    const shortcut = (event:KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase()==='j') {
+        event.preventDefault();
+        setOpen(value=>!value);
+      }
+    };
     window.addEventListener('lifehub:open-assistant',show);
-    return () => window.removeEventListener('lifehub:open-assistant',show);
+    window.addEventListener('keydown',shortcut);
+    return () => {
+      window.removeEventListener('lifehub:open-assistant',show);
+      window.removeEventListener('keydown',shortcut);
+    };
   }, []);
   useEffect(()=>{alive.current=true; const day=(e:Event)=>setSelectedDay((e as CustomEvent<string>).detail); window.addEventListener('lifehub:chat-day',day); return()=>{alive.current=false;window.removeEventListener('lifehub:chat-day',day);};},[]);
   const load=useCallback(async (before?:string)=>{
@@ -63,10 +88,10 @@ export function AssistantChat({user, path}: {user:User; path:string}) {
   async function send(recover=false,voiceText?:string){
     const text=recover?retry?.text:(voiceText||message.trim()||(photo?'Что на этой фотографии? Помоги разобраться с планами.':''));if(!text||lock.current||(mediaActive&&!voiceText)||!consent||!allowed)return;
     lock.current=true;setBusy(true);setError('');
-    const request=recover&&retry?retry:{text,key:crypto.randomUUID(),day:path.startsWith('/planning')?selectedDay:todayKey(user.timezone),photo};
+    const request=recover&&retry?retry:{text,key:crypto.randomUUID(),day:path.startsWith('/planning')?selectedDay:todayKey(user.timezone),photo,screen:currentScreen(path)};
     setRetry(request); if(!recover){setMessage('');setPhoto(null);}
     try {
-      await api<Response>('/ai/chat',{method:'POST',headers:{'Idempotency-Key':request.key},body:{context:'planning',mode:'chat',message:request.text,selected_day:request.day,planning_context_allowed:true,media_allowed:mediaConsent,photos:request.photo?[{data:request.photo.data}]:[]}});
+      await api<Response>('/ai/chat',{method:'POST',headers:{'Idempotency-Key':request.key},body:{context:'planning',mode:'chat',message:request.text,selected_day:request.day,screen:request.screen,planning_context_allowed:true,media_allowed:mediaConsent,photos:request.photo?[{data:request.photo.data}]:[]}});
       if(!alive.current)return;
       setRetry(null);window.dispatchEvent(new Event('lifehub:data-changed'));await load();
     } catch(e){if(alive.current){setError(errorMessage(e));await load();}}
@@ -79,14 +104,25 @@ export function AssistantChat({user, path}: {user:User; path:string}) {
     }catch(e){if(alive.current)setError(errorMessage(e));}finally{lock.current=false;if(alive.current)setBusy(false);}
   }
   const contextDay=path.startsWith('/planning')?selectedDay:todayKey(user.timezone);
+  const resourceLinks=(response:Response|null)=>{
+    if(!response||response.confirmation==='pending'||response.confirmation==='cancelled')return null;
+    return response.affected_resources.filter(item=>['task','event','list'].includes(item.type)).slice(0,3).map(item=>{
+      const link=item.type==='event'?'/planning/calendar?event=':item.type==='task'?'/planning?task=':'/planning/lists?list=';
+      const title=item.type==='event'?'событие':item.type==='task'?'задачу':'список';
+      return <button className="button secondary" key={item.type+item.id} onClick={()=>{close();navigate(link+encodeURIComponent(item.id));}}>Открыть {title}</button>;
+    });
+  };
   return <>
-    {open&&<Modal title="Ваш помощник" description="Один разговор. Все ваши планы." onClose={close} className="assistant-modal">
-      <div className="chat-context"><span className="live-dot"/>Life Hub · {dayLabel(contextDay,{day:'numeric',month:'short'})}<span>История сохранена</span></div>
+    {!open&&<button className="life-assistant" onClick={()=>setOpen(true)} aria-label="Спросить помощника" aria-haspopup="dialog">
+      <Sparkles size={21}/><span>Спросить помощника</span><kbd>⌘J</kbd>
+    </button>}
+    {open&&<Modal title="Помощник" description="Один чат на все экраны" onClose={close} className="assistant-modal">
+      <div className="chat-context"><span className="live-dot"/>Контекст: {screenLabel[currentScreen(path)]} · {dayLabel(contextDay,{day:'numeric',month:'short'})}<span>История сохранена</span></div>
       <div hidden={preferencesOpen} ref={log} className="chat-log" role="log" aria-label="История переписки" aria-live="polite" aria-relevant="additions text">
         {cursor&&<button className="chat-load" disabled={loading||busy} onClick={()=>void load(cursor)}>Показать предыдущие сообщения</button>}
         {loading&&entries.length===0&&<p className="chat-loading"><LoaderCircle className="spinner" size={18}/>Загружаю переписку…</p>}
         {entries.length===0&&!loading&&<div className="chat-welcome"><span className="chat-orb"><Sparkles size={28}/></span><h3>Давайте разберёмся<br/>с вашими планами.</h3><p>Спросите о расписании, добавьте задачу или перенесите встречу. Можно уточнять — разговор сохранится.</p>{allowed&&!isDemo()&&<div className="chat-suggestions">{['Что у меня сегодня?','Помоги спланировать день','Что запланировано на завтра?'].map(t=><button key={t} onClick={()=>{setMessage(t);input.current?.focus();}}>{t}</button>)}</div>}</div>}
-        {entries.map(entry=><div className="chat-turn" key={entry.id}><div className="chat-bubble user-bubble"><span className="chat-speaker">Вы</span><p>{entry.message}</p>{entry.photos?.map((src,i)=><img key={i} className="chat-history-photo" src={src} alt="Прикреплённая фотография" loading="lazy"/>)}</div><div className="chat-bubble assistant-bubble"><span className="chat-speaker"><Sparkles size={13}/>Life Hub</span><p>{entry.response?.message||entry.error||(Date.now()-Date.parse(entry.created_at)>120000?'Ответ не завершён. Можно отправить запрос заново.':'Готовлю ответ…')}</p>{entry.response?.confirmation==='pending'&&<div className="chat-confirm"><small>Изменения ещё не применены. Подтвердите действие.</small><div><button className="button primary" disabled={busy} onClick={()=>void decide(entry,true)}><Check size={15}/>Подтвердить</button><button className="button secondary" disabled={busy} onClick={()=>void decide(entry,false)}>Отмена</button></div></div>}<time>{new Date(entry.created_at).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit',timeZone:user.timezone})}</time></div></div>)}
+        {entries.map(entry=><div className="chat-turn" key={entry.id}><div className="chat-bubble user-bubble"><span className="chat-speaker">Вы</span><p>{entry.message}</p>{entry.photos?.map((src,i)=><img key={i} className="chat-history-photo" src={src} alt="Прикреплённая фотография" loading="lazy"/>)}</div><div className="chat-bubble assistant-bubble"><span className="chat-speaker"><Sparkles size={13}/>Life Hub</span><p>{entry.response?.message||entry.error||(Date.now()-Date.parse(entry.created_at)>120000?'Ответ не завершён. Можно отправить запрос заново.':'Готовлю ответ…')}</p>{entry.response?.confirmation==='pending'&&<div className="chat-confirm"><small>Изменения ещё не применены. Подтвердите действие.</small><div><button className="button primary" disabled={busy} onClick={()=>void decide(entry,true)}><Check size={15}/>Подтвердить</button><button className="button secondary" disabled={busy} onClick={()=>void decide(entry,false)}>Отмена</button></div></div>}{resourceLinks(entry.response)}<time>{new Date(entry.created_at).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit',timeZone:user.timezone})}</time></div></div>)}
         {busy&&retry&&!entries.some(e=>e.message===retry.text)&&<div className="chat-bubble user-bubble sending-bubble"><span className="chat-speaker">Вы</span><p>{retry.text}</p>{retry.photo&&<img className="chat-history-photo" src={retry.photo.data} alt="Отправляемая фотография"/>}</div>}
         {busy&&<div className="chat-thinking" role="status"><span/><span/><span/>Помощник работает</div>}
       </div>

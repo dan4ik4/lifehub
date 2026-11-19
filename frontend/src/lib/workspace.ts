@@ -2,8 +2,8 @@ export function openQuickAdd(kind?: string) {
   window.dispatchEvent(new CustomEvent('lifehub:quick-add',{detail:kind}));
 }
 
-export function openAssistant() {
-  window.dispatchEvent(new Event('lifehub:open-assistant'));
+export function openAssistant(prompt?: string) {
+  window.dispatchEvent(new CustomEvent('lifehub:open-assistant',{detail:prompt}));
 }
 
 export function refreshWorkspace() {

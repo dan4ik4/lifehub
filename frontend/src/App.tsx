@@ -1,3 +1,6 @@
+import {MiniCalendar} from './components/MiniCalendar';
+import {WorkoutSession} from './product/WorkoutSession';
+import {FreeTime} from './components/FreeTime';
 import {QuickAdd} from './components/QuickAdd';
 import {WorkspaceBar} from './components/WorkspaceBar';
 import {NativeHealthSync} from './components/NativeHealthSync';
@@ -7,7 +10,7 @@ import {Avatar} from './components/Avatar';
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { ArrowRight, Bell, BookOpen, CalendarDays, Check, CheckCircle2, ChevronDown, ChevronRight, CircleAlert, Crown, Heart, HelpCircle, LayoutGrid, Link2, ListChecks, LoaderCircle, LogOut, Menu, Plus, RefreshCw, Search, Settings2, Sparkles, Sun, Target, Wallet, X } from 'lucide-react';
 import { api, clearSession, errorMessage, getSession, isDemo, setSession, startDemo, subscribeSession } from './lib/api';
-import { dateKey, dayLabel, monthDays, shiftDay, todayKey } from './lib/dates';
+import { dateKey, dayLabel, monthDays, shiftDay, todayKey, zonedISO } from './lib/dates';
 import { allPages, usePlanning } from './lib/usePlanning';
 import type { AuthSession, CalendarEvent, Notify, Task, TaskOccurrence, User } from './lib/types';
 import { AuthScreen, Onboarding } from './components/Auth';
@@ -21,10 +24,10 @@ import { ListsView } from './components/ListsView';
 import { EntityEditor } from './components/EntityEditor';
 import { EventDetails, TaskDetails } from './components/Details';
 
-type View = 'day' | 'calendar' | 'lists';
+type View = 'day' | 'calendar' | 'free' | 'lists';
 interface Toast { id: number; message: string; kind: 'success' | 'error' | 'info' }
-const viewPaths = { day: '/planning', calendar: '/planning/calendar', lists: '/planning/lists' };
-const viewFromPath = (path: string): View => path === viewPaths.calendar ? 'calendar' : path === viewPaths.lists ? 'lists' : 'day';
+const viewPaths = { day: '/planning', calendar: '/planning/calendar', free: '/planning/free-time', lists: '/planning/lists' };
+const viewFromPath = (path: string): View => path === viewPaths.calendar ? 'calendar' : path === viewPaths.free ? 'free' : path === viewPaths.lists ? 'lists' : 'day';
 
 export default function App() {
   const session = useSyncExternalStore(subscribeSession, getSession);
@@ -77,7 +80,7 @@ export default function App() {
     finally { clearSession(); navigate('/', true); }
   }, [navigate, notify]);
   const user = session?.user;
-  const planning = path in {'/planning':1,'/planning/calendar':1,'/planning/lists':1};
+  const planning = path in {'/planning':1,'/planning/calendar':1,'/planning/free-time':1,'/planning/lists':1};
   const module = path.startsWith('/modules/') ? path.split('/')[2]
     : planning ? 'planning' : path === '/' || path === '/home' ? 'dashboard' : 'missing';
   const onboarded = user?.onboarding_completed;
@@ -90,8 +93,8 @@ export default function App() {
         : <Product user={user} module={module} path={path} search={query.toString()} navigate={navigate} onUserChange={updateUser} onLogout={logout} notify={notify}/>}
     {user && onboarded && <NativeHealthSync key={user.id} user={user}/>}
     {user && onboarded && path !== '/calendar/callback' && <>
-      <AssistantChat key={user.id} user={user} path={path}/>
-      <QuickAdd key={user.id+':add'} user={user} notify={notify}/>
+      <AssistantChat key={user.id} user={user} path={path} navigate={navigate}/>
+      <QuickAdd key={user.id+':add'} user={user} notify={notify}/>{!isDemo()&&(isPro(user)||user.free_modules.includes('health'))&&<WorkoutSession key={user.id+':workout'} user={user} notify={notify}/>}
     </>}
     <div className="toast-stack" aria-live="polite" aria-atomic="false">{toasts.map(toast => <div key={toast.id} className={`toast toast-${toast.kind}`} role={toast.kind === 'error' ? 'alert' : 'status'}>{toast.kind === 'error' ? <CircleAlert size={18} /> : toast.kind === 'success' ? <CheckCircle2 size={18} /> : <Bell size={18} />}<span>{toast.message}</span><button className="icon-button small" aria-label="Закрыть уведомление" onClick={() => setToasts(old => old.filter(t => t.id !== toast.id))}><X size={15} /></button></div>)}</div>
   </>;
@@ -103,9 +106,10 @@ function Workspace({ navigateProduct, user, view, search, onUserChange, onLogout
   const validDay = day && /^\d{4}-\d{2}-\d{2}$/.test(day) && !Number.isNaN(Date.parse(day)) && new Date(day).toISOString().slice(0,10)===day;
   const [selected, setSelected] = useState(validDay ? day : todayKey(user.timezone));
   useEffect(() => {if (validDay) setSelected(day);}, [day,validDay]);
-  const [editor, setEditor] = useState<{ kind: 'task' | 'event'; item?: Task | CalendarEvent; day: string; time?: string } | null>(null);
-  const [settings, setSettings] = useState<'profile' | 'connections' | 'plan' | null>(null), [searchOpen, setSearchOpen] = useState(false), [help, setHelp] = useState(false), [createMenu, setCreateMenu] = useState(false);
+  const [editor, setEditor] = useState<{ kind: 'task' | 'event'; item?: Task | CalendarEvent; day: string; time?: string; endTime?: string } | null>(null);
+  const [settings, setSettings] = useState<'profile' | 'connections' | 'plan' | null>(null), [searchOpen, setSearchOpen] = useState(() => params.get('find') === '1'), [help, setHelp] = useState(false), [createMenu, setCreateMenu] = useState(false);
   const [eventDetails, setEventDetails] = useState<CalendarEvent | null>(null), [taskDetails, setTaskDetails] = useState<{ task: Task; occurrence?: TaskOccurrence } | null>(null), [deletingTask, setDeletingTask] = useState<Task | null>(null);
+  const [calendarMove,setCalendarMove]=useState<{event:CalendarEvent;day:string;time:string}|null>(null);
   const [busyIds, setBusyIds] = useState<string[]>([]), lock = useRef(new Set<string>()), menuRef = useRef<HTMLDivElement>(null);
   useEffect(() => { window.dispatchEvent(new CustomEvent('lifehub:chat-day', {detail: selected})); }, [selected]);
   useEffect(() => {
@@ -113,7 +117,13 @@ function Workspace({ navigateProduct, user, view, search, onUserChange, onLogout
     window.addEventListener('lifehub:show-plan',showPlan);
     return () => window.removeEventListener('lifehub:show-plan',showPlan);
   }, []);
-  const month = monthDays(selected), data = usePlanning(user.timezone, month[0], shiftDay(month.at(-1)!, 1));
+  const month = monthDays(selected), rangeStart=view==='free'?todayKey(user.timezone):month[0];
+  const rangeEnd=view==='free'?shiftDay(rangeStart,14):shiftDay(month.at(-1)!,1);
+  const data = usePlanning(user.timezone,rangeStart,rangeEnd);
+  useEffect(() => {if(new URLSearchParams(search).get('find')==='1')setSearchOpen(true);},[search]);
+  const [focusMode,setFocusMode]=useState(false);
+  const [hiddenSources,setHiddenSources]=useState<string[]>([]);
+  const calendar=data.calendar?{...data.calendar,events:data.calendar.events.filter(event=>!hiddenSources.includes(event.source==='ai'?'local':event.source))}:null;
   const seenLink = useRef('');
   useEffect(() => {
     if (!search) {seenLink.current='';return;}
@@ -130,12 +140,20 @@ function Workspace({ navigateProduct, user, view, search, onUserChange, onLogout
     } else if (event) {
       setEventDetails(event);
       seenLink.current=search;
+    } else {
+      const id=params.get('event');
+      if (!id||params.has('occurrence'))return;
+      const controller=new AbortController();
+      api<CalendarEvent>('/planning/events/'+encodeURIComponent(id),{signal:controller.signal}).then(result=>{
+        if(!controller.signal.aborted){setEventDetails(result);seenLink.current=search;}
+      }).catch(error=>{if(!controller.signal.aborted)notify(errorMessage(error),'error');});
+      return ()=>controller.abort();
     }
-  }, [search,data.loading,data.tasks,data.calendar]);
+  }, [search,data.loading,data.tasks,data.calendar,notify]);
   const pro = user.plan === 'pro' || (user.plan === 'trial' && Boolean(user.trial_ends) && Date.parse(user.trial_ends!) > Date.now());
-  const title = { day: 'Мой день', calendar: 'Календарь', lists: 'Мои списки' }[view];
+  const title = { day: 'Мой день', calendar: 'Календарь', free: 'Свободное время', lists: 'Списки' }[view];
   const createTask = () => { setEditor({ kind: 'task', day: selected }); setCreateMenu(false); };
-  const createEvent = (day = selected, time?: string) => { setEditor({ kind: 'event', day, time }); setCreateMenu(false); };
+  const createEvent = (day = selected, time?: string, endTime?:string) => { setEditor({ kind: 'event', day, time, endTime }); setCreateMenu(false); };
   const editTask = (task: Task) => setEditor({ kind: 'task', item: task, day: selected });
   const navigate = (view: View) => navigateProduct(viewPaths[view]+'?day='+encodeURIComponent(selected));
   useEffect(() => { document.title = `${title} · Life Hub`; }, [title]);
@@ -156,36 +174,43 @@ function Workspace({ navigateProduct, user, view, search, onUserChange, onLogout
   const afterSaved = () => { void data.refresh(); notify(editor?.item ? 'Изменения сохранены' : editor?.kind === 'event' ? 'Событие добавлено в календарь' : 'Задача добавлена'); };
   return <div className="app-layout">
     <a className="skip-link" href="#main-content">Перейти к содержимому</a>
-    <Navigation user={user} path={viewPaths[view]} navigate={navigateProduct} onSettings={() => setSettings('profile')} />
+    <Navigation user={user} path={viewPaths[view]} navigate={navigateProduct} onSettings={() => setSettings('profile')} onConnections={() => setSettings('connections')} onSearch={() => setSearchOpen(true)} lists={view==='calendar'?[]:data.lists} context={view==='calendar'&&<div className="life-calendar-context"><MiniCalendar selected={selected} timezone={user.timezone} onSelect={setSelected} marked={calendar?.events.map(event=>dateKey(event.start_at,user.timezone))??[]}/><fieldset><legend>Календари</legend>{([['local','Личное'],['google','Google Calendar'],['apple','Apple Calendar']] as const).map(([source,label])=><label key={source}><input type="checkbox" checked={!hiddenSources.includes(source)} onChange={()=>setHiddenSources(old=>old.includes(source)?old.filter(item=>item!==source):[...old,source])}/>{label}</label>)}</fieldset></div>}/>
     <div className="app-main"><WorkspaceBar user={user} title="Планирование" onHome={() => navigateProduct('/home')}
       onProfile={() => setSettings('profile')} onSearch={() => setSearchOpen(true)}/>
-      <main id="main-content" className={`workspace-content view-${view}`}><header className="page-header"><div><div className="page-eyebrow"><span>{dayLabel(todayKey(user.timezone), { weekday: 'long', day: 'numeric', month: 'long' })}</span>{isDemo() && <span className="demo-badge">Демо</span>}</div><h1>{title}<span className="heading-dot">.</span></h1></div><div className="page-actions"><button className="icon-button refresh-button" onClick={() => void data.refresh()} aria-label="Обновить данные" disabled={data.refreshing || data.loading}><RefreshCw size={17} className={data.refreshing ? 'spinner' : ''} /></button><div className="create-menu-wrap" ref={menuRef}><div className="split-button"><button className="button primary" onClick={view === 'calendar' ? () => createEvent() : createTask}><Plus size={17} />{view === 'calendar' ? 'Новое событие' : 'Новая задача'}</button><button className="split-trigger" aria-label="Другие способы добавления" aria-expanded={createMenu} onClick={() => setCreateMenu(!createMenu)}><ChevronDown size={16} /></button></div>{createMenu && <div className="action-menu create-menu"><button onClick={createTask}><CheckCircle2 size={16} />Создать задачу<kbd>N</kbd></button><button onClick={() => createEvent()}><CalendarDays size={16} />Создать событие</button><button onClick={() => { navigate('lists'); setCreateMenu(false); }}><ListChecks size={16} />Открыть списки</button></div>}</div></div></header>
+      <main id="main-content" className={`workspace-content view-${view}${focusMode&&view==='day'?' life-focus-mode':''}`}>{view!=='free'&&<header className="page-header planning-header"><div><div className="life-page-eyebrow"><span>Планирование</span>{isDemo() && <span className="demo-badge">Демо</span>}</div><h1>{title}</h1>{view==='day'&&<span className="life-page-subtitle">{dayLabel(selected,{weekday:'long',day:'numeric',month:'long'})}</span>}</div><div className="page-actions">{view==='day'&&<button className="button secondary" aria-pressed={focusMode} onClick={()=>setFocusMode(value=>!value)}><Target size={16}/>{focusMode?'Выйти из фокуса':'Фокус'}</button>}<button className="icon-button refresh-button" onClick={() => void data.refresh()} aria-label="Обновить данные" disabled={data.refreshing || data.loading}><RefreshCw size={17} className={data.refreshing ? 'spinner' : ''} /></button><div className="create-menu-wrap" ref={menuRef}><div className="split-button"><button className="button primary" onClick={view === 'calendar' ? () => createEvent() : createTask}><Plus size={17} />{view === 'calendar' ? 'Новое событие' : 'Новая задача'}</button><button className="split-trigger" aria-label="Другие способы добавления" aria-expanded={createMenu} onClick={() => setCreateMenu(!createMenu)}><ChevronDown size={16} /></button></div>{createMenu && <div className="action-menu create-menu"><button onClick={createTask}><CheckCircle2 size={16} />Создать задачу<kbd>N</kbd></button><button onClick={() => createEvent()}><CalendarDays size={16} />Создать событие</button><button onClick={() => { navigate('lists'); setCreateMenu(false); }}><ListChecks size={16} />Открыть списки</button></div>}</div></div></header>}
       <nav className="product-tabs planning-tabs" aria-label="Разделы планирования">
-        {(['day','calendar','lists'] as const).map((key,index) => <button key={key} className={view===key?'active':''}
-          aria-current={view===key?'page':undefined} onClick={() => navigate(key)}>{['Мой день','Календарь','Списки'][index]}</button>)}
+        {(['day','calendar','free','lists'] as const).map((key,index) => <button key={key} className={view===key?'active':''}
+          aria-current={view===key?'page':undefined} onClick={() => navigate(key)}>{['Мой день','Календарь','Свободно','Списки'][index]}</button>)}
         <button onClick={() => setSettings('connections')}>Подключения</button>
         <button onClick={() => setHelp(true)}>Помощь</button>
       </nav>
       {data.error && <div className="workspace-error" role="alert"><CircleAlert size={19} /><div><strong>Не удалось обновить планы</strong><p>{data.error}</p></div><button className="button secondary small" onClick={() => void data.refresh()}>Повторить</button></div>}
-      {data.loading ? <div className="workspace-skeleton" aria-label="Загружаем планы" role="status"><div /><div /><div /><div /><span className="sr-only">Загружаем планы…</span></div> : <div className="view-enter" key={view}>{view === 'day' ? <TodayView user={user} selected={selected} onSelect={setSelected} tasks={data.tasks} calendar={data.calendar} busyIds={busyIds} onToggle={(t, o) => void toggleTask(t, o)} onEdit={editTask} onDelete={setDeletingTask} onCreate={createTask} onCreateEvent={() => createEvent()} onEvent={setEventDetails} onCalendar={() => navigate('calendar')} refresh={data.refresh} notify={notify} /> : view === 'calendar' ? <CalendarView selected={selected} onSelect={setSelected} timezone={user.timezone} calendar={data.calendar} tasks={data.tasks} onEvent={setEventDetails} onTask={(task, occurrence) => setTaskDetails({ task, occurrence })} onCreate={createEvent} /> : <ListsView lists={data.lists} pro={pro} refresh={data.refresh} notify={notify} onUpgrade={() => setSettings('plan')} />}</div>}
+      {data.loading ? <div className="workspace-skeleton" aria-label="Загружаем планы" role="status"><div /><div /><div /><div /><span className="sr-only">Загружаем планы…</span></div> : <div className="view-enter" key={view}>{view === 'day' ? <TodayView user={user} selected={selected} onSelect={setSelected} tasks={data.tasks} calendar={data.calendar} busyIds={busyIds} onToggle={(t, o) => void toggleTask(t, o)} onEdit={editTask} onDelete={setDeletingTask} onCreate={createTask} onCreateEvent={() => createEvent()} onEvent={setEventDetails} onCalendar={() => navigate('calendar')} onFree={() => navigate('free')} refresh={data.refresh} notify={notify} /> : view === 'calendar' ? <CalendarView selected={selected} onSelect={setSelected} timezone={user.timezone} calendar={calendar} tasks={data.tasks} onEvent={setEventDetails} onTask={(task, occurrence) => setTaskDetails({ task, occurrence })} onCreate={createEvent} onMove={(event,day,time)=>setCalendarMove({event,day,time})} /> : view === 'free' ? <FreeTime user={user} calendar={data.calendar} tasks={data.tasks} notify={notify} onCreate={createEvent}/> : <ListsView initialList={params.get('list')??undefined} lists={data.lists} pro={pro} refresh={data.refresh} notify={notify} onUpgrade={() => setSettings('plan')} />}</div>}
       </main>
     </div>
-    {editor && <EntityEditor key={`${editor.kind}:${editor.item?.id || editor.day}:${editor.time || ''}`} kind={editor.kind} item={editor.item} day={editor.day} initialTime={editor.time} timezone={user.timezone} pro={pro} onClose={() => setEditor(null)} onSaved={afterSaved} onUpgrade={() => setSettings('plan')} />}
+    {calendarMove&&<ConfirmDialog title="Перенести событие?" description={calendarMove.event.title+' · '+dayLabel(calendarMove.day)+' в '+calendarMove.time}
+      confirmLabel="Перенести" onClose={()=>setCalendarMove(null)} onConfirm={async()=>{
+        const {event,day,time}=calendarMove,start=zonedISO(day,time,user.timezone);
+        const end=new Date(Date.parse(start)+Date.parse(event.end_at)-Date.parse(event.start_at)).toISOString();
+        await api('/planning/events/'+event.id,{method:'PATCH',body:{version:event.version,start_at:start,end_at:end}});
+        await data.refresh();notify('Событие перенесено');
+      }}/>}
+    {editor && <EntityEditor key={`${editor.kind}:${editor.item?.id || editor.day}:${editor.time || ''}`} kind={editor.kind} item={editor.item} day={editor.day} initialTime={editor.time} initialEndTime={editor.endTime} timezone={user.timezone} pro={pro} onClose={() => setEditor(null)} onSaved={afterSaved} onUpgrade={() => setSettings('plan')} />}
     {eventDetails && <EventDetails event={eventDetails} timezone={user.timezone} onClose={() => { setEventDetails(null); if (params.has("event")) navigate(view); }} onEdit={event => { setEventDetails(null); setEditor({ kind: 'event', item: event, day: selected }); }} onDeleted={() => { void data.refresh(); notify('Событие удалено'); }} />}
     {taskDetails && <TaskDetails task={taskDetails.task} occurrence={taskDetails.occurrence} timezone={user.timezone} busy={busyIds.includes(taskDetails.task.id)} onClose={() => { setTaskDetails(null); if (params.has("task")) navigate(view); }} onToggle={() => void toggleTask(taskDetails.task, taskDetails.occurrence)} onEdit={() => { setTaskDetails(null); editTask(taskDetails.task); }} />}
     {deletingTask && <ConfirmDialog title={deletingTask.recurrence ? 'Удалить повторяющуюся задачу?' : 'Удалить задачу?'} description={`«${deletingTask.title}» ${deletingTask.recurrence ? 'и все её повторения будут удалены' : 'будет удалена'}. Это действие нельзя отменить.`} onClose={() => setDeletingTask(null)} onConfirm={async () => { await api(`/planning/tasks/${deletingTask.id}?version=${deletingTask.version}`, { method: 'DELETE' }); await data.refresh(); notify('Задача удалена'); }} />}
     {settings && <Settings initialTab={settings} user={user} onUserChange={onUserChange} onClose={() => { setSettings(null); void data.refresh(); }} onLogout={onLogout} notify={notify} />}
-    {searchOpen && <SearchDialog tasks={data.tasks} timezone={user.timezone} onClose={() => setSearchOpen(false)} onTask={task => { setSearchOpen(false); editTask(task); }} onEvent={event => { setSearchOpen(false); setEventDetails(event); }} />}
+    {searchOpen && <SearchDialog tasks={data.tasks} timezone={user.timezone} onFree={() => {setSearchOpen(false);navigate('free');}} onClose={() => {setSearchOpen(false);if(params.has('find'))navigate(view);}} onTask={task => { setSearchOpen(false); editTask(task); }} onEvent={event => { setSearchOpen(false); setEventDetails(event); }} />}
     {help && <Modal title="Ваше спокойное пространство" onClose={() => setHelp(false)} className="help-modal"><div className="modal-body"><p>Life Hub помогает держать задачи, встречи и списки в одном месте.</p><div className="help-feature"><CheckCircle2 size={20} /><div><strong>Задачи</strong><p>Создайте задачу, добавьте дату и отмечайте маленькие победы.</p></div></div><div className="help-feature"><CalendarDays size={20} /><div><strong>Календарь</strong><p>Переключайте день и неделю. Нажмите на свободное время для новой встречи.</p></div></div><div className="help-feature"><ListChecks size={20} /><div><strong>Списки</strong><p>Добавляйте пункты по одному или сразу несколько с новой строки.</p></div></div><div className="keyboard-hints"><span><kbd>Ctrl / ⌘</kbd> + <kbd>K</kbd> Поиск</span><span><kbd>N</kbd> Новая задача</span><span><kbd>Esc</kbd> Закрыть окно</span></div></div><footer className="modal-footer"><button className="button primary" onClick={() => setHelp(false)}>Всё понятно<Check size={15} /></button></footer></Modal>}
   </div>;
 }
 
-function SearchDialog({ tasks, timezone, onClose, onTask, onEvent }: { tasks: Task[]; timezone: string; onClose: () => void; onTask: (task: Task) => void; onEvent: (event: CalendarEvent) => void }) {
+function SearchDialog({ tasks, timezone, onClose, onTask, onEvent, onFree }: { tasks: Task[]; timezone: string; onClose: () => void; onTask: (task: Task) => void; onEvent: (event: CalendarEvent) => void; onFree:()=>void }) {
   const [query, setQuery] = useState(''), [events, setEvents] = useState<CalendarEvent[]>([]), [error, setError] = useState(''), [loading, setLoading] = useState(true);
   useEffect(() => { const controller = new AbortController(); allPages<CalendarEvent>('/planning/events', controller.signal).then(setEvents).catch(e => { if (!controller.signal.aborted) setError(errorMessage(e)); }).finally(() => { if (!controller.signal.aborted) setLoading(false); }); return () => controller.abort(); }, []);
   const matches = (value: { title: string; notes: string | null }) => query.trim() && `${value.title} ${value.notes || ''}`.toLocaleLowerCase('ru').includes(query.trim().toLocaleLowerCase('ru'));
   const foundTasks = tasks.filter(matches), foundEvents = events.filter(matches);
-  return <Modal title="Найти в планах" onClose={onClose} className="search-modal"><div className="modal-body"><label className="search-input"><Search size={20} /><input autoFocus aria-label="Поиск по задачам и событиям" placeholder="Название или заметка…" value={query} onChange={e => setQuery(e.target.value)} /><kbd>esc</kbd></label>{loading && <span className="search-loading"><LoaderCircle size={14} className="spinner" />Загружаем события…</span>}{error && <p className="field-error">{error}</p>}<div className="search-results">{foundTasks.length > 0 && <span className="eyebrow">ЗАДАЧИ</span>}{foundTasks.map(task => <button key={task.id} onClick={() => onTask(task)}><CheckCircle2 size={18} /><span><strong>{task.title}</strong><small>{task.completed ? 'Выполнено' : 'В планах'}</small></span><ArrowRight size={15} /></button>)}{foundEvents.length > 0 && <span className="eyebrow">СОБЫТИЯ</span>}{foundEvents.map(event => <button key={event.id} onClick={() => onEvent(event)}><CalendarDays size={18} /><span><strong>{event.title}</strong><small>{dayLabel(dateKey(event.start_at, timezone))}</small></span><ArrowRight size={15} /></button>)}{query.trim() && !foundTasks.length && !foundEvents.length && !loading && <EmptyState title="Пока ничего не нашлось" text="Попробуйте другое слово или часть названия." icon={<Search size={25} />} />}{!query.trim() && <div className="search-placeholder">Найдите нужную задачу или событие по названию и заметкам.</div>}</div></div></Modal>;
+  return <Modal title="Найти в планах" onClose={onClose} className="search-modal"><div className="modal-body"><label className="search-input"><Search size={20} /><input autoFocus aria-label="Поиск по задачам и событиям" placeholder="Название или заметка…" value={query} onChange={e => setQuery(e.target.value)} /><kbd>esc</kbd></label>{loading && <span className="search-loading"><LoaderCircle size={14} className="spinner" />Загружаем события…</span>}{error && <p className="field-error">{error}</p>}<div className="search-results">{(!query.trim()||/свобод|окна/.test(query.toLowerCase()))&&<button onClick={onFree}><CalendarDays size={18}/><strong>Свободное время</strong><ArrowRight size={15}/></button>}{foundTasks.length > 0 && <span className="eyebrow">ЗАДАЧИ</span>}{foundTasks.map(task => <button key={task.id} onClick={() => onTask(task)}><CheckCircle2 size={18} /><span><strong>{task.title}</strong><small>{task.completed ? 'Выполнено' : 'В планах'}</small></span><ArrowRight size={15} /></button>)}{foundEvents.length > 0 && <span className="eyebrow">СОБЫТИЯ</span>}{foundEvents.map(event => <button key={event.id} onClick={() => onEvent(event)}><CalendarDays size={18} /><span><strong>{event.title}</strong><small>{dayLabel(dateKey(event.start_at, timezone))}</small></span><ArrowRight size={15} /></button>)}{query.trim() && !foundTasks.length && !foundEvents.length && !loading && <EmptyState title="Пока ничего не нашлось" text="Попробуйте другое слово или часть названия." icon={<Search size={25} />} />}{!query.trim() && <div className="search-placeholder">Найдите нужную задачу или событие по названию и заметкам.</div>}</div></div></Modal>;
 }
 
 function CalendarCallback({ onComplete, notify }: { onComplete: () => void; notify: Notify }) {

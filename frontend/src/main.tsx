@@ -6,6 +6,7 @@ import './styles.css';
 import './product/overview.css';
 import './product/chat-media.css';
 import './workspace.css';
+import './figjam.css';
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
   state = { failed: false };

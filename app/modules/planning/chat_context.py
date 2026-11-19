@@ -101,6 +101,7 @@ def build_context(db, user, now, payload, record_id, tasks, lists):
         "current_time": now.astimezone(zone).isoformat(),
         "timezone": user.timezone,
         "selected_day": selected.isoformat(),
+        **({"screen": payload.screen} if payload.screen else {}),
         "pro_features": EntitlementService.is_pro(user),
         "next_weekdays": {
             name: (today + timedelta(days=(i - today.weekday()) % 7)).isoformat()
