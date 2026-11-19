@@ -126,6 +126,7 @@ def dashboard(user=Depends(get_current_user), db=Depends(get_db)):
                 "id": b.id,
                 "title": b.title,
                 "author": b.author,
+                "cover_id": b.cover_id,
                 "current_page": b.current_page,
                 "total_pages": b.total_pages,
             }

@@ -42,6 +42,11 @@ export function AssistantChat({user, path}: {user:User; path:string}) {
   const historyRequest=useRef(0);
   const lock=useRef(false), alive=useRef(true), log=useRef<HTMLDivElement>(null), input=useRef<HTMLTextAreaElement>(null);
   const allowed=user.plan==='pro'||(user.plan==='trial'&&!!user.trial_ends&&Date.parse(user.trial_ends)>Date.now())||user.free_modules.includes('planning');
+  useEffect(() => {
+    const show = () => setOpen(true);
+    window.addEventListener('lifehub:open-assistant',show);
+    return () => window.removeEventListener('lifehub:open-assistant',show);
+  }, []);
   useEffect(()=>{alive.current=true; const day=(e:Event)=>setSelectedDay((e as CustomEvent<string>).detail); window.addEventListener('lifehub:chat-day',day); return()=>{alive.current=false;window.removeEventListener('lifehub:chat-day',day);};},[]);
   const load=useCallback(async (before?:string)=>{
     const revision=++historyRequest.current;setLoading(true);
@@ -75,7 +80,6 @@ export function AssistantChat({user, path}: {user:User; path:string}) {
   }
   const contextDay=path.startsWith('/planning')?selectedDay:todayKey(user.timezone);
   return <>
-    <button className={`assistant-launcher ${path.startsWith("/planning") ? "with-bottom-nav" : ""}`} aria-label="Открыть чат с помощником" aria-haspopup="dialog" aria-expanded={open} onClick={()=>setOpen(true)}><MessageCircle size={22}/><span>Помощник</span>{busy&&<i/>}</button>
     {open&&<Modal title="Ваш помощник" description="Один разговор. Все ваши планы." onClose={close} className="assistant-modal">
       <div className="chat-context"><span className="live-dot"/>Life Hub · {dayLabel(contextDay,{day:'numeric',month:'short'})}<span>История сохранена</span></div>
       <div hidden={preferencesOpen} ref={log} className="chat-log" role="log" aria-label="История переписки" aria-live="polite" aria-relevant="additions text">

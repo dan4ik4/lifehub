@@ -209,7 +209,7 @@ export function AuthScreen({ onAuthenticated, onDemo }: { onAuthenticated: (sess
     if (mode === 'reset') { await api('/auth/forgot-password', { method: 'POST', body: { email: email.trim().toLowerCase() } }); setResetResendAt(Date.now() + 60000); }
     setOtp(''); setNotice('Запрос отправлен. Проверьте входящие и папку «Спам».');
   });
-  const headings: Record<Mode, string> = { login: 'С возвращением', register: 'Начнём с чистого листа', verify: 'Проверьте почту', forgot: 'Забыли пароль?', reset: 'Новый пароль', success: 'Всё получилось' };
+  const headings: Record<Mode, string> = { login: 'Вход в LifeHub', register: 'Создать аккаунт', verify: 'Подтвердите почту', forgot: 'Забыли пароль?', reset: 'Новый пароль', success: 'Всё получилось' };
   const subtitles: Record<Mode, ReactNode> = {
     login: 'Ваши планы уже ждут. Войдите, чтобы продолжить.', register: 'Создайте аккаунт и соберите свой день воедино.',
     verify: <>Мы отправили 6-значный код на <strong>{email.trim()}</strong>. Введите его ниже.</>,

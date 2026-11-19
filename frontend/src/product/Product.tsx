@@ -1,3 +1,8 @@
+import {WorkspaceBar} from '../components/WorkspaceBar';
+import {CrossInsights} from './CrossInsights';
+import {HealthOverview, WorkoutActivity} from './HealthOverview';
+import {useAssistantPreferences} from '../lib/assistantPreferences';
+import {CsvImportDialog} from '../components/CsvImport';
 import {GoalsHabits} from './GoalsHabits';
 import {HealthConnection} from './HealthConnection';
 import {Navigation} from '../components/Navigation';
@@ -72,6 +77,8 @@ export const dateLabel = (value: unknown) =>
 export function Product({
   user,
   module,
+  path,
+  search,
   navigate,
   onUserChange,
   onLogout,
@@ -79,98 +86,66 @@ export function Product({
 }: {
   user: User;
   module: string;
+  path: string;
+  search: string;
   navigate: (path: string) => void;
   onUserChange: (u: User) => void;
   onLogout: () => void;
   notify: Notify;
 }) {
-  const [tab, setTab] = useState(sections[module]?.[0]?.key ?? ""),
-    [settings, setSettings] = useState<"profile" | "plan" | null>(null);
-  const [dataRevision,setDataRevision]=useState(0);
-  useEffect(()=>{const changed=()=>setDataRevision(n=>n+1);window.addEventListener('lifehub:data-changed',changed);return()=>window.removeEventListener('lifehub:data-changed',changed);},[]);
-  const pro = isPro(user),
-    allowed =
-      pro || user.free_modules.includes(module) || module === "dashboard";
+  const [settings, setSettings] = useState<"profile" | "plan" | "connections" | null>(null);
+  const pro = isPro(user);
+  const allowed = pro || user.free_modules.includes(module);
+  const [, , , tab, recordId] = path.split('/');
+  const modulePath = '/modules/'+module;
+  const healthOverview = module === 'health' && (!tab || tab === 'overview');
+  const financeOverview = module === 'finance' && tab === 'analysis';
+  const section = sections[module]?.find(item => item.key === tab) ?? sections[module]?.[0];
+  const tabs = [
+    ...(module === 'health' ? [{key:'overview',label:'Обзор',pro:false}] : []),
+    ...(sections[module] ?? []),
+    ...(module === 'finance' ? [{key:'analysis',label:'Аналитика',pro:true}] : []),
+  ];
+  const activeTab = healthOverview ? 'overview' : financeOverview ? 'analysis' : section?.key;
+  const title = names[module] ?? (module === 'insights' ? 'Что видно вместе' : 'Страница недоступна');
+  useEffect(() => { document.title = title+' · LifeHub'; }, [title]);
   useEffect(() => {
-    setTab(sections[module]?.[0]?.key ?? "");
-    document.title = `${names[module] || "Life Hub"} · Life Hub`;
-  }, [module]);
-  const section =
-    sections[module]?.find((s) => s.key === tab) ?? sections[module]?.[0];
+    const showPlan = () => setSettings('plan');
+    window.addEventListener('lifehub:show-plan',showPlan);
+    return () => window.removeEventListener('lifehub:show-plan',showPlan);
+  }, []);
   return (
     <div className="app-layout">
-      <Navigation user={user} path={module === 'dashboard' ? '/home' : module === 'planning' ? '/planning' : '/modules/'+module} navigate={navigate} onSettings={() => setSettings('profile')}/>
+      <Navigation user={user} path={path} navigate={navigate} onSettings={() => setSettings('profile')}/>
       <div className="app-main product-layout">
-      <a className="skip-link" href="#product-main">
-        Перейти к содержимому
-      </a>
-      <header className="product-header">
-        <button className="brand-button" onClick={() => navigate("/home")}>
-          <Logo />
-        </button>
-        <button className="button ghost" onClick={() => setSettings("profile")}>
-          <span className="profile-avatar">
-            <Avatar user={user} />
-          </span>
-          <span>{user.name?.split(" ")[0] || "Профиль"}</span>
-        </button>
-      </header>
-      <main id="product-main" className="product-main">
-        <header className="product-title">
-          <div>
-            <span className="eyebrow">{module === "dashboard" ? "ВАША ЖИЗНЬ В ОДНОМ МЕСТЕ" : "МОИ МОДУЛИ"}</span>
-            <h1>
-              {names[module]}
-              <span className="heading-dot">.</span>
-            </h1>
-          </div>
-          <span className="badge">
-            {pro ? "Life Hub Pro" : "Life Hub Free"}
-          </span>
-        </header>
-        {isDemo() ? (
-          <EmptyState
-            title="Новые разделы — в вашем аккаунте"
-            text="Войдите или зарегистрируйтесь, чтобы сохранять привычки, здоровье, финансы и записи."
-            action="Перейти ко входу"
-            onAction={onLogout}
-          />
-        ) : !allowed ? (
-          <Locked onPlan={() => setSettings("plan")} module />
-        ) : module === "goals_habits" ? (
-          <GoalsHabits user={user} notify={notify}/>
-        ) : module === "dashboard" ? (
-          <Dashboard user={user} navigate={navigate} notify={notify} />
-        ) : (
-          <>
-            {module === "health" && <HealthConnection user={user}/> }
-            <nav className="product-tabs" aria-label="Подразделы">
-              {sections[module]?.map((s) => (
-                <button
-                  key={s.key}
-                  aria-current={s.key === section?.key ? "page" : undefined}
-                  className={s.key === section?.key ? "active" : ""}
-                  onClick={() => setTab(s.key)}
-                >
-                  {s.label}
-                  {s.pro && !pro && <Crown size={13} />}
-                </button>
-              ))}
-            </nav>
-            {section &&
-              (section.pro && !pro ? (
-                <Locked onPlan={() => setSettings("plan")} />
-              ) : (
-                <Records
-                  key={`${section.path}:${dataRevision}`}
-                  section={section}
-                  user={user}
-                  notify={notify}
-                />
-              ))}
-          </>
-        )}
-      </main>
+        <a className="skip-link" href="#product-main">Перейти к содержимому</a>
+        <WorkspaceBar user={user} title={module==='dashboard'?'Главная':title}
+          onHome={() => navigate('/home')} onProfile={() => setSettings('profile')}/>
+        <main id="product-main" className={'product-main'+(module==='dashboard'?' hub-main-home':'')}>
+          {module!=='dashboard' && <header className="product-title"><h1>{title}</h1></header>}
+          {isDemo() ? <EmptyState title="Откройте свой аккаунт" text="Войдите, чтобы сохранять записи в модулях." action="Перейти ко входу" onAction={onLogout}/>
+            : module === 'dashboard' ? <Dashboard key={user.id} user={user} navigate={navigate} notify={notify}/>
+            : module === 'insights' ? <CrossInsights user={user} pro={pro} navigate={navigate}/>
+            : !names[module] || (tab && !tabs.some(item => item.key === tab) && module !== 'goals_habits') ?
+              <EmptyState title="Такой страницы нет" text="Вернитесь на главную или выберите модуль в меню." action="На главную" onAction={() => navigate('/home')}/>
+            : !allowed ? <Locked onPlan={() => setSettings('plan')} module/>
+            : module === 'goals_habits' ? <GoalsHabits user={user} notify={notify}/>
+            : <>
+              <nav className="product-tabs" aria-label="Подразделы">
+                {tabs.map(item => <button key={item.key} aria-current={item.key===activeTab?'page':undefined}
+                  className={item.key===activeTab?'active':''} onClick={() => navigate(modulePath+'/'+item.key+(module==='finance'&&search?'?'+search:''))}>
+                  {item.label}{item.pro&&!pro&&<Crown size={13}/>}
+                </button>)}
+              </nav>
+              {healthOverview ? <HealthOverview user={user} navigate={navigate}/>
+                : financeOverview ? pro ? <FinanceOverview user={user} revision={search} analysis
+                    preferences={new URLSearchParams(search)} onSelect={params => navigate(modulePath+'/analysis?'+params)}
+                    onCategory={params => navigate(modulePath+'/transactions?'+params)}/> : <Locked onPlan={() => setSettings('plan')}/>
+                : section && (section.pro&&!pro ? <Locked onPlan={() => setSettings('plan')}/> :
+                  <Records key={section.path} section={section} user={user} notify={notify} route={modulePath+'/'+section.key}
+                    search={search} navigate={navigate} recordId={recordId}/>)}
+            </>}
+        </main>
       </div>
       {settings && (
         <Settings
@@ -254,7 +229,11 @@ function useRows(path: string) {
     void load();
     const focus = () => void load();
     window.addEventListener("focus", focus);
-    return () => window.removeEventListener("focus", focus);
+    window.addEventListener("lifehub:data-changed", focus);
+    return () => {
+      window.removeEventListener("focus", focus);
+      window.removeEventListener("lifehub:data-changed", focus);
+    };
   }, [load]);
   return { rows, loading, error, more, busy, load };
 }
@@ -262,10 +241,18 @@ function Records({
   section: s,
   user,
   notify,
+  route,
+  search,
+  navigate,
+  recordId,
 }: {
   section: Section;
   user: User;
   notify: Notify;
+  route: string;
+  search: string;
+  navigate: (path:string)=>void;
+  recordId?: string;
 }) {
   const [editor, setEditor] = useState<Record<string, unknown> | null>(null),
     [deleting, setDeleting] = useState<Row | null>(null),
@@ -277,10 +264,40 @@ function Records({
     [smart, setSmart] = useState(false),
     [filterDay, setFilterDay] = useState(""),
     [bookStatus, setBookStatus] = useState("");
+  const params = new URLSearchParams(search);
+  const currency = /^[A-Z]{3}$/.test(params.get('currency')??'') ? params.get('currency')! : 'PLN';
+  const month = /^[1-8]\d{3}-(0[1-9]|1[0-2])$/.test(params.get('month')??'') ? params.get('month')! : todayKey(user.timezone).slice(0,7);
+  const financeFilter = new URLSearchParams({month,currency});
+  if (params.get('category')) financeFilter.set('category',params.get('category')!);
+  if (params.get('kind')) financeFilter.set('kind',params.get('kind')!);
+  const [importOpen,setImportOpen] = useState(false);
+  const [linkError,setLinkError] = useState('');
+  const {preferences} = useAssistantPreferences(user.id);
+  const pro = isPro(user);
+  const hasPlanning = pro || user.free_modules.includes('planning');
+  const canImport = hasPlanning && preferences.messages && preferences.modules;
+  const saveFilter = (next:URLSearchParams) => navigate(route+(next.size?'?'+next:''));
+  const showDetail = (row:Row) => navigate(route+'/'+row.id+(search?'?'+search:''));
+  const closeDetail = () => {
+    setDetail(null);
+    navigate(route+(search?'?'+search:''));
+  };
+  useEffect(() => {
+    setLinkError('');
+    setDetail(null);
+    if (!recordId) return;
+    const controller = new AbortController();
+    api<Row>(s.path+'/'+encodeURIComponent(recordId),{signal:controller.signal}).then(row => {
+      if (!controller.signal.aborted) setDetail(row);
+    }).catch(cause => {
+      if (!controller.signal.aborted) setLinkError(errorMessage(cause));
+    });
+    return () => controller.abort();
+  }, [recordId,s.path]);
   const base =
     s.key === "diary" && searched
       ? s.path + "/search?q=" + encodeURIComponent(searched)
-      : s.path;
+      : s.key === "transactions" ? "/finance/transaction-history?"+financeFilter : s.path;
   const filter = filterDay
     ? "day=" + filterDay
     : bookStatus
@@ -289,7 +306,6 @@ function Records({
   const data = useRows(
       base + (filter ? (base.includes("?") ? "&" : "?") + filter : ""),
     ),
-    pro = isPro(user),
     day = todayKey(user.timezone);
   async function toggle(h: Row) {
     if (busyId) return;
@@ -316,7 +332,7 @@ function Records({
       <div className="section-toolbar">
         <div>
           <h2>{s.label}</h2>
-          <p>{s.description}</p>
+
         </div>
         <div className="product-actions">
           <button
@@ -341,15 +357,16 @@ function Records({
               Помочь сформулировать
             </button>
           )}
-          <button className="button primary" onClick={() => setEditor({})}>
-            <Plus size={17} />
-            Добавить
+          {s.key==='transactions' && <button className="button secondary" onClick={() => setImportOpen(true)}>Импорт выписки</button>}
+          <button className="button primary" onClick={() => setEditor(s.key==='transactions'?{currency}:s.key==='diary'&&filterDay?{day:filterDay}:{})}>
+            <Plus size={17}/>{({workouts:'Записать тренировку',sleep:'Записать сон',weight:'Записать вес',diary:'Написать',transactions:'Добавить операцию',books:'Добавить книгу',nutrition:'Добавить приём пищи'} as Record<string,string>)[s.key]??'Добавить'}
           </button>
         </div>
       </div>
-      {["sleep", "weight", "workouts"].includes(s.key) && (
+      {["sleep", "weight"].includes(s.key) && (
         <HealthChart section={s.key} user={user} revision={data.rows} />
       )}
+      {s.key==='workouts' && <WorkoutActivity user={user} revision={data.rows} onSelect={showDetail}/>}
       {s.key === "weight" && pro && (
         <WeightTarget
           unit={user.weight_unit}
@@ -359,7 +376,7 @@ function Records({
       {s.key === "nutrition" && (
         <NutritionBalance user={user} revision={data.rows} />
       )}
-      {s.key === "books" && pro && <BookStats revision={data.rows} />}
+      {s.key === "books" && pro && <details className="hub-disclosure"><summary>Статистика чтения</summary><BookStats revision={data.rows}/></details>}
       {s.key === "books" && (
         <div className="product-search">
           <label className="product-field">
@@ -377,7 +394,7 @@ function Records({
         </div>
       )}
       {s.key === "diary" && (
-        <DiaryReview user={user} pro={pro} revision={data.rows} onSource={setFilterDay}/>
+        <details className="hub-disclosure"><summary>Недельный обзор с ИИ</summary><DiaryReview user={user} pro={pro} revision={data.rows} onSource={setFilterDay}/></details>
       )}
       {s.key === "diary" && (
         <DiaryCalendar
@@ -404,9 +421,24 @@ function Records({
           )}
         </div>
       )}
-      {s.path.startsWith("/finance/") && (
-        <FinanceOverview user={user} revision={data.rows} />
-      )}
+      {s.key==='transactions' && <>
+        <FinanceOverview user={user} revision={data.rows} preferences={financeFilter} onSelect={saveFilter}
+          onCategory={saveFilter}/>
+        <div className="hub-filter-row" aria-label="Фильтры операций">
+          <label>Тип<select value={params.get('kind')??''} onChange={event => {
+            const next = new URLSearchParams(financeFilter);
+            if (event.target.value) next.set('kind',event.target.value); else next.delete('kind');
+            saveFilter(next);
+          }}><option value="">Все операции</option><option value="expense">Расходы</option><option value="income">Доходы</option></select></label>
+          {params.get('category') && <button className="button secondary" onClick={() => {
+            const next = new URLSearchParams(financeFilter);
+            next.delete('category');
+            saveFilter(next);
+          }}>Снять фильтр «{params.get('category')}»</button>}
+        </div>
+        {importOpen && <CsvImportDialog onClose={() => setImportOpen(false)} modulesAllowed={canImport} missingPlanning={!hasPlanning}/>}
+      </>}
+      {linkError && <p className="field-error" role="alert">{linkError}</p>}
       {s.key === "diary" && pro && (
         <form
           className="product-search"
@@ -463,7 +495,7 @@ function Records({
           onAction={() => setEditor({})}
         />
       ) : (
-        <div className={s.key === "diary" ? "diary-feed" : "record-grid"}>
+        <div className={`record-grid record-layout-${s.key}`}>
           {data.rows.map((row) => (
             <article className={`record-card record-${s.key}`} key={row.id}>
               <div className="record-head">
@@ -535,7 +567,7 @@ function Records({
                     </button>
                     <button
                       className="text-button"
-                      onClick={() => setDetail(row)}
+                      onClick={() => showDetail(row)}
                     >
                       История
                       <ChevronRight size={14} />
@@ -546,7 +578,7 @@ function Records({
                   ) ? (
                   <button
                     className="text-button"
-                    onClick={() => setDetail(row)}
+                    onClick={() => showDetail(row)}
                   >
                     {s.key === "goals"
                       ? "Открыть цель"
@@ -560,12 +592,12 @@ function Records({
                 ) : s.key === "diary" ? (
                   <button
                     className="text-button"
-                    onClick={() => setDetail(row)}
+                    onClick={() => showDetail(row)}
                   >
                     Читать запись
                     <ArrowRight size={15} />
                   </button>
-                ) : null}
+                ) : <button className="text-button" onClick={() => showDetail(row)}>Открыть<ArrowRight size={15}/></button>}
               </div>
             </article>
           ))}
@@ -638,10 +670,8 @@ function Records({
           section={s}
           initial={detail}
           user={user}
-          onClose={() => {
-            setDetail(null);
-            void data.load();
-          }}
+          onClose={() => { closeDetail(); void data.load(); }}
+          onEdit={() => { closeDetail(); setEditor(detail); }}
           notify={notify}
         />
       )}
@@ -826,7 +856,7 @@ function RecordContent({
     </>
   );
 }
-function RecordEditor({
+export function RecordEditor({
   section: s,
   initial,
   user,
@@ -890,11 +920,23 @@ function RecordEditor({
     }),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
+  const [changed, setChanged] = useState(false);
+  const close = () => {
+    if (busy) return;
+    if (s.key !== "diary" || !changed || window.confirm("Закрыть запись без сохранения?")) onClose();
+  };
+  const renderField = (f: (typeof fields)[number]) => (
+    <FieldControl key={f.key} field={f} value={values[f.key]} onChange={(v) => {
+      setChanged(true);
+      setValues((old) => ({ ...old, [f.key]: v }));
+    }}/>
+  );
+  const notes = fields.find(field => field.key === "notes" && field.optional);
   return (
     <Modal
       title={`${initial.id ? "Изменить" : "Добавить"} · ${s.singular.toLowerCase()}`}
-      onClose={() => !busy && onClose()}
-      className="product-modal"
+      onClose={close}
+      className={`product-modal hub-record-editor${s.key === "diary" ? " diary-editor" : ""}`}
     >
       <form
         onSubmit={async (e) => {
@@ -915,14 +957,11 @@ function RecordEditor({
         }}
       >
         <div className="modal-body product-form">
-          {fields.map((f) => (
-            <FieldControl
-              key={f.key}
-              field={f}
-              value={values[f.key]}
-              onChange={(v) => setValues((old) => ({ ...old, [f.key]: v }))}
-            />
-          ))}
+          {fields.filter(f => f !== notes).map(renderField)}
+          {notes && <details className="hub-disclosure" open={Boolean(initial.notes)}>
+            <summary>{notes.label}</summary>
+            <div>{renderField(notes)}</div>
+          </details>}
           {error && (
             <p className="field-error" role="alert">
               {error}
@@ -934,7 +973,7 @@ function RecordEditor({
             type="button"
             className="button secondary"
             disabled={busy}
-            onClick={onClose}
+            onClick={close}
           >
             Отмена
           </button>

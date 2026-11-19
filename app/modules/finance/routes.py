@@ -86,6 +86,32 @@ def categories(user=Depends(member), db=Depends(get_db)):
     return {"items": sorted(set(BASE_CATEGORIES + custom))}
 
 
+@router.get("/transaction-history")
+def transaction_history(
+    month: str = Query(pattern=r"^[1-8][0-9]{3}-(0[1-9]|1[0-2])$"),
+    currency: str = Query(pattern=r"^[A-Z]{3}$"),
+    category: str | None = Query(None, max_length=100),
+    kind: str | None = Query(None, pattern=r"^(income|expense)$"),
+    offset: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
+    user=Depends(member),
+    db=Depends(get_db),
+):
+    start = date.fromisoformat(month + "-01")
+    end = (start.replace(day=28) + timedelta(days=4)).replace(day=1)
+    query = select(Transaction).where(
+        Transaction.user_id == user.id, Transaction.deleted_at.is_(None),
+        Transaction.day >= start, Transaction.day < end, Transaction.currency == currency,
+    )
+    if category:
+        query = query.where(Transaction.category == category)
+    if kind:
+        query = query.where(Transaction.kind == kind)
+    rows = db.scalars(query.order_by(Transaction.day.desc(), Transaction.created_at.desc(), Transaction.id)
+        .offset(offset).limit(limit + 1)).all()
+    return {"items": [record(row) for row in rows[:limit]], "has_more": len(rows) > limit}
+
+
 @router.get("/overview")
 def overview(
     month: str = Query(pattern=r"^[1-8][0-9]{3}-(0[1-9]|1[0-2])$"),

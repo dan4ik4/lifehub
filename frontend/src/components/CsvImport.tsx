@@ -16,7 +16,7 @@ export function CsvImportButton({disabled,modulesAllowed}:{disabled:boolean;modu
   return <><button className="csv-open" type="button" disabled={disabled} onClick={()=>setOpen(true)}><FileSpreadsheet size={17}/>Выписка CSV / PDF</button>{open&&<CsvImportDialog modulesAllowed={modulesAllowed} onClose={()=>setOpen(false)}/>}</>;
 }
 
-function CsvImportDialog({onClose,modulesAllowed}:{onClose:()=>void;modulesAllowed:boolean}) {
+export function CsvImportDialog({onClose,modulesAllowed,missingPlanning=false}:{onClose:()=>void;modulesAllowed:boolean;missingPlanning?:boolean}) {
   const [file,setFile]=useState<File|null>(null),[account,setAccount]=useState(''),[currency,setCurrency]=useState('PLN');
   const [encoding,setEncoding]=useState('utf-8-sig'),[consent,setConsent]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState('');
   const [preview,setPreview]=useState<Preview|null>(null),[rows,setRows]=useState<Draft[]>([]),[recent,setRecent]=useState<Preview[]>([]);
@@ -53,7 +53,9 @@ function CsvImportDialog({onClose,modulesAllowed}:{onClose:()=>void;modulesAllow
   const invalid=selected.some(r=>csvCents(r.transaction!.amount)===null||!r.transaction!.title.trim()||!/^[A-Z]{3}$/.test(r.transaction!.currency)||!r.transaction!.day);
   return <Modal title="Банковская выписка" description="Загрузите CSV или PDF, проверьте операции и подтвердите сохранение." onClose={()=>{if(!busy)onClose();}} className="csv-modal">
     <div className="modal-body csv-body">
-      {!modulesAllowed&&<p className="field-error">Включите доступ к модулям в настройках помощника, чтобы разбирать выписки.</p>}
+      {!modulesAllowed&&<p className="field-error">{missingPlanning
+        ? 'Для разбора выписок через помощника нужен доступ к модулю «Планирование».'
+        : 'Откройте помощника и включите обработку сообщений и данных модулей в его настройках.'}</p>}
       <div className="csv-upload-grid">
         <label>Счёт<input maxLength={100} value={account} disabled={busy} placeholder="Например: mBank · основной" onChange={e=>{setAccount(e.target.value);editRequest();}}/></label>
         <label>Валюта, если её нет в файле<input value={currency} maxLength={3} disabled={busy} onChange={e=>{setCurrency(e.target.value.toUpperCase());editRequest();}}/></label>

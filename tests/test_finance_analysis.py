@@ -67,6 +67,29 @@ def send(client, h, data, **changes):
         'source_hash': data['source_hash'], 'consent': True, **changes})
 
 
+def test_category_history_filters_and_pages_owned_transactions(client, db, make_user, auth_headers):
+    user = make_user()
+    other = make_user()
+    first = add(db, user, '2026-11-18')
+    second = add(db, user, '2026-11-01')
+    add(db, user, '2026-12-01')
+    add(db, user, '2026-10-31')
+    add(db, user, '2026-11-19', kind='income')
+    add(db, user, '2026-11-19', currency='EUR')
+    add(db, user, '2026-11-19', category='travel')
+    add(db, user, '2026-11-19', deleted_at=NOW)
+    add(db, other, '2026-11-19')
+    path = '/api/v1/finance/transaction-history'
+    params = {'month': '2026-11', 'currency': 'PLN', 'category': 'food', 'kind': 'expense', 'limit': 1}
+    assert client.get(path, params=params).status_code == 401
+    for offset, expected, has_more in [(0, first, True), (1, second, False)]:
+        response = client.get(path, headers=auth_headers(user), params={**params, 'offset': offset})
+        assert response.status_code == 200
+        page = response.json()
+        assert [row['id'] for row in page['items']] == [str(expected.id)]
+        assert page['has_more'] is has_more
+
+
 def test_exact_month_facts_and_explicit_conditional_forecast(client, app, db, make_user, auth_headers):
     _, h, provider = setup(client, app, db, make_user, auth_headers)
     raw = read(client, h)

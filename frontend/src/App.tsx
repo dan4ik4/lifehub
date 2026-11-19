@@ -1,3 +1,5 @@
+import {QuickAdd} from './components/QuickAdd';
+import {WorkspaceBar} from './components/WorkspaceBar';
 import {NativeHealthSync} from './components/NativeHealthSync';
 import {Navigation} from './components/Navigation';
 import {AssistantChat} from './components/AssistantChat';
@@ -26,51 +28,118 @@ const viewFromPath = (path: string): View => path === viewPaths.calendar ? 'cale
 
 export default function App() {
   const session = useSyncExternalStore(subscribeSession, getSession);
-  const [path, setPath] = useState(window.location.pathname), [toasts, setToasts] = useState<Toast[]>([]);
+  const [location, setLocation] = useState(window.location.pathname + window.location.search);
+  const [toasts, setToasts] = useState<Toast[]>([]);
+  const [path, search = ''] = location.split('?');
+  const query = new URLSearchParams(search);
+  const routePositions = useRef(new Map<string,number>());
+  const currentLocation = useRef(location);
+  const restorePosition = useRef(false);
   const toastId = useRef(0), timers = useRef<number[]>([]);
   const notify: Notify = useCallback((message, kind = 'success') => { const id = ++toastId.current; setToasts(old => [...old.slice(-2), { id, message, kind }]); timers.current.push(window.setTimeout(() => setToasts(old => old.filter(t => t.id !== id)), kind === 'error' ? 8000 : 4500)); }, []);
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
-  const navigate = useCallback((value: string, replace = false) => { if (replace) window.history.replaceState({}, '', value); else window.history.pushState({}, '', value); setPath(value); }, []);
-  useEffect(() => { const pop = () => setPath(window.location.pathname); window.addEventListener('popstate', pop); return () => window.removeEventListener('popstate', pop); }, []);
-  useEffect(() => { window.scrollTo({ top: 0, behavior: 'instant' }); }, [path]);
+  const navigate = useCallback((value: string, replace = false) => {
+    if (value === currentLocation.current) return;
+    routePositions.current.set(currentLocation.current, window.scrollY);
+    restorePosition.current = false;
+    if (replace) window.history.replaceState({}, '', value);
+    else window.history.pushState({}, '', value);
+    currentLocation.current = value;
+    setLocation(value);
+  }, []);
+  useEffect(() => {
+    const pop = () => {
+      routePositions.current.set(currentLocation.current, window.scrollY);
+      restorePosition.current = true;
+      currentLocation.current = window.location.pathname + window.location.search;
+      setLocation(currentLocation.current);
+    };
+    window.addEventListener('popstate', pop);
+    return () => window.removeEventListener('popstate', pop);
+  }, []);
+  useEffect(() => {
+    window.scrollTo({top:restorePosition.current ? routePositions.current.get(location) ?? 0 : 0, behavior:'instant'});
+  }, [location]);
   const updateUser = useCallback((user: User) => { const current = getSession(); if (current) setSession({ ...current, user }); }, []);
   useEffect(() => {
     if (!session) return; const controller = new AbortController();
     api<User>('/users/me', { signal: controller.signal }).then(user => { if (!controller.signal.aborted) updateUser(user); }).catch(error => { if (!controller.signal.aborted && getSession()) notify(errorMessage(error), 'error'); });
     return () => controller.abort();
   }, [session?.user.id, notify, updateUser]);
-  const onAuthenticated = (value: AuthSession) => { setSession(value); if (window.location.pathname !== '/calendar/callback') navigate('/home', true); };
+  const onAuthenticated = (value: AuthSession) => {
+    setSession(value);
+    if (path === '/') navigate('/home', true);
+  };
   const logout = useCallback(async () => {
     const current = getSession();
     try { if (current && !current.demo) await disablePush().catch(() => {}); if (current && !current.demo) await api('/auth/logout', { method: 'POST', body: { refresh_token: current.tokens.refresh_token } }); }
     catch { notify('Вход на этом устройстве закрыт. Сервер не ответил на запрос завершения сессии.', 'info'); }
     finally { clearSession(); navigate('/', true); }
   }, [navigate, notify]);
+  const user = session?.user;
+  const planning = path in {'/planning':1,'/planning/calendar':1,'/planning/lists':1};
+  const module = path.startsWith('/modules/') ? path.split('/')[2]
+    : planning ? 'planning' : path === '/' || path === '/home' ? 'dashboard' : 'missing';
+  const onboarded = user?.onboarding_completed;
   return <>
-    {!session ? <AuthScreen onAuthenticated={onAuthenticated} onDemo={() => { startDemo(); navigate('/planning', true); }} /> : !session.user.onboarding_completed ? <Onboarding user={session.user} onComplete={user => { updateUser(user); navigate('/home', true); }} onLogout={() => void logout()} /> : path === '/calendar/callback' ? <CalendarCallback onComplete={() => navigate('/planning/calendar', true)} notify={notify} /> : (path === '/' || path === '/home' || path.startsWith('/modules/') || (!isPro(session.user) && !session.user.free_modules.includes('planning'))) ? <Product user={session.user} module={path.startsWith('/modules/') ? path.split('/')[2] : path.startsWith('/planning') ? 'planning' : 'dashboard'} navigate={navigate} onUserChange={updateUser} onLogout={() => void logout()} notify={notify} /> : <Workspace navigateProduct={navigate} user={session.user} view={viewFromPath(path)} setView={view => navigate(viewPaths[view])} onUserChange={updateUser} onLogout={() => void logout()} notify={notify} />}
-    {session?.user.onboarding_completed && <NativeHealthSync key={session.user.id} user={session.user}/>}
-    {session?.user.onboarding_completed && path !== "/calendar/callback" && <AssistantChat key={session.user.id} user={session.user} path={path} />}
+    {!user ? <AuthScreen onAuthenticated={onAuthenticated} onDemo={() => { startDemo(); navigate('/planning', true); }}/>
+      : !onboarded ? <Onboarding user={user} onComplete={updated => { updateUser(updated); if (path === '/') navigate('/home', true); }} onLogout={() => void logout()}/>
+      : path === '/calendar/callback' ? <CalendarCallback onComplete={() => navigate('/planning/calendar', true)} notify={notify}/>
+      : planning && (isPro(user) || user.free_modules.includes('planning'))
+        ? <Workspace navigateProduct={navigate} user={user} view={viewFromPath(path)} search={search} onUserChange={updateUser} onLogout={logout} notify={notify}/>
+        : <Product user={user} module={module} path={path} search={query.toString()} navigate={navigate} onUserChange={updateUser} onLogout={logout} notify={notify}/>}
+    {user && onboarded && <NativeHealthSync key={user.id} user={user}/>}
+    {user && onboarded && path !== '/calendar/callback' && <>
+      <AssistantChat key={user.id} user={user} path={path}/>
+      <QuickAdd key={user.id+':add'} user={user} notify={notify}/>
+    </>}
     <div className="toast-stack" aria-live="polite" aria-atomic="false">{toasts.map(toast => <div key={toast.id} className={`toast toast-${toast.kind}`} role={toast.kind === 'error' ? 'alert' : 'status'}>{toast.kind === 'error' ? <CircleAlert size={18} /> : toast.kind === 'success' ? <CheckCircle2 size={18} /> : <Bell size={18} />}<span>{toast.message}</span><button className="icon-button small" aria-label="Закрыть уведомление" onClick={() => setToasts(old => old.filter(t => t.id !== toast.id))}><X size={15} /></button></div>)}</div>
   </>;
 }
 
-function Workspace({ navigateProduct, user, view, setView, onUserChange, onLogout, notify }: { navigateProduct: (path: string) => void; user: User; view: View; setView: (view: View) => void; onUserChange: (user: User) => void; onLogout: () => void; notify: Notify }) {
-  const [selected, setSelected] = useState(todayKey(user.timezone));
+function Workspace({ navigateProduct, user, view, search, onUserChange, onLogout, notify }: { navigateProduct: (path: string) => void; user: User; view: View; search:string; onUserChange: (user: User) => void; onLogout: () => void; notify: Notify }) {
+  const params = new URLSearchParams(search);
+  const day = params.get('day');
+  const validDay = day && /^\d{4}-\d{2}-\d{2}$/.test(day) && !Number.isNaN(Date.parse(day)) && new Date(day).toISOString().slice(0,10)===day;
+  const [selected, setSelected] = useState(validDay ? day : todayKey(user.timezone));
+  useEffect(() => {if (validDay) setSelected(day);}, [day,validDay]);
   const [editor, setEditor] = useState<{ kind: 'task' | 'event'; item?: Task | CalendarEvent; day: string; time?: string } | null>(null);
-  const [settings, setSettings] = useState<'profile' | 'connections' | 'plan' | null>(null), [search, setSearch] = useState(false), [help, setHelp] = useState(false), [createMenu, setCreateMenu] = useState(false);
+  const [settings, setSettings] = useState<'profile' | 'connections' | 'plan' | null>(null), [searchOpen, setSearchOpen] = useState(false), [help, setHelp] = useState(false), [createMenu, setCreateMenu] = useState(false);
   const [eventDetails, setEventDetails] = useState<CalendarEvent | null>(null), [taskDetails, setTaskDetails] = useState<{ task: Task; occurrence?: TaskOccurrence } | null>(null), [deletingTask, setDeletingTask] = useState<Task | null>(null);
   const [busyIds, setBusyIds] = useState<string[]>([]), lock = useRef(new Set<string>()), menuRef = useRef<HTMLDivElement>(null);
   useEffect(() => { window.dispatchEvent(new CustomEvent('lifehub:chat-day', {detail: selected})); }, [selected]);
+  useEffect(() => {
+    const showPlan = () => setSettings('plan');
+    window.addEventListener('lifehub:show-plan',showPlan);
+    return () => window.removeEventListener('lifehub:show-plan',showPlan);
+  }, []);
   const month = monthDays(selected), data = usePlanning(user.timezone, month[0], shiftDay(month.at(-1)!, 1));
+  const seenLink = useRef('');
+  useEffect(() => {
+    if (!search) {seenLink.current='';return;}
+    if (data.loading || seenLink.current===search) return;
+    const params = new URLSearchParams(search);
+    const task = data.tasks.find(item => item.id===params.get('task'));
+    const event = data.calendar?.events.find(item => item.id===params.get('event')
+      && (!params.has('occurrence') || item.occurrence_at===params.get('occurrence')));
+    if (task) {
+      const occurrence=data.calendar?.tasks.find(item => item.task_id===task.id &&
+        (params.has('occurrence') ? item.occurrence_at===params.get('occurrence') : item.occurrence_at===null));
+      setTaskDetails({task,occurrence});
+      seenLink.current=search;
+    } else if (event) {
+      setEventDetails(event);
+      seenLink.current=search;
+    }
+  }, [search,data.loading,data.tasks,data.calendar]);
   const pro = user.plan === 'pro' || (user.plan === 'trial' && Boolean(user.trial_ends) && Date.parse(user.trial_ends!) > Date.now());
   const title = { day: 'Мой день', calendar: 'Календарь', lists: 'Мои списки' }[view];
-  const firstName = user.name?.trim().split(' ')[0] || 'друг';
   const createTask = () => { setEditor({ kind: 'task', day: selected }); setCreateMenu(false); };
   const createEvent = (day = selected, time?: string) => { setEditor({ kind: 'event', day, time }); setCreateMenu(false); };
   const editTask = (task: Task) => setEditor({ kind: 'task', item: task, day: selected });
-  const navigate = (view: View) => { setView(view); };
+  const navigate = (view: View) => navigateProduct(viewPaths[view]+'?day='+encodeURIComponent(selected));
   useEffect(() => { document.title = `${title} · Life Hub`; }, [title]);
-  useEffect(() => { const keydown = (e: KeyboardEvent) => { const input = e.target instanceof HTMLElement && (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName) || e.target.isContentEditable); if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setSearch(true); } else if (e.key === 'Escape') { setCreateMenu(false); } else if (!input && !document.querySelector('dialog[open]') && e.key.toLowerCase() === 'n') { e.preventDefault(); setEditor({ kind: 'task', day: selected }); } }; window.addEventListener('keydown', keydown); return () => window.removeEventListener('keydown', keydown); }, [selected]);
+  useEffect(() => { const keydown = (e: KeyboardEvent) => { const input = e.target instanceof HTMLElement && (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName) || e.target.isContentEditable); if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setSearchOpen(true); } else if (e.key === 'Escape') { setCreateMenu(false); } else if (!input && !document.querySelector('dialog[open]') && e.key.toLowerCase() === 'n') { e.preventDefault(); setEditor({ kind: 'task', day: selected }); } }; window.addEventListener('keydown', keydown); return () => window.removeEventListener('keydown', keydown); }, [selected]);
   useEffect(() => { if (!createMenu) return; const outside = (e: PointerEvent) => { if (!menuRef.current?.contains(e.target as Node)) setCreateMenu(false); }; document.addEventListener('pointerdown', outside); return () => document.removeEventListener('pointerdown', outside); }, [createMenu]);
   async function toggleTask(task: Task, occurrence?: TaskOccurrence) {
     if (lock.current.has(task.id)) return;
@@ -88,20 +157,25 @@ function Workspace({ navigateProduct, user, view, setView, onUserChange, onLogou
   return <div className="app-layout">
     <a className="skip-link" href="#main-content">Перейти к содержимому</a>
     <Navigation user={user} path={viewPaths[view]} navigate={navigateProduct} onSettings={() => setSettings('profile')} />
-    <div className="app-main"><header className="topbar"><div className="breadcrumbs"><button className="breadcrumb-home" onClick={() => navigateProduct("/home")}>Главная</button><ChevronRight size={13} /><strong>Планирование</strong></div><div className="topbar-actions"><button className="search-trigger" aria-label="Найти в планах" onClick={() => setSearch(true)}><Search size={17} /><span>Найти в планах</span><kbd>⌘ K</kbd></button><span className="topbar-divider" /><button className="icon-button" aria-label="Подключения календарей" title="Подключения календарей" onClick={() => setSettings('connections')}><Link2 size={19} /></button><button className="icon-button" aria-label="Помощь и горячие клавиши" title="Помощь" onClick={() => setHelp(true)}><HelpCircle size={19} /></button><button className="header-avatar" aria-label="Мой профиль" onClick={() => setSettings('profile')}><Avatar user={user}/></button></div></header>
-      <main id="main-content" className={`workspace-content view-${view}`}><header className="page-header"><div><div className="page-eyebrow"><span>{dayLabel(todayKey(user.timezone), { weekday: 'long', day: 'numeric', month: 'long' })}</span>{isDemo() && <span className="demo-badge">Демо</span>}</div><h1>{title}<span className="heading-dot">.</span></h1><p>{view === 'day' ? `Привет, ${firstName}. Давайте найдём время для важного.` : view === 'calendar' ? 'У каждого важного дела — своё время.' : 'От покупок до идей. Ничего не потеряется.'}</p></div><div className="page-actions"><button className="icon-button refresh-button" onClick={() => void data.refresh()} aria-label="Обновить данные" disabled={data.refreshing || data.loading}><RefreshCw size={17} className={data.refreshing ? 'spinner' : ''} /></button><div className="create-menu-wrap" ref={menuRef}><div className="split-button"><button className="button primary" onClick={view === 'calendar' ? () => createEvent() : createTask}><Plus size={17} />{view === 'calendar' ? 'Новое событие' : 'Новая задача'}</button><button className="split-trigger" aria-label="Другие способы добавления" aria-expanded={createMenu} onClick={() => setCreateMenu(!createMenu)}><ChevronDown size={16} /></button></div>{createMenu && <div className="action-menu create-menu"><button onClick={createTask}><CheckCircle2 size={16} />Создать задачу<kbd>N</kbd></button><button onClick={() => createEvent()}><CalendarDays size={16} />Создать событие</button><button onClick={() => { navigate('lists'); setCreateMenu(false); }}><ListChecks size={16} />Открыть списки</button></div>}</div></div></header>
+    <div className="app-main"><WorkspaceBar user={user} title="Планирование" onHome={() => navigateProduct('/home')}
+      onProfile={() => setSettings('profile')} onSearch={() => setSearchOpen(true)}/>
+      <main id="main-content" className={`workspace-content view-${view}`}><header className="page-header"><div><div className="page-eyebrow"><span>{dayLabel(todayKey(user.timezone), { weekday: 'long', day: 'numeric', month: 'long' })}</span>{isDemo() && <span className="demo-badge">Демо</span>}</div><h1>{title}<span className="heading-dot">.</span></h1></div><div className="page-actions"><button className="icon-button refresh-button" onClick={() => void data.refresh()} aria-label="Обновить данные" disabled={data.refreshing || data.loading}><RefreshCw size={17} className={data.refreshing ? 'spinner' : ''} /></button><div className="create-menu-wrap" ref={menuRef}><div className="split-button"><button className="button primary" onClick={view === 'calendar' ? () => createEvent() : createTask}><Plus size={17} />{view === 'calendar' ? 'Новое событие' : 'Новая задача'}</button><button className="split-trigger" aria-label="Другие способы добавления" aria-expanded={createMenu} onClick={() => setCreateMenu(!createMenu)}><ChevronDown size={16} /></button></div>{createMenu && <div className="action-menu create-menu"><button onClick={createTask}><CheckCircle2 size={16} />Создать задачу<kbd>N</kbd></button><button onClick={() => createEvent()}><CalendarDays size={16} />Создать событие</button><button onClick={() => { navigate('lists'); setCreateMenu(false); }}><ListChecks size={16} />Открыть списки</button></div>}</div></div></header>
+      <nav className="product-tabs planning-tabs" aria-label="Разделы планирования">
+        {(['day','calendar','lists'] as const).map((key,index) => <button key={key} className={view===key?'active':''}
+          aria-current={view===key?'page':undefined} onClick={() => navigate(key)}>{['Мой день','Календарь','Списки'][index]}</button>)}
+        <button onClick={() => setSettings('connections')}>Подключения</button>
+        <button onClick={() => setHelp(true)}>Помощь</button>
+      </nav>
       {data.error && <div className="workspace-error" role="alert"><CircleAlert size={19} /><div><strong>Не удалось обновить планы</strong><p>{data.error}</p></div><button className="button secondary small" onClick={() => void data.refresh()}>Повторить</button></div>}
-      {data.loading ? <div className="workspace-skeleton" aria-label="Загружаем планы" role="status"><div /><div /><div /><div /><span className="sr-only">Загружаем планы…</span></div> : <div className="view-enter" key={view}>{view === 'day' ? <TodayView user={user} selected={selected} onSelect={setSelected} tasks={data.tasks} calendar={data.calendar} busyIds={busyIds} onToggle={(t, o) => void toggleTask(t, o)} onEdit={editTask} onDelete={setDeletingTask} onCreate={createTask} onCreateEvent={() => createEvent()} onEvent={setEventDetails} onCalendar={() => setView('calendar')} refresh={data.refresh} notify={notify} /> : view === 'calendar' ? <CalendarView selected={selected} onSelect={setSelected} timezone={user.timezone} calendar={data.calendar} tasks={data.tasks} onEvent={setEventDetails} onTask={(task, occurrence) => setTaskDetails({ task, occurrence })} onCreate={createEvent} /> : <ListsView lists={data.lists} pro={pro} refresh={data.refresh} notify={notify} onUpgrade={() => setSettings('plan')} />}</div>}
-      <footer className="workspace-footer"><span>Маленькие шаги. Ваша большая жизнь.</span><span>lifehub.</span></footer>
+      {data.loading ? <div className="workspace-skeleton" aria-label="Загружаем планы" role="status"><div /><div /><div /><div /><span className="sr-only">Загружаем планы…</span></div> : <div className="view-enter" key={view}>{view === 'day' ? <TodayView user={user} selected={selected} onSelect={setSelected} tasks={data.tasks} calendar={data.calendar} busyIds={busyIds} onToggle={(t, o) => void toggleTask(t, o)} onEdit={editTask} onDelete={setDeletingTask} onCreate={createTask} onCreateEvent={() => createEvent()} onEvent={setEventDetails} onCalendar={() => navigate('calendar')} refresh={data.refresh} notify={notify} /> : view === 'calendar' ? <CalendarView selected={selected} onSelect={setSelected} timezone={user.timezone} calendar={data.calendar} tasks={data.tasks} onEvent={setEventDetails} onTask={(task, occurrence) => setTaskDetails({ task, occurrence })} onCreate={createEvent} /> : <ListsView lists={data.lists} pro={pro} refresh={data.refresh} notify={notify} onUpgrade={() => setSettings('plan')} />}</div>}
       </main>
-      <nav className="mobile-bottom-nav" aria-label="Мобильная навигация">{([{ key: 'day', label: 'Мой день', icon: Sun }, { key: 'calendar', label: 'Календарь', icon: CalendarDays }, { key: 'lists', label: 'Списки', icon: ListChecks }] as const).map(({ key, label, icon: Icon }) => <button key={key} className={view === key ? 'active' : ''} onClick={() => navigate(key)} aria-current={view === key ? 'page' : undefined}><Icon size={20} /><span>{label}</span></button>)}<button onClick={() => setSettings('profile')}><Settings2 size={20} /><span>Профиль</span></button></nav>
     </div>
     {editor && <EntityEditor key={`${editor.kind}:${editor.item?.id || editor.day}:${editor.time || ''}`} kind={editor.kind} item={editor.item} day={editor.day} initialTime={editor.time} timezone={user.timezone} pro={pro} onClose={() => setEditor(null)} onSaved={afterSaved} onUpgrade={() => setSettings('plan')} />}
-    {eventDetails && <EventDetails event={eventDetails} timezone={user.timezone} onClose={() => setEventDetails(null)} onEdit={event => { setEventDetails(null); setEditor({ kind: 'event', item: event, day: selected }); }} onDeleted={() => { void data.refresh(); notify('Событие удалено'); }} />}
-    {taskDetails && <TaskDetails task={taskDetails.task} occurrence={taskDetails.occurrence} timezone={user.timezone} busy={busyIds.includes(taskDetails.task.id)} onClose={() => setTaskDetails(null)} onToggle={() => void toggleTask(taskDetails.task, taskDetails.occurrence)} onEdit={() => { setTaskDetails(null); editTask(taskDetails.task); }} />}
+    {eventDetails && <EventDetails event={eventDetails} timezone={user.timezone} onClose={() => { setEventDetails(null); if (params.has("event")) navigate(view); }} onEdit={event => { setEventDetails(null); setEditor({ kind: 'event', item: event, day: selected }); }} onDeleted={() => { void data.refresh(); notify('Событие удалено'); }} />}
+    {taskDetails && <TaskDetails task={taskDetails.task} occurrence={taskDetails.occurrence} timezone={user.timezone} busy={busyIds.includes(taskDetails.task.id)} onClose={() => { setTaskDetails(null); if (params.has("task")) navigate(view); }} onToggle={() => void toggleTask(taskDetails.task, taskDetails.occurrence)} onEdit={() => { setTaskDetails(null); editTask(taskDetails.task); }} />}
     {deletingTask && <ConfirmDialog title={deletingTask.recurrence ? 'Удалить повторяющуюся задачу?' : 'Удалить задачу?'} description={`«${deletingTask.title}» ${deletingTask.recurrence ? 'и все её повторения будут удалены' : 'будет удалена'}. Это действие нельзя отменить.`} onClose={() => setDeletingTask(null)} onConfirm={async () => { await api(`/planning/tasks/${deletingTask.id}?version=${deletingTask.version}`, { method: 'DELETE' }); await data.refresh(); notify('Задача удалена'); }} />}
     {settings && <Settings initialTab={settings} user={user} onUserChange={onUserChange} onClose={() => { setSettings(null); void data.refresh(); }} onLogout={onLogout} notify={notify} />}
-    {search && <SearchDialog tasks={data.tasks} timezone={user.timezone} onClose={() => setSearch(false)} onTask={task => { setSearch(false); editTask(task); }} onEvent={event => { setSearch(false); setEventDetails(event); }} />}
+    {searchOpen && <SearchDialog tasks={data.tasks} timezone={user.timezone} onClose={() => setSearchOpen(false)} onTask={task => { setSearchOpen(false); editTask(task); }} onEvent={event => { setSearchOpen(false); setEventDetails(event); }} />}
     {help && <Modal title="Ваше спокойное пространство" onClose={() => setHelp(false)} className="help-modal"><div className="modal-body"><p>Life Hub помогает держать задачи, встречи и списки в одном месте.</p><div className="help-feature"><CheckCircle2 size={20} /><div><strong>Задачи</strong><p>Создайте задачу, добавьте дату и отмечайте маленькие победы.</p></div></div><div className="help-feature"><CalendarDays size={20} /><div><strong>Календарь</strong><p>Переключайте день и неделю. Нажмите на свободное время для новой встречи.</p></div></div><div className="help-feature"><ListChecks size={20} /><div><strong>Списки</strong><p>Добавляйте пункты по одному или сразу несколько с новой строки.</p></div></div><div className="keyboard-hints"><span><kbd>Ctrl / ⌘</kbd> + <kbd>K</kbd> Поиск</span><span><kbd>N</kbd> Новая задача</span><span><kbd>Esc</kbd> Закрыть окно</span></div></div><footer className="modal-footer"><button className="button primary" onClick={() => setHelp(false)}>Всё понятно<Check size={15} /></button></footer></Modal>}
   </div>;
 }

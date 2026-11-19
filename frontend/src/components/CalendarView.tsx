@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { CalendarDays, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
-import { dateKey, dayLabel, minutesOfDay, parts, shiftDay, todayKey, weekDays, zonedISO } from '../lib/dates';
+import { dateKey, dayLabel, minutesOfDay, monthDays, parts, shiftDay, todayKey, weekDays, zonedISO } from '../lib/dates';
 import type { CalendarEvent, CalendarRange, Task, TaskOccurrence } from '../lib/types';
 
 interface Block { id: string; title: string; start: number; end: number; kind: 'task' | 'event'; event?: CalendarEvent; task?: Task; occurrence?: TaskOccurrence; completed?: boolean; point?: boolean; offset?: string; color: number }
@@ -126,7 +126,7 @@ export function CalendarView({ selected, onSelect, timezone, calendar, tasks, on
   onEvent: (event: CalendarEvent) => void; onTask: (task: Task, occurrence?: TaskOccurrence) => void;
   onCreate: (day: string, time?: string) => void;
 }) {
-  const [view, setView] = useState<'day' | 'week'>(() => window.innerWidth < 800 ? 'day' : 'week');
+  const [view, setView] = useState<'agenda' | 'day' | 'week' | 'month'>(() => window.innerWidth < 800 ? 'agenda' : 'week');
   const scroll = useRef<HTMLDivElement>(null);
   const days = view === 'day' ? [selected] : weekDays(selected), today = todayKey(timezone);
   const scrolled = useRef('');
@@ -140,10 +140,65 @@ export function CalendarView({ selected, onSelect, timezone, calendar, tasks, on
   const getEvents = (day: string) => (calendar?.events || []).filter(event => eventOccupiesDay(event, day, timezone));
   const getTasks = (day: string) => (calendar?.tasks || []).map(occurrence => ({ occurrence, task: tasks.find(task => task.id === occurrence.task_id) }))
     .filter((item): item is { occurrence: TaskOccurrence; task: Task } => Boolean(item.task) && taskOccupiesDay(item.task!, item.occurrence, day, timezone));
-  return <section className="calendar-panel panel"><header className="calendar-toolbar"><div className="calendar-range"><button className="icon-button" aria-label={view === 'week' ? 'Предыдущая неделя' : 'Предыдущий день'} onClick={() => onSelect(shiftDay(selected, view === 'week' ? -7 : -1))}><ChevronLeft size={19} /></button><button className="icon-button" aria-label={view === 'week' ? 'Следующая неделя' : 'Следующий день'} onClick={() => onSelect(shiftDay(selected, view === 'week' ? 7 : 1))}><ChevronRight size={19} /></button><h2>{view === 'week' ? calendarWeekLabel(days[0], days[6]) : dayLabel(selected, { day: 'numeric', month: 'long' })}</h2><button className="button secondary small" onClick={() => onSelect(today)}>Сегодня</button></div><div className="segmented" role="group" aria-label="Вид календаря"><button className={view === 'day' ? 'selected' : ''} aria-pressed={view === 'day'} onClick={() => setView('day')}>День</button><button className={view === 'week' ? 'selected' : ''} aria-pressed={view === 'week'} onClick={() => setView('week')}>Неделя</button></div></header>
+  const changePeriod = (direction:number) => {
+    if (view==='month') {
+      const [year,month] = selected.split('-').map(Number);
+      onSelect(new Date(Date.UTC(year,month-1+direction,1)).toISOString().slice(0,10));
+    } else {
+      onSelect(shiftDay(selected,direction*(view==='week'?7:1)));
+    }
+  };
+  const title = view==='month' ? dayLabel(selected,{month:'long',year:'numeric'})
+    : view==='week' ? calendarWeekLabel(days[0],days[6]) : dayLabel(selected,{day:'numeric',month:'long'});
+  const agenda = [
+    ...getEvents(selected).map(event => ({
+      key:'event:'+event.id+':'+event.occurrence_at, title:event.title,
+      time:event.all_day?'Весь день':parts(event.start_at,timezone).hour+':'+parts(event.start_at,timezone).minute,
+      icon:'event', run:() => onEvent(event),
+    })),
+    ...getTasks(selected).map(({task,occurrence}) => {
+      const stamp=occurrence.effective_start_at??occurrence.effective_due_at;
+      const local=stamp?parts(stamp,timezone):null;
+      return {key:'task:'+task.id+':'+occurrence.occurrence_at,title:task.title,
+        time:task.all_day||!local?'Весь день':local.hour+':'+local.minute, icon:'task',run:() => onTask(task,occurrence)};
+    }),
+  ].sort((a,b) => a.time.localeCompare(b.time,'ru'));
+  const agendaItems = [...new Map(agenda.map(item => [item.key,item])).values()];
+  return <section className="calendar-panel panel">
+    <header className="calendar-toolbar">
+      <div className="calendar-range">
+        <button className="icon-button" aria-label="Предыдущий период" onClick={() => changePeriod(-1)}><ChevronLeft size={19}/></button>
+        <button className="icon-button" aria-label="Следующий период" onClick={() => changePeriod(1)}><ChevronRight size={19}/></button>
+        <h2>{title}</h2><button className="button secondary small" onClick={() => onSelect(today)}>Сегодня</button>
+      </div>
+      <div className="segmented" role="group" aria-label="Вид календаря">
+        {(['agenda','day','week','month'] as const).map((key,index) => <button key={key}
+          className={view===key?'selected':''} aria-pressed={view===key} onClick={() => setView(key)}>
+          {['Список','День','Неделя','Месяц'][index]}
+        </button>)}
+      </div>
+    </header>
+    {view==='agenda' ? <div className="hub-agenda">
+      {agendaItems.map(item => <button key={item.key} className="hub-agenda-item" onClick={item.run}>
+        <span>{item.time}</span><span><strong>{item.title}</strong><small>{item.icon==='task'?'Задача':'Событие'}</small></span><ChevronRight size={17}/>
+      </button>)}
+      {!agendaItems.length && <p>На этот день нет запланированных задач и событий.</p>}
+      <button className="button secondary" onClick={() => onCreate(selected)}><Plus size={16}/>Новое событие</button>
+    </div> : view==='month' ? <div className="hub-month" aria-label="Месяц календаря">
+      {['Пн','Вт','Ср','Чт','Пт','Сб','Вс'].map(label => <span className="hub-month-weekday" key={label}>{label}</span>)}
+      {monthDays(selected).map(day => {
+        const count=getEvents(day).length+getTasks(day).length;
+        return <button key={day} type="button" aria-label={dayLabel(day)+', записей: '+count}
+          aria-current={day===today?'date':undefined} className={day.slice(0,7)===selected.slice(0,7)?'':'outside-month'}
+          onClick={() => {onSelect(day);setView('agenda');}}>
+          <strong>{Number(day.slice(-2))}</strong>{count>0 && <small>{count}</small>}
+        </button>;
+      })}
+    </div> : <>
     <div className={`calendar-overflow ${view}`}><div className="calendar-inner"><div className="calendar-day-heads" style={{ gridTemplateColumns: `58px repeat(${days.length}, minmax(0,1fr))` }}><span className="timezone-abbr" title={timezone}>{calendarOffsetLabel(selected, timezone)}</span>{days.map(day => <button className={`day-head ${day === today ? 'is-today' : ''}`} key={day} onClick={() => onSelect(day)} aria-label={`Выбрать ${dayLabel(day)}`}><span>{dayLabel(day, { weekday: 'short' })}</span><strong>{Number(day.slice(-2))}</strong></button>)}</div>
       <div className="all-day-grid" style={{ gridTemplateColumns: `58px repeat(${days.length}, minmax(0,1fr))` }}><span className="all-day-label">Весь<br />день</span>{days.map(day => <div className="all-day-cell" key={day}>{getEvents(day).filter(e => e.all_day).map(event => <button className="all-day-event" key={`${event.id}:${event.occurrence_at}`} onClick={() => onEvent(event)}>{event.title}</button>)}{getTasks(day).filter(({ task }) => task.all_day).map(({ task, occurrence }) => <button className={`all-day-task ${occurrence.status === 'completed' ? 'done' : ''}`} key={`${task.id}:${occurrence.occurrence_at}`} onClick={() => onTask(task, occurrence)}>{task.title}</button>)}</div>)}</div>
       <div className="calendar-scroll" ref={scroll}><div className="calendar-time-grid" style={{ gridTemplateColumns: `58px repeat(${days.length}, minmax(0,1fr))` }}><div className="hour-axis">{Array.from({ length: 24 }, (_, h) => <span key={h} style={{ top: h * 60 }}>{String(h).padStart(2, '0')}:00</span>)}</div>{days.map(day => <div className="calendar-day-column" key={day}>{Array.from({ length: 24 }, (_, h) => <button className="hour-slot" key={h} aria-label={`Создать событие ${dayLabel(day)} в ${h}:00`} style={{ top: h * 60 }} onClick={() => onCreate(day, `${String(h).padStart(2, '0')}:00`)}><Plus size={13} /></button>)}{layoutBlocks(calendarDayBlocks(day, timezone, calendar, tasks)).map(block => <button key={block.id} className={`calendar-block block-${block.color} ${block.completed ? 'done' : ''}`} style={{ top: block.start, height: Math.max(1, block.end - block.start - (block.end - block.start > 6 ? 3 : 0)), padding: block.end - block.start < 24 ? '0 4px' : undefined, boxSizing: 'border-box', left: `calc(${block.lane / block.lanes * 100}% + 4px)`, width: `calc(${100 / block.lanes}% - 8px)` }} onClick={() => block.event ? onEvent(block.event) : onTask(block.task!, block.occurrence)} title={`${block.title} · ${dayLabel(day)} · ${blockLabel(block)}`} aria-label={`${block.title}, ${dayLabel(day)}, ${blockLabel(block)}`}><strong>{block.title}</strong>{block.end - block.start > 38 && <span>{blockLabel(block)}{block.kind === 'task' ? ' · Задача' : ''}</span>}{block.event?.notes && block.end - block.start > 70 && <p>{block.event.notes}</p>}</button>)}{day === today && <div className="current-time-line" style={{ top: minutesOfDay(new Date().toISOString(), timezone) }}><i /></div>}</div>)}</div></div>
     </div></div><footer className="calendar-legend"><span><i className="green" />События</span><span><i className="gold" />Задачи</span><span className="calendar-hint"><CalendarDays size={13} />Нажмите на свободное время, чтобы добавить событие</span></footer>
+    </>}
   </section>;
 }

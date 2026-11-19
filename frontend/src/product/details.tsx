@@ -9,119 +9,94 @@ import { Modal } from "../components/ui";
 import { GoalLinks, MilestoneEditor } from "./Extras";
 import { isPro, text, amount, dateLabel, Progress } from "./Product";
 import { FinanceAnalysis } from "./FinanceAnalysis";
-export function FinanceOverview({
-  user,
-  revision,
-}: {
-  user: User;
-  revision: Row[];
+import {displayWeight, weightLabel} from './weight';
+const categoryLabels:Record<string,string>={food:'Еда',transport:'Транспорт',home:'Дом',health:'Здоровье',leisure:'Досуг',other:'Другое',income:'Доход'};
+type FinanceSnapshot = {
+  income:string; expense:string; balance:string; net_worth?:string;
+  categories:{category:string;amount:string}[];
+  budgets?:Row[];
+};
+export function FinanceOverview({user,revision,preferences,onSelect,onCategory,analysis=false}: {
+  user:User;
+  revision:unknown;
+  preferences:URLSearchParams;
+  onSelect:(params:URLSearchParams)=>void;
+  onCategory:(params:URLSearchParams)=>void;
+  analysis?:boolean;
 }) {
-  const [currency, setCurrency] = useState("PLN"),
-    [month, setMonth] = useState(todayKey(user.timezone).slice(0, 7)),
-    [data, setData] = useState<Record<string, unknown> | null>(null),
-    [error, setError] = useState("");
+  const currency = /^[A-Z]{3}$/.test(preferences.get('currency')??'') ? preferences.get('currency')! : 'PLN';
+  const month = /^[1-8]\d{3}-(0[1-9]|1[0-2])$/.test(preferences.get('month')??'') ? preferences.get('month')! : todayKey(user.timezone).slice(0,7);
+  const [data,setData] = useState<FinanceSnapshot|null>(null);
+  const [error,setError] = useState('');
+  const [reload,setReload] = useState(0);
   useEffect(() => {
-    const c = new AbortController();
-    setError("");
+    const controller = new AbortController();
     setData(null);
-    api<Record<string, unknown>>(
-      `/finance/overview?month=${month}&currency=${currency}`,
-      { signal: c.signal },
-    )
-      .then(setData)
-      .catch((e) => {
-        if (!c.signal.aborted) setError(errorMessage(e));
-      });
-    return () => c.abort();
-  }, [currency, month, revision]);
-  return (
-    <div className="finance-overview">
-      <div className="overview-controls">
-        <label>
-          Месяц
-          <input
-            type="month"
-            value={month}
-            required
-            onChange={(e) => {
-              if (e.target.value) setMonth(e.target.value);
-            }}
-          />
-        </label>
-        <label>
-          Валюта
-          <select
-            value={currency}
-            onChange={(e) => setCurrency(e.target.value)}
-          >
-            {["PLN", "EUR", "USD", "RUB", "UAH", "GBP"].map((c) => (
-              <option key={c}>{c}</option>
-            ))}
-          </select>
-        </label>
-      </div>
-      {error ? (
-        <p role="alert">{error}</p>
-      ) : (
-        data && (
-          <>
-            <div className="finance-totals">
-              {[
-                ["income", "Доходы"],
-                ["expense", "Расходы"],
-                ["balance", "Разница за месяц"],
-              ].map(([key, label]) => (
-                <div key={key}>
-                  <small>{label}</small>
-                  <strong>
-                    {amount(data[key])} <span>{currency}</span>
-                  </strong>
-                </div>
-              ))}
-            </div>
-            {data.net_worth!==undefined&&<p className="muted">Накопления с учётом долгов: <strong>{amount(data.net_worth)} {currency}</strong></p>}
-            {Array.isArray(data.budgets) && data.budgets.length > 0 && (
-              <div className="budget-bars">
-                {(data.budgets as Row[]).map((b) => (
-                  <div
-                    key={b.id}
-                    className={
-                      Number(b.percent) > 100
-                        ? "over"
-                        : Number(b.percent) > 80
-                          ? "near"
-                          : ""
-                    }
-                  >
-                    <Progress
-                      value={Number(b.percent)}
-                      label={text(b.category)}
-                    />
-                    <small>
-                      {amount(b.spent)} / {amount(b.amount)} {currency}
-                    </small>
-                  </div>
-                ))}
-              </div>
-            )}
-          </>
-        )
-      )}
-      <FinanceAnalysis key={month+currency} user={user} month={month} currency={currency} pro={isPro(user)} revision={revision}/>
+    setError('');
+    api<FinanceSnapshot>(`/finance/overview?month=${month}&currency=${currency}`,{signal:controller.signal}).then(value => {
+      if (!controller.signal.aborted) setData(value);
+    }).catch(cause => {
+      if (!controller.signal.aborted) setError(errorMessage(cause));
+    });
+    return () => controller.abort();
+  }, [month,currency,revision,reload,user.id]);
+  const select = (name:string,value:string) => {
+    const next = new URLSearchParams({month,currency});
+    next.set(name,value);
+    onSelect(next);
+  };
+  const categories = [...(data?.categories??[])].sort((a,b) => Number(b.amount)-Number(a.amount));
+  const largest = Number(categories[0]?.amount??1);
+  return <section className="finance-overview" aria-label="Сводка финансов">
+    <div className="overview-controls">
+      <label>Месяц <input type="month" value={month} max={analysis?todayKey(user.timezone).slice(0,7):undefined}
+        onChange={event => {if (event.target.value) select('month',event.target.value);}}/></label>
+      <label>Валюта <select value={currency} onChange={event => select('currency',event.target.value)}>
+        {[...new Set(['PLN','EUR','USD','RUB','UAH','GBP',currency])].map(code => <option key={code}>{code}</option>)}
+      </select></label>
     </div>
-  );
+    {error ? <p className="product-error" role="alert">{error}<button className="text-button" onClick={() => setReload(value=>value+1)}>Повторить</button></p>
+      : !data ? <p className="product-loading" role="status">Загружаем сводку…</p>
+      : <>
+        <div className="finance-totals">
+          {([['expense','Расходы'],['income','Доходы'],['balance','Разница']] as const).map(([key,label]) => <div key={key}>
+            <small>{label}</small><strong>{amount(data[key])} <span>{currency}</span></strong>
+          </div>)}
+        </div>
+        {!!categories.length && <div className="hub-categories">
+          <h3>Расходы по категориям</h3>
+          {categories.map(({category,amount:total}) => <button key={category}
+            aria-pressed={!analysis ? preferences.get('category')===category : undefined}
+            onClick={() => onCategory(new URLSearchParams({month,currency,category,kind:'expense'}))}>
+            <span>{categoryLabels[category]??category}</span>
+            <span className="hub-category-bar"><i style={{width: Math.min(100,Number(total)/largest*100)+'%'}}/></span>
+            <strong>{amount(total)} {currency}</strong><ArrowRight size={15}/>
+          </button>)}
+        </div>}
+        {!!data.budgets?.length && <details className="hub-disclosure"><summary>Использование бюджетов</summary>
+          <div className="budget-bars">{data.budgets.map(b => <button key={b.id} className="hub-budget-link"
+            onClick={() => onCategory(new URLSearchParams({month,currency,category:text(b.category),kind:'expense'}))}>
+            <Progress value={Number(b.percent)} label={categoryLabels[text(b.category)]??text(b.category)}/>
+            <small>{amount(b.spent)} / {amount(b.amount)} {currency}</small>
+          </button>)}</div>
+        </details>}
+      </>}
+    {analysis && <FinanceAnalysis key={month+':'+currency} user={user} month={month} currency={currency} pro={isPro(user)} revision={revision}/>}
+  </section>;
 }
 export function RecordDetail({
   section: s,
   initial,
   user,
   onClose,
+  onEdit,
   notify,
 }: {
   section: Section;
   initial: Row;
   user: User;
   onClose: () => void;
+  onEdit?: () => void;
   notify: Notify;
 }) {
   const [item, setItem] = useState(initial),
@@ -175,7 +150,7 @@ export function RecordDetail({
     <Modal
       title={text(item.title) || s.singular}
       onClose={() => !busy && onClose()}
-      className="product-modal"
+      className="product-modal hub-detail-modal"
     >
       <div className="modal-body detail-body">
         {error && (
@@ -183,6 +158,19 @@ export function RecordDetail({
             {error}
           </p>
         )}
+        {!['diary','habits','goals','medications','savings','debts'].includes(s.key) && <dl className="hub-entry-facts">
+          {s.fields.filter(field => field.key!=='title' && item[field.key]!==null && item[field.key]!==undefined && item[field.key]!=='' && !Array.isArray(item[field.key])).map(field => {
+            const raw = item[field.key];
+            const value = field.key==='kg' ? amount(displayWeight(raw,user.weight_unit))+' '+weightLabel(user.weight_unit)
+              : field.type==='date' || field.type==='datetime-local' ? dateLabel(raw)
+              : field.options?.find(option => option[0]===text(raw))?.[1] ?? text(raw);
+            return <div key={field.key}><dt>{field.key==='kg'?'Вес':field.label}</dt><dd>{value}</dd></div>;
+          })}
+          {s.key==='programs' && <div><dt>Упражнения</dt><dd>{Array.isArray(item.exercises) ? item.exercises.map((exercise,index) => {
+            const row = exercise as Record<string,unknown>;
+            return <p key={index}>{text(row.name)}{row.sets ? ' · '+text(row.sets)+' подходов' : ''}{row.reps ? ' × '+text(row.reps) : ''}</p>;
+          }) : '—'}</dd></div>}
+        </dl>}
         {s.key === "diary" && (
           <>
             <span className="eyebrow">{dateLabel(item.day)}</span>
@@ -413,6 +401,7 @@ export function RecordDetail({
           </>
         )}
       </div>
+      {onEdit && <footer className="modal-footer"><button type="button" className="button primary" disabled={busy} onClick={onEdit}>Изменить запись</button></footer>}
     </Modal>
   );
 }

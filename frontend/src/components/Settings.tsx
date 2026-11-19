@@ -320,7 +320,7 @@ export function Settings({ user, onUserChange, onClose, onLogout, notify, initia
 
       <section className="settings-panel" id={`settings-panel-${tab}`} role="tabpanel" aria-labelledby={`settings-tab-${tab}`} tabIndex={0}>
         {tab === 'profile' && <>
-          <div className="settings-heading"><span className="settings-eyebrow">ВАШЕ ПРОСТРАНСТВО</span><h2>Личные данные</h2><p>Пусть Life Hub подстраивается под ваш ритм.</p></div>
+          <div className="settings-heading"><h2>Профиль и безопасность</h2></div>
           {demo && <div className="settings-demo-note"><Sparkles size={16} /><span>Вы в деморежиме. Изменения остаются в этом браузере.</span></div>}
           <form onSubmit={saveProfile} className="settings-profile-form" aria-busy={busy === 'profile'}>
             <div className="field"><label htmlFor="settings-name">Как вас называть</label><input className="input" id="settings-name" disabled={!!busy} value={name} onChange={event => setName(event.target.value)} autoComplete="name" maxLength={50} required placeholder="Ваше имя" /></div>
@@ -343,7 +343,7 @@ export function Settings({ user, onUserChange, onClose, onLogout, notify, initia
         </>}
 
         {tab === 'connections' && <>
-          <div className="settings-heading"><span className="settings-eyebrow">ВСЕ ПЛАНЫ В ОДНОМ МЕСТЕ</span><h2>Ваши календари</h2><p>Рабочие встречи и личные планы — в общем ритме.</p></div>
+          <div className="settings-heading"><h2>Подключения календарей</h2></div>
           {!hasPro && <div className="settings-pro-callout"><span className="settings-callout-icon"><Crown size={22} /></span><div><strong>Синхронизация доступна в Pro</strong><p>Подключите внешний календарь, чтобы события обновлялись автоматически.</p><button type="button" className="button primary" onClick={() => setTab('plan')}>{trialExpired ? 'Посмотреть мой план' : 'Попробовать Pro'}<ArrowRight size={16} /></button></div></div>}
           {errors.connections && <div className="settings-error-box" role="alert"><p>{errors.connections}</p>{hasPro && <button className="settings-text-button" type="button" onClick={() => void loadConnections()} disabled={connectionsLoading}>Обновить список</button>}</div>}
           {connectionsLoading && !connections.length ? <div className="settings-loading" role="status"><Loader2 size={19} className="settings-spin" />Загружаем календари…</div> : <>
@@ -358,7 +358,7 @@ export function Settings({ user, onUserChange, onClose, onLogout, notify, initia
         </>}
 
         {tab === 'plan' && <>
-          <div className="settings-heading"><span className="settings-eyebrow">БОЛЬШЕ МЕСТА ДЛЯ ВАШИХ ПЛАНОВ</span><h2>Ваш план</h2><p>Выберите ритм, который подходит именно вам.</p></div>
+          <div className="settings-heading"><h2>Ваш план</h2></div>
           <div className={`settings-plan-card ${hasPro ? 'settings-plan-pro' : ''}`}><div className="settings-plan-top"><span className="settings-plan-icon"><Crown size={25} /></span><span className="settings-plan-current"><CheckCircle2 size={14} />Текущий план</span></div><h3>{planName}</h3><p>{user.plan === 'pro' ? 'Все модули, полная история и расширенные возможности.' : trialActive ? 'Все возможности Pro открыты на время пробного периода.' : 'Всё необходимое, чтобы спокойно спланировать день.'}</p>{trialActive && <div className="settings-trial-progress"><div><Clock3 size={15} /><span>Осталось около {trialHours} ч</span></div><progress value={Math.min(trialHours, 72)} max={72} aria-label="Оставшееся время пробного периода" /><span>До {prettyDate(user.trial_ends, user.timezone)}</span></div>}{trialExpired && <p className="settings-trial-ended">Пробный период завершён. Ваши планы сохранены.</p>}</div>
           <div className="settings-feature-comparison"><div className="settings-feature-heading"><strong>Возможности Life Hub</strong><span>{hasPro ? 'Включено' : 'Free / Pro'}</span></div>{[
             ['Задачи, события и календарь', true], ['Список покупок', true], ['Повторяющиеся задачи и события', hasPro], ['Приоритеты и свои списки', hasPro], ['Google Calendar', hasPro], ['Все пять модулей', hasPro], ['Безлимитные привычки и цели', hasPro], ['Полная история здоровья', hasPro], ['Бюджеты, накопления и долги', hasPro], ['Статистика книг и поиск по дневнику', hasPro],
