@@ -1,3 +1,4 @@
+import { t, locale } from '../lib/language';
 import {BookCover,DiaryComposer,ReadingPanel} from './ReadingJournal';
 import {BudgetOverview} from './BudgetOverview';
 import {openWorkout,useActiveWorkout} from './WorkoutSession';
@@ -53,12 +54,12 @@ import {
   DiaryCalendar,
 } from "./Extras";
 const names: Record<string, string> = {
-  dashboard: "Главная",
-  planning: "Планирование",
-  goals_habits: "Цели и привычки",
-  health: "Здоровье",
-  finance: "Финансы",
-  books: "Книги и дневник",
+  dashboard: t("Главная"),
+  planning: t("Планирование"),
+  goals_habits: t("Цели и привычки"),
+  health: t("Здоровье"),
+  finance: t("Финансы"),
+  books: t("Книги и дневник"),
 };
 export const isPro = (user: User) =>
   user.plan === "pro" ||
@@ -72,7 +73,7 @@ export const dateLabel = (value: unknown) =>
   value
     ? new Date(
         text(value).length === 10 ? text(value) + "T12:00:00" : text(value),
-      ).toLocaleDateString("ru-RU", {
+      ).toLocaleDateString(locale, {
         day: "numeric",
         month: "short",
         year: "numeric",
@@ -107,12 +108,12 @@ export function Product({
   const financeOverview = module === 'finance' && tab === 'analysis';
   const section = sections[module]?.find(item => item.key === tab) ?? sections[module]?.[0];
   const tabs = [
-    ...(module === 'health' || module === 'finance' ? [{key:'overview',label:'Обзор',pro:false}] : []),
+    ...(module === 'health' || module === 'finance' ? [{key:'overview',label:t("Обзор"),pro:false}] : []),
     ...(sections[module] ?? []),
-    ...(module === 'finance' ? [{key:'analysis',label:'Аналитика',pro:true}] : []),
+    ...(module === 'finance' ? [{key:'analysis',label:t("Аналитика"),pro:true}] : []),
   ];
   const activeTab = (healthOverview||financeHome) ? 'overview' : financeOverview ? 'analysis' : section?.key;
-  const title = names[module] ?? (module === 'insights' ? 'Что видно вместе' : 'Страница недоступна');
+  const title = names[module] ?? (module === 'insights' ? t("Что видно вместе") : t("Страница недоступна"));
   useEffect(() => { document.title = title+' · LifeHub'; }, [title]);
   useEffect(()=>{
     const keydown=(event:KeyboardEvent)=>{
@@ -137,28 +138,28 @@ export function Product({
     <div className="app-layout">
       <Navigation user={user} path={path} navigate={navigate} onSettings={() => setSettings('profile')}/>
       <div className="app-main product-layout">
-        <a className="skip-link" href="#product-main">Перейти к содержимому</a>
-        <WorkspaceBar user={user} title={module==='dashboard'?'Сегодня':title}
+        <a className="skip-link" href="#product-main">{t("Перейти к содержимому")}</a>
+        <WorkspaceBar user={user} title={module==='dashboard'?t("Сегодня"):title}
           onHome={() => navigate('/home')} onProfile={() => setSettings('profile')}/>
         <main data-module={module} data-tab={activeTab} id="product-main" className={'product-main'+(module==='dashboard'?' hub-main-home':'')}>
           {module!=='dashboard' && (!section||!allowed||healthOverview||financeOverview||module==='goals_habits') && <header className="product-title"><div>
             <span className="life-page-eyebrow">{title}</span>
-            <h1>{healthOverview?'Обзор':financeOverview?'Аналитика':module==='goals_habits'?(tab==='goals'?'Цели':tab==='habits'?'Привычки':'Сегодня'):module==='insights'?'Связи между модулями':title}</h1>
-            {healthOverview&&<p className="life-page-subtitle">Сон, вес и движение за неделю</p>}
-            {module==='insights'&&<p className="life-page-subtitle">Наблюдения по вашим записям</p>}
-          </div>{healthOverview&&<button className="button primary" onClick={()=>openQuickAdd()}><Plus size={16}/>Записать</button>}</header>}
-          {isDemo() ? <EmptyState title="Откройте свой аккаунт" text="Войдите, чтобы сохранять записи в модулях." action="Перейти ко входу" onAction={onLogout}/>
+            <h1>{healthOverview?t("Обзор"):financeOverview?t("Аналитика"):module==='goals_habits'?(tab==='goals'?t("Цели"):tab==='habits'?t("Привычки"):t("Сегодня")):module==='insights'?t("Связи между модулями"):title}</h1>
+            {healthOverview&&<p className="life-page-subtitle">{t("Сон, вес и движение за неделю")}</p>}
+            {module==='insights'&&<p className="life-page-subtitle">{t("Наблюдения по вашим записям")}</p>}
+          </div>{healthOverview&&<button className="button primary" onClick={()=>openQuickAdd()}><Plus size={16}/>{t("Записать")}</button>}</header>}
+          {isDemo() ? <EmptyState title={t("Откройте свой аккаунт")} text={t("Войдите, чтобы сохранять записи в модулях.")} action={t("Перейти ко входу")} onAction={onLogout}/>
             : module === 'dashboard' ? <Dashboard key={user.id} user={user} navigate={navigate} notify={notify} onProfile={()=>setSettings('profile')}/>
             : module === 'insights' ? <CrossInsights user={user} pro={pro} navigate={navigate} view={tab}/>
             : !names[module] || (tab && !tabs.some(item => item.key === tab) && module !== 'goals_habits') ?
-              <EmptyState title="Такой страницы нет" text="Вернитесь на главную или выберите модуль в меню." action="На главную" onAction={() => navigate('/home')}/>
+              <EmptyState title={t("Такой страницы нет")} text={t("Вернитесь на главную или выберите модуль в меню.")} action={t("На главную")} onAction={() => navigate('/home')}/>
             : !allowed ? <Locked onPlan={() => setSettings('plan')} module/>
             : module === 'goals_habits' ? <>
-              <nav className="product-tabs" aria-label="Разделы целей и привычек">{[['','Сегодня'],['habits','Привычки'],['goals','Цели'],['stats','Статистика']].map(([key,label])=><button key={key} className={(tab??'')===key?'active':''} onClick={()=>navigate(modulePath+(key?'/'+key:''))}>{label}</button>)}</nav>
+              <nav className="product-tabs" aria-label={t("Разделы целей и привычек")}>{[['',t("Сегодня")],['habits',t("Привычки")],['goals',t("Цели")],['stats',t("Статистика")]].map(([key,label])=><button key={key} className={(tab??'')===key?'active':''} onClick={()=>navigate(modulePath+(key?'/'+key:''))}>{label}</button>)}</nav>
               <GoalsHabits user={user} notify={notify} view={tab} create={new URLSearchParams(search).get('new')}/>
             </>
             : <>
-              <nav className="product-tabs" aria-label="Подразделы">
+              <nav className="product-tabs" aria-label={t("Подразделы")}>
                 {tabs.map(item => <button key={item.key} aria-current={item.key===activeTab?'page':undefined}
                   className={item.key===activeTab?'active':''} onClick={() => navigate(modulePath+'/'+item.key+(module==='finance'&&search?'?'+search:''))}>
                   {item.label}{item.pro&&!pro&&<Crown size={13}/>}
@@ -199,15 +200,15 @@ function Locked({
       icon={<Crown size={28} />}
       title={
         module
-          ? "Этот модуль не входит в ваш выбор Free"
-          : "Возможность Life Hub Pro"
+          ? t("Этот модуль не входит в ваш выбор Free")
+          : t("Возможность Life Hub Pro")
       }
       text={
         module
-          ? "Остальные выбранные вами модули доступны в меню."
-          : "Сохраняйте больше деталей и смотрите полную историю."
+          ? t("Остальные выбранные вами модули доступны в меню.")
+          : t("Сохраняйте больше деталей и смотрите полную историю.")
       }
-      action="Посмотреть возможности"
+      action={t("Посмотреть возможности")}
       onAction={onPlan}
     />
   );
@@ -359,18 +360,18 @@ function Records({
   return (
     <section className={'product-section life-section-'+s.key}>
       <div className="section-toolbar life-record-heading">
-        <div><span className="life-page-eyebrow">{route.includes('/health/')?'Здоровье':route.includes('/finance/')?'Финансы':'Книги и дневник'}</span>
+        <div><span className="life-page-eyebrow">{route.includes('/health/')?t("Здоровье"):route.includes('/finance/')?t("Финансы"):t("Книги и дневник")}</span>
           {financeHome?<div className="life-finance-month">
-            <button className="icon-button" aria-label="Предыдущий месяц" onClick={()=>navigate('/modules/finance?'+new URLSearchParams({month:shiftMonth(month+'-01',-1).slice(0,7),currency}))}>‹</button>
+            <button className="icon-button" aria-label={t("Предыдущий месяц")} onClick={()=>navigate('/modules/finance?'+new URLSearchParams({month:shiftMonth(month+'-01',-1).slice(0,7),currency}))}>‹</button>
             <h1>{dayLabel(month+'-01',{month:'long',year:'numeric'}).replace(' г.','')}</h1>
-            <button className="icon-button" aria-label="Следующий месяц" onClick={()=>navigate('/modules/finance?'+new URLSearchParams({month:shiftMonth(month+'-01',1).slice(0,7),currency}))}>›</button>
+            <button className="icon-button" aria-label={t("Следующий месяц")} onClick={()=>navigate('/modules/finance?'+new URLSearchParams({month:shiftMonth(month+'-01',1).slice(0,7),currency}))}>›</button>
           </div>:<h1>{s.label}</h1>}
         </div>
         <div className="product-actions">
           <button
             className="icon-button"
             disabled={data.busy}
-            aria-label="Обновить"
+            aria-label={t("Обновить")}
             onClick={() => void data.load()}
           >
             <RefreshCw size={18} className={data.busy ? "spinner" : ""} />
@@ -381,19 +382,19 @@ function Records({
               onClick={() => setCatalog(true)}
             >
               <Search size={16} />
-              Найти книгу
+              {t("Найти книгу")}
             </button>
           )}
           {s.key === "goals" && (
             <button className="button secondary" onClick={() => setSmart(true)}>
-              Помочь сформулировать
+              {t("Помочь сформулировать")}
             </button>
           )}
-          {s.key==='transactions' && <button className="button secondary" onClick={() => setImportOpen(true)}>Импорт выписки</button>}
+          {s.key==='transactions' && <button className="button secondary" onClick={() => setImportOpen(true)}>{t("Импорт выписки")}</button>}
           <button className="button primary" onClick={() => setEditor(s.key==='transactions'?{currency}:s.key==='budgets'?{month,currency}:s.key==='diary'&&filterDay?{day:filterDay}:{})}>
-            <Plus size={17}/>{({workouts:'Записать вручную',sleep:'Записать сон',weight:'Записать вес',diary:'Написать',transactions:'Добавить операцию',books:'Добавить книгу',nutrition:'Добавить приём пищи'} as Record<string,string>)[s.key]??'Добавить'}
+            <Plus size={17}/>{({workouts:t("Записать вручную"),sleep:t("Записать сон"),weight:t("Записать вес"),diary:t("Написать"),transactions:t("Добавить операцию"),books:t("Добавить книгу"),nutrition:t("Добавить приём пищи")} as Record<string,string>)[s.key]??t("Добавить")}
           </button>
-          {s.key==='workouts'&&<button className="button primary life-brown-button" onClick={()=>openWorkout()}>{activeWorkout?'Продолжить тренировку':'Начать тренировку'}</button>}
+          {s.key==='workouts'&&<button className="button primary life-brown-button" onClick={()=>openWorkout()}>{activeWorkout?t("Продолжить тренировку"):t("Начать тренировку")}</button>}
         </div>
       </div>
       {["sleep", "weight"].includes(s.key) && (
@@ -411,33 +412,33 @@ function Records({
         <NutritionBalance user={user} revision={data.rows} />
       )}
       {s.key==="books"&&<ReadingPanel user={user} rows={data.rows} pro={pro} notify={notify} onOpen={showDetail} onEdit={setEditor} onSaved={()=>void data.load()}/>}
-      {s.key === "books" && pro && <details className="hub-disclosure"><summary>Статистика чтения</summary><BookStats revision={data.rows}/></details>}
-      {s.key==="books"&&<div className="life-shelf-head"><h2>{bookStatus==='reading'?'Читаю':bookStatus==='read'?'Прочитано':'Хочу прочитать'}</h2>
-        <div className="segmented" aria-label="Полки">{[['want','Хочу'],['reading','Читаю'],['read','Прочитано']].map(([key,label])=><button key={key} type="button" aria-pressed={bookStatus===key} className={bookStatus===key?'selected':''} onClick={()=>setBookStatus(key)}>{label}</button>)}</div></div>}
+      {s.key === "books" && pro && <details className="hub-disclosure"><summary>{t("Статистика чтения")}</summary><BookStats revision={data.rows}/></details>}
+      {s.key==="books"&&<div className="life-shelf-head"><h2>{bookStatus==='reading'?t("Читаю"):bookStatus==='read'?t("Прочитано"):t("Хочу прочитать")}</h2>
+        <div className="segmented" aria-label={t("Полки")}>{[['want',t("Хочу")],['reading',t("Читаю")],['read',t("Прочитано")]].map(([key,label])=><button key={key} type="button" aria-pressed={bookStatus===key} className={bookStatus===key?'selected':''} onClick={()=>setBookStatus(key)}>{label}</button>)}</div></div>}
       {s.key==="diary"&&<DiaryComposer user={user} day={filterDay||day} notify={notify} onSaved={()=>void data.load()}/>}
       {s.key==="diary"&&<aside className="life-diary-aside">
         <DiaryCalendar selected={filterDay} onSelect={setFilterDay} user={user} revision={data.rows}/>
-        <details className="hub-disclosure life-diary-review"><summary>Недельный обзор с ИИ</summary><DiaryReview user={user} pro={pro} revision={data.rows} onSource={setFilterDay}/></details>
-        {filterDay&&<button className="button secondary" onClick={()=>setFilterDay('')}>Показать все дни</button>}
+        <details className="hub-disclosure life-diary-review"><summary>{t("Недельный обзор с ИИ")}</summary><DiaryReview user={user} pro={pro} revision={data.rows} onSource={setFilterDay}/></details>
+        {filterDay&&<button className="button secondary" onClick={()=>setFilterDay('')}>{t("Показать все дни")}</button>}
       </aside>}
       {s.key==='transactions' && <>
         <FinanceOverview user={user} revision={data.rows} preferences={financeFilter} home={financeHome} goto={navigate} onSelect={financeHome?p=>navigate('/modules/finance?'+p):saveFilter}
           onCategory={saveFilter}/>
-        <div className="hub-filter-row" aria-label="Фильтры операций">
+        <div className="hub-filter-row" aria-label={t("Фильтры операций")}>
           <form onSubmit={event=>{event.preventDefault();const next=new URLSearchParams(financeFilter);if(query.trim())next.set('q',query.trim());else next.delete('q');saveFilter(next);}}>
-            <input aria-label="Поиск операций" value={query} onChange={event=>setQuery(event.target.value)} maxLength={120} placeholder="Название или категория"/>
-            <button className="button secondary" type="submit"><Search size={15}/>Найти</button>
+            <input aria-label={t("Поиск операций")} value={query} onChange={event=>setQuery(event.target.value)} maxLength={120} placeholder={t("Название или категория")}/>
+            <button className="button secondary" type="submit"><Search size={15}/>{t("Найти")}</button>
           </form>
-          <label>Тип<select value={params.get('kind')??''} onChange={event => {
+          <label>{t("Тип")}<select value={params.get('kind')??''} onChange={event => {
             const next = new URLSearchParams(financeFilter);
             if (event.target.value) next.set('kind',event.target.value); else next.delete('kind');
             saveFilter(next);
-          }}><option value="">Все операции</option><option value="expense">Расходы</option><option value="income">Доходы</option></select></label>
+          }}><option value="">{t("Все операции")}</option><option value="expense">{t("Расходы")}</option><option value="income">{t("Доходы")}</option></select></label>
           {params.get('category') && <button className="button secondary" onClick={() => {
             const next = new URLSearchParams(financeFilter);
             next.delete('category');
             saveFilter(next);
-          }}>Снять фильтр «{params.get('category')}»</button>}
+          }}>{t("Снять фильтр «")}{params.get('category')}»</button>}
         </div>
         {importOpen && <CsvImportDialog onClose={() => setImportOpen(false)} modulesAllowed={canImport} missingPlanning={!hasPlanning}/>}
       </>}
@@ -452,14 +453,14 @@ function Records({
         >
           <Search size={18} />
           <input
-            aria-label="Поиск в дневнике"
-            placeholder="Найти мысль или событие…"
+            aria-label={t("Поиск в дневнике")}
+            placeholder={t("Найти мысль или событие…")}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             maxLength={200}
           />
           <button className="button secondary" type="submit">
-            Найти
+            {t("Найти")}
           </button>
           {searched && (
             <button
@@ -470,7 +471,7 @@ function Records({
                 setSearched("");
               }}
             >
-              Сбросить
+              {t("Сбросить")}
             </button>
           )}
         </form>
@@ -479,22 +480,22 @@ function Records({
         <div role="alert" className="product-error">
           {data.error}
           <button className="text-button" onClick={() => void data.load()}>
-            Повторить
+            {t("Повторить")}
           </button>
         </div>
       )}
       {data.loading ? (
         <div className="product-loading" role="status">
           <LoaderCircle size={24} className="spinner" />
-          Загружаем записи…
+          {t("Загружаем записи…")}
         </div>
       ) : data.rows.length === 0 ? (
         <EmptyState
           title={
-            searched ? "Ничего не найдено" : "Здесь начинается ваша история"
+            searched ? t("Ничего не найдено") : t("Здесь начинается ваша история")
           }
-          text={searched ? "Попробуйте другое слово." : s.description}
-          action={searched ? undefined : "Добавить первую запись"}
+          text={searched ? t("Попробуйте другое слово.") : s.description}
+          action={searched ? undefined : t("Добавить первую запись")}
           onAction={() => setEditor({})}
         />
       ) : (
@@ -506,23 +507,23 @@ function Records({
                 <div>
                   <button
                     className="icon-button"
-                    aria-label={`Изменить ${text(row.title) || s.singular}`}
+                    aria-label={t("Изменить {0}", text(row.title) || s.singular)}
                     onClick={() => setEditor(row)}
                   >
                     <Pencil size={16} />
                   </button>
                   <button
                     className="icon-button"
-                    aria-label={`Удалить ${text(row.title) || s.singular}`}
+                    aria-label={t("Удалить {0}", text(row.title) || s.singular)}
                     onClick={() => setDeleting(row)}
                   >
                     <Trash2 size={16} />
                   </button>
                 </div>
               </div>
-              {s.key==='books'&&<button className="life-shelf-cover" onClick={()=>showDetail(row)} aria-label={'Открыть '+row.title}><BookCover book={row}/></button>}
+              {s.key==='books'&&<button className="life-shelf-cover" onClick={()=>showDetail(row)} aria-label={t("Открыть ")+row.title}><BookCover book={row}/></button>}
               <RecordContent section={s} row={row} user={user} />
-              {s.key==='programs'&&<button className="button secondary" onClick={()=>openWorkout(row)}>Начать</button>}
+              {s.key==='programs'&&<button className="button secondary" onClick={()=>openWorkout(row)}>{t("Начать")}</button>}
               {s.key==='diary'&&Array.isArray(row.tags)&&row.tags.length>0&&<div className="life-diary-tags">{row.tags.map((tag,index)=><button key={index} disabled={!pro} onClick={()=>{setQuery(String(tag));setSearched(String(tag));}}>{String(tag)}</button>)}</div>}
               {s.key === "habits" && (
                 <button
@@ -547,7 +548,7 @@ function Records({
                     }
                   }}
                 >
-                  {row.archived ? "Вернуть из архива" : "В архив"}
+                  {row.archived ? t("Вернуть из архива") : t("В архив")}
                 </button>
               )}
               <div className="record-bottom">
@@ -569,13 +570,13 @@ function Records({
                       ) : (
                         <Plus size={16} />
                       )}{" "}
-                      {row.today_complete ? "Выполнено" : "Отметить сегодня"}
+                      {row.today_complete ? t("Выполнено") : t("Отметить сегодня")}
                     </button>
                     <button
                       className="text-button"
                       onClick={() => showDetail(row)}
                     >
-                      История
+                      {t("История")}
                       <ChevronRight size={14} />
                     </button>
                   </>
@@ -587,12 +588,12 @@ function Records({
                     onClick={() => showDetail(row)}
                   >
                     {s.key === "goals"
-                      ? "Открыть цель"
+                      ? t("Открыть цель")
                       : s.key === "debts"
-                        ? "Погашения"
+                        ? t("Погашения")
                         : s.key === "savings"
-                          ? "История баланса"
-                          : "Отметки приёма"}
+                          ? t("История баланса")
+                          : t("Отметки приёма")}
                     <ArrowRight size={15} />
                   </button>
                 ) : s.key === "diary" ? (
@@ -600,10 +601,10 @@ function Records({
                     className="text-button"
                     onClick={() => showDetail(row)}
                   >
-                    Читать запись
+                    {t("Читать запись")}
                     <ArrowRight size={15} />
                   </button>
-                ) : <button className="text-button" onClick={() => showDetail(row)}>Открыть<ArrowRight size={15}/></button>}
+                ) : <button className="text-button" onClick={() => showDetail(row)}>{t("Открыть")}<ArrowRight size={15}/></button>}
               </div>
             </article>
           ))}
@@ -615,7 +616,7 @@ function Records({
           disabled={data.busy}
           onClick={() => void data.load(data.rows.length)}
         >
-          Показать ещё
+          {t("Показать ещё")}
         </button>
       )}
       {smart && (
@@ -642,15 +643,15 @@ function Records({
               },
             });
             await data.load();
-            notify("Запись сохранена");
+            notify(t("Запись сохранена"));
             setEditor(null);
           }}
         />
       )}
       {deleting && (
         <ConfirmDialog
-          title="Удалить запись?"
-          description="Запись исчезнет из этого раздела. Остальные записи останутся на месте."
+          title={t("Удалить запись?")}
+          description={t("Запись исчезнет из этого раздела. Остальные записи останутся на месте.")}
           onClose={() => setDeleting(null)}
           onConfirm={async () => {
             await api(
@@ -658,7 +659,7 @@ function Records({
               { method: "DELETE" },
             );
             await data.load();
-            notify("Запись удалена");
+            notify(t("Запись удалена"));
           }}
         />
       )}
@@ -688,7 +689,7 @@ function subtitle(s: Section, r: Row) {
   if (r.day) return dateLabel(r.day);
   if (r.month) return text(r.month);
   if (r.next_payment)
-    return "Платёж " + dateLabel(r.next_due || r.next_payment);
+    return t("Платёж ") + dateLabel(r.next_due || r.next_payment);
   if (r.status)
     return (
       s.fields
@@ -698,9 +699,9 @@ function subtitle(s: Section, r: Row) {
   if (s.key === "sleep") return dateLabel(r.end_at);
   if (s.key === "habits")
     return r.archived
-      ? "В архиве"
+      ? t("В архиве")
       : (r.weekdays as number[])
-          .map((x) => ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"][x])
+          .map((x) => [t("Пн"), t("Вт"), t("Ср"), t("Чт"), t("Пт"), t("Сб"), t("Вс")][x])
           .join(" · ");
   return s.singular;
 }
@@ -740,9 +741,9 @@ function RecordContent({
               ? amount(
                   (Date.parse(text(r.end_at)) - Date.parse(text(r.start_at))) /
                     3600000,
-                ) + " ч сна"
+                ) + t(" ч сна")
               : s.key === "diary"
-                ? "Мысли дня"
+                ? t("Мысли дня")
                 : text(r.category))}
       </h3>
       {!!r.author && <p className="muted">{text(r.author)}</p>}
@@ -751,14 +752,14 @@ function RecordContent({
       )}
       {s.key === "goals" && (
         <>
-          <Progress value={Number(r.progress)} label="Прогресс цели" />
-          {!!r.due_date && <small>До {dateLabel(r.due_date)}</small>}
+          <Progress value={Number(r.progress)} label={t("Прогресс цели")} />
+          {!!r.due_date && <small>{t("До")} {dateLabel(r.due_date)}</small>}
         </>
       )}
       {s.key === "habits" && (
         <p className="record-metric">
           {amount(r.today_value)} / {amount(r.target)}{" "}
-          <small>{text(r.unit) || "за сегодня"}</small>
+          <small>{text(r.unit) || t("за сегодня")}</small>
         </p>
       )}
       {s.key === "programs" && (
@@ -773,26 +774,25 @@ function RecordContent({
           ).map((e, i) => (
             <p key={i}>
               {e.name} · {e.sets} × {e.reps}
-              {e.kg !== null ? " · " + e.kg + " кг" : ""}
+              {e.kg !== null ? " · " + e.kg + t(" кг") : ""}
             </p>
           ))}
         </div>
       )}
       {s.key === "workouts" && (
         <p className="record-metric">
-          {amount(r.minutes)} <small>минут</small>
+          {amount(r.minutes)} <small>{t("минут")}</small>
         </p>
       )}
       {s.key === "sleep" && (
-        <p className="muted">Качество {text(r.quality)} из 5</p>
+        <p className="muted">{t("Качество")} {text(r.quality)} {t("из 5")}</p>
       )}
       {s.key === "nutrition" && (
         <>
           <p className="record-metric">
-            {amount(r.calories)} <small>ккал</small>
+            {amount(r.calories)} <small>{t("ккал")}</small>
           </p>
-          <p className="muted">
-            Б {amount(r.protein)} · Ж {amount(r.fat)} · У {amount(r.carbs)}
+          <p className="muted">{t("Б")} {amount(r.protein)} {t("· Ж")} {amount(r.fat)} {t("· У")} {amount(r.carbs)}
           </p>
         </>
       )}
@@ -812,16 +812,16 @@ function RecordContent({
         <>
           <Progress
             value={(Number(r.saved) / Number(r.target)) * 100}
-            label="Накоплено"
+            label={t("Накоплено")}
           />
           <p>
             {amount(r.saved)} / {amount(r.target)} {text(r.currency)}
           </p>
-          <small>До {dateLabel(r.due_date)}</small>
+          <small>{t("До")} {dateLabel(r.due_date)}</small>
           {r.monthly_needed !== undefined && (
             <p className="muted">
-              Откладывать примерно {amount(r.monthly_needed)} {text(r.currency)}{" "}
-              / мес.
+              {t("Откладывать примерно")} {amount(r.monthly_needed)} {text(r.currency)}{" "}
+              {t("/ мес.")}
             </p>
           )}
         </>
@@ -834,10 +834,10 @@ function RecordContent({
                 ? (Number(r.current_page) / Number(r.total_pages)) * 100
                 : 0
             }
-            label={`${text(r.current_page)} / ${r.total_pages || "?"} страниц`}
+            label={t("{0} / {1} страниц", text(r.current_page), r.total_pages || "?")}
           />
           {!!r.rating && (
-            <p aria-label={`Оценка ${r.rating} из 5`}>
+            <p aria-label={t("Оценка {0} из 5", r.rating)}>
               {"★".repeat(Number(r.rating))}
               {"☆".repeat(5 - Number(r.rating))}
             </p>
@@ -871,14 +871,14 @@ export function RecordEditor({
       s.key === "weight" && f.key === "kg"
         ? {
             ...f,
-            label: "Вес, " + weightLabel(user.weight_unit),
+            label: t("Вес, ") + weightLabel(user.weight_unit),
             max: displayWeight(1000, user.weight_unit),
           }
         : f.key === "category" && isPro(user)
           ? {
               ...f,
               type: "text" as const,
-              hint: "Еда, транспорт, дом — или своя категория.",
+              hint: t("Еда, транспорт, дом — или своя категория."),
             }
           : f,
     ),
@@ -886,7 +886,7 @@ export function RecordEditor({
       ? [
           {
             key: "notes",
-            label: "Заметки о книге",
+            label: t("Заметки о книге"),
             type: "textarea" as const,
             optional: true,
           },
@@ -920,7 +920,7 @@ export function RecordEditor({
   const [changed, setChanged] = useState(false);
   const close = () => {
     if (busy) return;
-    if (s.key !== "diary" || !changed || window.confirm("Закрыть запись без сохранения?")) onClose();
+    if (s.key !== "diary" || !changed || window.confirm(t("Закрыть запись без сохранения?"))) onClose();
   };
   const renderField = (f: (typeof fields)[number]) => (
     <FieldControl key={f.key} field={f} value={values[f.key]} onChange={(v) => {
@@ -931,7 +931,7 @@ export function RecordEditor({
   const notes = fields.find(field => field.key === "notes" && field.optional);
   return (
     <Modal
-      title={`${initial.id ? "Изменить" : "Добавить"} · ${s.singular.toLowerCase()}`}
+      title={`${initial.id ? t("Изменить") : t("Добавить")} · ${s.singular.toLowerCase()}`}
       onClose={close}
       className={`product-modal hub-record-editor${s.key === "diary" ? " diary-editor" : ""}`}
     >
@@ -972,10 +972,10 @@ export function RecordEditor({
             disabled={busy}
             onClick={close}
           >
-            Отмена
+            {t("Отмена")}
           </button>
           <button className="button primary" disabled={busy}>
-            {busy && <LoaderCircle size={16} className="spinner" />}Сохранить
+            {busy && <LoaderCircle size={16} className="spinner" />}{t("Сохранить")}
           </button>
         </footer>
       </form>
@@ -1004,17 +1004,16 @@ function FieldControl({
         <legend>{f.label}</legend>
         <datalist id="exercise-catalog">
           {exerciseNames.map((name) => (
-            <option key={name} value={name} />
+            <option key={name} value={t(name)} />
           ))}
         </datalist>
         <small>
-          Выберите название из справочника или введите своё. Подходы и нагрузку
-          задайте по своей программе.
+          {t("Выберите название из справочника или введите своё. Подходы и нагрузку задайте по своей программе.")}
         </small>
         {items.map((item, i) => (
           <div key={i}>
             <label>
-              Упражнение {i + 1}
+              {t("Упражнение")} {i + 1}
               <input
                 list="exercise-catalog"
                 required
@@ -1031,7 +1030,7 @@ function FieldControl({
             </label>
             {(["sets", "reps", "kg"] as const).map((key, n) => (
               <label key={key}>
-                {["Подходы", "Повторы", "Вес, кг"][n]}
+                {[t("Подходы"), t("Повторы"), t("Вес, кг")][n]}
                 <input
                   type="number"
                   required={key !== "kg"}
@@ -1061,7 +1060,7 @@ function FieldControl({
               className="icon-button"
               type="button"
               disabled={items.length === 1}
-              aria-label={"Убрать упражнение " + (i + 1)}
+              aria-label={t("Убрать упражнение ") + (i + 1)}
               onClick={() => onChange(items.filter((_, j) => j !== i))}
             >
               <Trash2 size={16} />
@@ -1076,7 +1075,7 @@ function FieldControl({
             onChange([...items, { name: "", sets: 3, reps: 10, kg: null }])
           }
         >
-          Добавить упражнение
+          {t("Добавить упражнение")}
         </button>
       </fieldset>
     );
@@ -1086,7 +1085,7 @@ function FieldControl({
       <fieldset className="product-field">
         <legend>{f.label}</legend>
         <div className="weekday-picker">
-          {["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"].map((name, i) => (
+          {[t("Пн"), t("Вт"), t("Ср"), t("Чт"), t("Пт"), t("Сб"), t("Вс")].map((name, i) => (
             <button
               key={i}
               type="button"
@@ -1112,7 +1111,7 @@ function FieldControl({
         <div className="time-picker">
           {(value as string[]).map((v, i) => (
             <label key={i}>
-              <span className="sr-only">Приём {i + 1}</span>
+              <span className="sr-only">{t("Приём")} {i + 1}</span>
               <input
                 type="time"
                 required
@@ -1129,7 +1128,7 @@ function FieldControl({
                 type="button"
                 className="icon-button"
                 disabled={(value as string[]).length === 1}
-                aria-label={`Убрать время ${v}`}
+                aria-label={t("Убрать время {0}", v)}
                 onClick={() =>
                   onChange((value as string[]).filter((_, j) => j !== i))
                 }
@@ -1145,7 +1144,7 @@ function FieldControl({
             className="text-button"
             onClick={() => onChange([...(value as string[]), "18:00"])}
           >
-            Добавить время
+            {t("Добавить время")}
           </button>
         )}
       </fieldset>
@@ -1154,7 +1153,7 @@ function FieldControl({
     <div className={`product-field ${f.type === "textarea" ? "full" : ""}`}>
       <label htmlFor={id}>
         {f.label}
-        {f.optional && <span> · необязательно</span>}
+        {f.optional && <span> {t("· необязательно")}</span>}
       </label>
       {f.type === "textarea" ? (
         <textarea
@@ -1194,7 +1193,7 @@ function FieldControl({
       {f.hint && <small>{f.hint}</small>}
       {f.type === "datetime-local" && (
         <small>
-          Часовой пояс устройства:{" "}
+          {t("Часовой пояс устройства:")}{" "}
           {Intl.DateTimeFormat().resolvedOptions().timeZone}
         </small>
       )}
@@ -1215,8 +1214,8 @@ function Catalog({
     [searched, setSearched] = useState(false);
   return (
     <Modal
-      title="Найти книгу"
-      description="Поиск по названию или автору в Open Library"
+      title={t("Найти книгу")}
+      description={t("Поиск по названию или автору в Open Library")}
       onClose={onClose}
     >
       <div className="modal-body">
@@ -1240,7 +1239,7 @@ function Catalog({
           }}
         >
           <input
-            aria-label="Название или автор"
+            aria-label={t("Название или автор")}
             required
             minLength={2}
             maxLength={200}
@@ -1253,7 +1252,7 @@ function Catalog({
             ) : (
               <Search size={16} />
             )}
-            Найти
+            {t("Найти")}
           </button>
         </form>
         {error && (
@@ -1275,8 +1274,7 @@ function Catalog({
         </div>
         {searched && !rows.length && (
           <p>
-            Книг не найдено. Попробуйте другое название или добавьте книгу
-            вручную.
+            {t("Книг не найдено. Попробуйте другое название или добавьте книгу вручную.")}
           </p>
         )}
       </div>

@@ -1,3 +1,4 @@
+import { t } from '../lib/language';
 import { useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { Bell, CalendarDays, CheckSquare, ChevronDown, Clock3, Crown, LoaderCircle, Repeat2 } from 'lucide-react';
@@ -8,8 +9,8 @@ import type { CalendarEvent, Priority, Task } from '../lib/types';
 import { Modal } from './ui';
 
 const recurrenceOptions = [
-  ['', 'Не повторять'], ['FREQ=DAILY', 'Каждый день'], ['FREQ=WEEKLY', 'Каждую неделю'],
-  ['FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR', 'По будням'], ['FREQ=MONTHLY', 'Каждый месяц'],
+  ['', t("Не повторять")], ['FREQ=DAILY', t("Каждый день")], ['FREQ=WEEKLY', t("Каждую неделю")],
+  ['FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR', t("По будням")], ['FREQ=MONTHLY', t("Каждый месяц")],
 ];
 
 type EntityKind = 'task' | 'event';
@@ -57,9 +58,9 @@ export function entityPayload(kind: EntityKind, item: Entity | undefined, fields
   const isTask = kind === 'task';
   const task = isTask ? item as Task | undefined : undefined;
   const zone = item?.timezone || timezone;
-  if (!fields.title.trim()) throw new Error('Добавьте название — так будет проще найти запись.');
+  if (!fields.title.trim()) throw new Error(t("Добавьте название — так будет проще найти запись."));
   if (!pro && (fields.rrule || isTask && fields.priority !== 'none')) {
-    throw new Error('Для сохранения на Free отключите повторение и приоритет или подключите Pro.');
+    throw new Error(t("Для сохранения на Free отключите повторение и приоритет или подключите Pro."));
   }
   const allDay = (fields.hasDate || fields.hasStart || !isTask) && fields.allDay;
   const at = fields.hasDate || !isTask
@@ -74,20 +75,20 @@ export function entityPayload(kind: EntityKind, item: Entity | undefined, fields
       ? timestamp(fields.startDate, allDay ? '00:00' : fields.startTime, zone, allDay, task?.start_at, item?.all_day) : null;
     body.priority = fields.priority;
     if (body.start_at && at && Date.parse(String(body.start_at)) > Date.parse(at)) {
-      throw new Error('Начало задачи не должно быть позже дедлайна.');
+      throw new Error(t("Начало задачи не должно быть позже дедлайна."));
     }
   } else {
     body.start_at = at;
     body.end_at = timestamp(allDay ? shiftDay(fields.endDate, 1) : fields.endDate, allDay ? '00:00' : fields.endTime,
       zone, allDay, (item as CalendarEvent | undefined)?.end_at, item?.all_day);
-    if (Date.parse(String(body.end_at)) <= Date.parse(String(at))) throw new Error('Окончание события должно быть позже начала.');
+    if (Date.parse(String(body.end_at)) <= Date.parse(String(at))) throw new Error(t("Окончание события должно быть позже начала."));
   }
-  if (fields.rrule && !at && !body.start_at) throw new Error('Для повторения нужна дата. Укажите начало или дедлайн.');
+  if (fields.rrule && !at && !body.start_at) throw new Error(t("Для повторения нужна дата. Укажите начало или дедлайн."));
   if (fields.reminder !== 'keep') {
-    if (fields.reminder !== 'none' && !at && !body.start_at) throw new Error('Добавьте дату, чтобы настроить напоминание.');
+    if (fields.reminder !== 'none' && !at && !body.start_at) throw new Error(t("Добавьте дату, чтобы настроить напоминание."));
     body.reminders = fields.reminder === 'none' ? [] : [{ offset_minutes: Number(fields.reminder), channel: 'email' }];
   } else if (isTask && !at && !body.start_at && task?.reminders.some(reminder => reminder.offset_minutes !== null)) {
-    throw new Error('Уберите текущее напоминание или оставьте дату начала / дедлайн.');
+    throw new Error(t("Уберите текущее напоминание или оставьте дату начала / дедлайн."));
   }
   return body;
 }
@@ -120,7 +121,7 @@ export function EntityEditor({ kind, item, day, initialTime, initialEndTime, tim
     try {
       body = entityPayload(kind, item, { title, notes, date, time, endDate, endTime, hasDate, allDay, priority, rrule, reminder, hasStart, startDate, startTime }, timezone, pro);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Проверьте заполненные поля.');
+      setError(cause instanceof Error ? cause.message : t("Проверьте заполненные поля."));
       return;
     }
     busyRef.current = true; setBusy(true);
@@ -129,27 +130,27 @@ export function EntityEditor({ kind, item, day, initialTime, initialEndTime, tim
       onSaved(); onClose();
     } catch (e) { setError(errorMessage(e)); } finally { busyRef.current = false; setBusy(false); }
   }
-  return <Modal title={readOnly ? 'Просмотр события' : item ? isTask ? 'Редактировать задачу' : 'Редактировать событие' : isTask ? 'Новая задача' : 'Новое событие'} description={item?.recurrence ? 'Изменения будут применены ко всей серии.' : 'Освободите голову — сохраните важное здесь.'} onClose={() => !busy && onClose()} className="entity-modal">
-    <form onSubmit={save} aria-busy={busy}><div className="modal-body editor-body" inert={busy}><div className={`entity-type ${isTask ? '' : 'event-type'}`}>{isTask ? <CheckSquare size={15} /> : <CalendarDays size={15} />}{isTask ? 'Задача' : 'Событие'}<span>Планирование</span></div>
-      <label className="field">Название<input className="input title-input" autoFocus required maxLength={300} value={title} onChange={e => setTitle(e.target.value)} disabled={readOnly} placeholder={isTask ? 'Что хотите сделать?' : 'Что запланировано?'} /></label>
-      <label className="field">Заметка <span className="optional">необязательно</span><textarea className="input" rows={3} maxLength={20000} value={notes} onChange={e => setNotes(e.target.value)} disabled={readOnly} placeholder="Детали, ссылки или пара мыслей…" /></label>
-      {isTask && <label className="switch-row"><span><CalendarDays size={17} />Добавить дедлайн</span><input type="checkbox" role="switch" checked={hasDate} onChange={e => setHasDate(e.target.checked)} /></label>}
-      {(hasDate || !isTask) && <><div className="form-grid"><label className="field">{isTask ? 'Дата' : 'Начало'}<input className="input" type="date" required value={date} disabled={readOnly} onChange={e => { setDate(e.target.value); if (!item && endDate < e.target.value) setEndDate(e.target.value); }} /></label>{!allDay && <label className="field">{isTask ? 'Время дедлайна' : 'Время начала'}<input className="input" type="time" required value={time} disabled={readOnly} onChange={e => setTime(e.target.value)} /></label>}</div>
-        {!isTask && <div className="form-grid"><label className="field">Окончание<input className="input" type="date" required min={date} value={endDate} disabled={readOnly} onChange={e => setEndDate(e.target.value)} /></label>{!allDay && <label className="field">Время окончания<input className="input" type="time" required value={endTime} disabled={readOnly} onChange={e => setEndTime(e.target.value)} /></label>}</div>}
+  return <Modal title={readOnly ? t("Просмотр события") : item ? isTask ? t("Редактировать задачу") : t("Редактировать событие") : isTask ? t("Новая задача") : t("Новое событие")} description={item?.recurrence ? t("Изменения будут применены ко всей серии.") : t("Освободите голову — сохраните важное здесь.")} onClose={() => !busy && onClose()} className="entity-modal">
+    <form onSubmit={save} aria-busy={busy}><div className="modal-body editor-body" inert={busy}><div className={`entity-type ${isTask ? '' : 'event-type'}`}>{isTask ? <CheckSquare size={15} /> : <CalendarDays size={15} />}{isTask ? t("Задача") : t("Событие")}<span>{t("Планирование")}</span></div>
+      <label className="field">{t("Название")}<input className="input title-input" autoFocus required maxLength={300} value={title} onChange={e => setTitle(e.target.value)} disabled={readOnly} placeholder={isTask ? t("Что хотите сделать?") : t("Что запланировано?")} /></label>
+      <label className="field">{t("Заметка")} <span className="optional">{t("необязательно")}</span><textarea className="input" rows={3} maxLength={20000} value={notes} onChange={e => setNotes(e.target.value)} disabled={readOnly} placeholder={t("Детали, ссылки или пара мыслей…")} /></label>
+      {isTask && <label className="switch-row"><span><CalendarDays size={17} />{t("Добавить дедлайн")}</span><input type="checkbox" role="switch" checked={hasDate} onChange={e => setHasDate(e.target.checked)} /></label>}
+      {(hasDate || !isTask) && <><div className="form-grid"><label className="field">{isTask ? t("Дата") : t("Начало")}<input className="input" type="date" required value={date} disabled={readOnly} onChange={e => { setDate(e.target.value); if (!item && endDate < e.target.value) setEndDate(e.target.value); }} /></label>{!allDay && <label className="field">{isTask ? t("Время дедлайна") : t("Время начала")}<input className="input" type="time" required value={time} disabled={readOnly} onChange={e => setTime(e.target.value)} /></label>}</div>
+        {!isTask && <div className="form-grid"><label className="field">{t("Окончание")}<input className="input" type="date" required min={date} value={endDate} disabled={readOnly} onChange={e => setEndDate(e.target.value)} /></label>{!allDay && <label className="field">{t("Время окончания")}<input className="input" type="time" required value={endTime} disabled={readOnly} onChange={e => setEndTime(e.target.value)} /></label>}</div>}
         </>}
-      {(hasDate || hasStart || !isTask) && <label className="switch-row"><span><Clock3 size={17} />Весь день</span><input type="checkbox" role="switch" checked={allDay} disabled={readOnly} onChange={e => setAllDay(e.target.checked)} /></label>}
-      <button type="button" className="editor-expand" onClick={() => setAdvanced(!advanced)} aria-expanded={advanced}><span>Дополнительные настройки</span><ChevronDown size={17} className={advanced ? 'rotate' : ''} /></button>
+      {(hasDate || hasStart || !isTask) && <label className="switch-row"><span><Clock3 size={17} />{t("Весь день")}</span><input type="checkbox" role="switch" checked={allDay} disabled={readOnly} onChange={e => setAllDay(e.target.checked)} /></label>}
+      <button type="button" className="editor-expand" onClick={() => setAdvanced(!advanced)} aria-expanded={advanced}><span>{t("Дополнительные настройки")}</span><ChevronDown size={17} className={advanced ? 'rotate' : ''} /></button>
       {advanced && <div className="advanced-fields">
-        {isTask && <label className="field">Приоритет {!pro && <span className="pro-label"><Crown size={12} />Pro</span>}<select className="input" value={priority} onChange={e => setPriority(e.target.value as Priority)} disabled={!pro && priority === 'none'}><option value="none">Без приоритета</option><option value="low" disabled={!pro}>Низкий</option><option value="medium" disabled={!pro}>Средний</option><option value="high" disabled={!pro}>Высокий</option></select></label>}
-        <label className="field"><span className="inline-icon"><Repeat2 size={15} />Повторение {!pro && <span className="pro-label"><Crown size={12} />Pro</span>}</span><select className="input" disabled={!pro && !rrule || readOnly} value={rrule} onChange={e => setRrule(e.target.value)}>{recurrenceOptions.map(([value, label]) => <option key={value} value={value} disabled={Boolean(value) && !pro}>{label}</option>)}{rrule && !recurrenceOptions.some(([r]) => r === rrule) && <option value={rrule} disabled={!pro}>{recurrenceLabel(rrule, zone)}</option>}</select></label>
-        {!pro && <button type="button" className="text-button" onClick={onUpgrade}>Посмотреть возможности Pro <Crown size={13} /></button>}
-        {isTask && <><label className="switch-row"><span>Запланировать начало</span><input type="checkbox" role="switch" checked={hasStart} onChange={e => setHasStart(e.target.checked)} /></label>{hasStart && <div className="form-grid"><label className="field">Дата начала<input className="input" type="date" value={startDate} required onChange={e => setStartDate(e.target.value)} /></label>{!allDay && <label className="field">Время начала<input className="input" type="time" value={startTime} required onChange={e => setStartTime(e.target.value)} /></label>}</div>}</>}
-        <label className="field"><span className="inline-icon"><Bell size={15} />Напоминание на почту</span><select className="input" disabled={readOnly} value={reminder} onChange={e => setReminder(e.target.value)}>{item && <option value="keep">Оставить текущие напоминания</option>}<option value="none">Без напоминания</option><option value="0">В момент начала / дедлайна</option><option value="5">За 5 минут</option><option value="15">За 15 минут</option><option value="30">За 30 минут</option><option value="60">За час</option><option value="1440">За день</option></select></label>
+        {isTask && <label className="field">{t("Приоритет")} {!pro && <span className="pro-label"><Crown size={12} />Pro</span>}<select className="input" value={priority} onChange={e => setPriority(e.target.value as Priority)} disabled={!pro && priority === 'none'}><option value="none">{t("Без приоритета")}</option><option value="low" disabled={!pro}>{t("Низкий")}</option><option value="medium" disabled={!pro}>{t("Средний")}</option><option value="high" disabled={!pro}>{t("Высокий")}</option></select></label>}
+        <label className="field"><span className="inline-icon"><Repeat2 size={15} />{t("Повторение")} {!pro && <span className="pro-label"><Crown size={12} />Pro</span>}</span><select className="input" disabled={!pro && !rrule || readOnly} value={rrule} onChange={e => setRrule(e.target.value)}>{recurrenceOptions.map(([value, label]) => <option key={value} value={value} disabled={Boolean(value) && !pro}>{label}</option>)}{rrule && !recurrenceOptions.some(([r]) => r === rrule) && <option value={rrule} disabled={!pro}>{recurrenceLabel(rrule, zone)}</option>}</select></label>
+        {!pro && <button type="button" className="text-button" onClick={onUpgrade}>{t("Посмотреть возможности Pro")} <Crown size={13} /></button>}
+        {isTask && <><label className="switch-row"><span>{t("Запланировать начало")}</span><input type="checkbox" role="switch" checked={hasStart} onChange={e => setHasStart(e.target.checked)} /></label>{hasStart && <div className="form-grid"><label className="field">{t("Дата начала")}<input className="input" type="date" value={startDate} required onChange={e => setStartDate(e.target.value)} /></label>{!allDay && <label className="field">{t("Время начала")}<input className="input" type="time" value={startTime} required onChange={e => setStartTime(e.target.value)} /></label>}</div>}</>}
+        <label className="field"><span className="inline-icon"><Bell size={15} />{t("Напоминание на почту")}</span><select className="input" disabled={readOnly} value={reminder} onChange={e => setReminder(e.target.value)}>{item && <option value="keep">{t("Оставить текущие напоминания")}</option>}<option value="none">{t("Без напоминания")}</option><option value="0">{t("В момент начала / дедлайна")}</option><option value="5">{t("За 5 минут")}</option><option value="15">{t("За 15 минут")}</option><option value="30">{t("За 30 минут")}</option><option value="60">{t("За час")}</option><option value="1440">{t("За день")}</option></select></label>
       </div>}
-      <p className="timezone-note"><Clock3 size={12} />Часовой пояс: {zone.replaceAll('_', ' ')}</p>
-      {premiumBlocked && !readOnly && <div className="notice"><p>Для редактирования на Free отключите повторение и приоритет. С Pro их можно сохранить.</p><button type="button" className="button secondary small" onClick={() => { setRrule(''); setPriority('none'); setError(''); }}>Убрать функции Pro</button><button type="button" className="text-button" onClick={onUpgrade}>Посмотреть Pro <Crown size={13} /></button></div>}
-      {readOnly && <p className="notice">Это событие доступно только для чтения. Измените его в исходном календаре.</p>}
+      <p className="timezone-note"><Clock3 size={12} />{t("Часовой пояс:")} {zone.replaceAll('_', ' ')}</p>
+      {premiumBlocked && !readOnly && <div className="notice"><p>{t("Для редактирования на Free отключите повторение и приоритет. С Pro их можно сохранить.")}</p><button type="button" className="button secondary small" onClick={() => { setRrule(''); setPriority('none'); setError(''); }}>{t("Убрать функции Pro")}</button><button type="button" className="text-button" onClick={onUpgrade}>{t("Посмотреть Pro")} <Crown size={13} /></button></div>}
+      {readOnly && <p className="notice">{t("Это событие доступно только для чтения. Измените его в исходном календаре.")}</p>}
       {error && <p className="field-error" role="alert">{error}</p>}
-    </div><footer className="modal-footer"><button className="button secondary" type="button" onClick={onClose} disabled={busy}>Отмена</button>{!readOnly && <button className="button primary" type="submit" disabled={busy || premiumBlocked}>{busy && <LoaderCircle className="spinner" size={16} />}{item ? 'Сохранить изменения' : isTask ? 'Создать задачу' : 'Создать событие'}</button>}</footer></form>
+    </div><footer className="modal-footer"><button className="button secondary" type="button" onClick={onClose} disabled={busy}>{t("Отмена")}</button>{!readOnly && <button className="button primary" type="submit" disabled={busy || premiumBlocked}>{busy && <LoaderCircle className="spinner" size={16} />}{item ? t("Сохранить изменения") : isTask ? t("Создать задачу") : t("Создать событие")}</button>}</footer></form>
   </Modal>;
 }

@@ -1,3 +1,4 @@
+import { t } from '../lib/language';
 import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { createPortal } from 'react-dom';
@@ -17,13 +18,13 @@ export function Modal({ title, description, onClose, children, className = '' }:
     return () => { dialog?.close(); document.body.style.overflow = previous; active?.focus(); };
   }, []);
   return createPortal(<dialog className={`modal ${className}`} ref={ref} onCancel={event => { event.preventDefault(); onClose(); }} onClick={event => { if (event.target === event.currentTarget) { const r = event.currentTarget.getBoundingClientRect(); if (event.clientX < r.left || event.clientX > r.right || event.clientY < r.top || event.clientY > r.bottom) onClose(); } }} aria-label={title}>
-    <div className="modal-shell"><header className="modal-heading"><div><h2>{title}</h2>{description && <p>{description}</p>}</div><button className="icon-button" onClick={onClose} aria-label="Закрыть окно"><X size={20} /></button></header>{children}</div>
+    <div className="modal-shell"><header className="modal-heading"><div><h2>{title}</h2>{description && <p>{description}</p>}</div><button className="icon-button" onClick={onClose} aria-label={t("Закрыть окно")}><X size={20} /></button></header>{children}</div>
   </dialog>, document.body);
 }
 
-export function ConfirmDialog({ title, description, onClose, onConfirm, confirmLabel = 'Удалить' }: { title: string; description: string; onClose: () => void; onConfirm: () => Promise<void>; confirmLabel?: string }) {
+export function ConfirmDialog({ title, description, onClose, onConfirm, confirmLabel = t("Удалить") }: { title: string; description: string; onClose: () => void; onConfirm: () => Promise<void>; confirmLabel?: string }) {
   const [busy, setBusy] = useState(false), [error, setError] = useState('');
-  return <Modal title={title} onClose={() => !busy && onClose()} className="confirm-modal"><div className="modal-body"><div className="confirm-symbol"><CircleAlert size={24} /></div><p>{description}</p>{error && <p className="field-error" role="alert">{error}</p>}</div><footer className="modal-footer"><button className="button secondary" disabled={busy} onClick={onClose}>Отмена</button><button className="button danger" disabled={busy} onClick={async () => { setBusy(true); try { await onConfirm(); onClose(); } catch (e) { setError(e instanceof Error ? e.message : 'Не удалось выполнить действие'); } finally { setBusy(false); } }}>{busy ? <LoaderCircle className="spinner" size={16} /> : null}{confirmLabel}</button></footer></Modal>;
+  return <Modal title={title} onClose={() => !busy && onClose()} className="confirm-modal"><div className="modal-body"><div className="confirm-symbol"><CircleAlert size={24} /></div><p>{description}</p>{error && <p className="field-error" role="alert">{error}</p>}</div><footer className="modal-footer"><button className="button secondary" disabled={busy} onClick={onClose}>{t("Отмена")}</button><button className="button danger" disabled={busy} onClick={async () => { setBusy(true); try { await onConfirm(); onClose(); } catch (e) { setError(e instanceof Error ? e.message : t("Не удалось выполнить действие")); } finally { setBusy(false); } }}>{busy ? <LoaderCircle className="spinner" size={16} /> : null}{confirmLabel}</button></footer></Modal>;
 }
 
 export function CheckButton({ checked, busy = false, onClick, label }: { checked: boolean; busy?: boolean; onClick: () => void; label: string }) {

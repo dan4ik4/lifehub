@@ -1,3 +1,4 @@
+import { t } from '../lib/language';
 import {useEffect,useState} from 'react';
 import {Activity,Check,Clock3,Plus,Trash2} from 'lucide-react';
 import {api,errorMessage} from '../lib/api';
@@ -108,36 +109,36 @@ export function WorkoutSession({user,notify}:{user:User;notify:Notify}){
     try{
       await api('/health/workouts',{method:'POST',body:{day:todayKey(user.timezone),title:session.title,
         minutes:Math.max(1,Math.min(1440,Math.round((Date.now()-session.started)/60_000))),efforts:session.efforts}});
-      record(null);setOpen(false);setTitle('');setName('');setProgram('');setKg('');refreshWorkspace();notify('Тренировка сохранена');
+      record(null);setOpen(false);setTitle('');setName('');setProgram('');setKg('');refreshWorkspace();notify(t("Тренировка сохранена"));
     }catch(e){setError(errorMessage(e));}
     finally{setBusy(false);}
   }
   if(!open)return null;
-  return <><Modal title={session?'Идёт тренировка':'Начать тренировку'} onClose={()=>!busy&&setOpen(false)} className={'life-workout-modal'+(session?' live':'')}>
+  return <><Modal title={session?t("Идёт тренировка"):t("Начать тренировку")} onClose={()=>!busy&&setOpen(false)} className={'life-workout-modal'+(session?' live':'')}>
     {!session?<form onSubmit={e=>{e.preventDefault();start();}}><div className="modal-body product-form">
-      {pro&&programs.length>0&&<label>Программа<select value={program} onChange={e=>{setProgram(e.target.value);const row=programs.find(item=>item.id===e.target.value);if(row)setTitle(String(row.title));}}>
-        <option value="">Свободная тренировка</option>{programs.map(row=><option value={row.id} key={row.id}>{String(row.title)}</option>)}</select></label>}
-      <label>Название<input required value={title} maxLength={300} onChange={e=>setTitle(e.target.value)} placeholder="Например, силовая тренировка"/></label>
-    </div><footer className="modal-footer"><button className="button primary"><Activity size={17}/>Начать</button></footer></form>:
+      {pro&&programs.length>0&&<label>{t("Программа")}<select value={program} onChange={e=>{setProgram(e.target.value);const row=programs.find(item=>item.id===e.target.value);if(row)setTitle(String(row.title));}}>
+        <option value="">{t("Свободная тренировка")}</option>{programs.map(row=><option value={row.id} key={row.id}>{String(row.title)}</option>)}</select></label>}
+      <label>{t("Название")}<input required value={title} maxLength={300} onChange={e=>setTitle(e.target.value)} placeholder={t("Например, силовая тренировка")}/></label>
+    </div><footer className="modal-footer"><button className="button primary"><Activity size={17}/>{t("Начать")}</button></footer></form>:
       <div className="modal-body life-workout-session">
-        <header><span><i/>Идёт тренировка</span><time>{clock(Math.max(0,Math.floor((now-session.started)/1000)))}</time></header>
+        <header><span><i/>{t("Идёт тренировка")}</span><time>{clock(Math.max(0,Math.floor((now-session.started)/1000)))}</time></header>
         <h3>{session.title}</h3>
-        {current&&<p>{current.name} · подход {Math.min(current.sets,session.efforts.filter(e=>e.name===current.name).length+1)} из {current.sets}</p>}
+        {current&&<p>{current.name} {t("· подход")} {Math.min(current.sets,session.efforts.filter(e=>e.name===current.name).length+1)} {t("из")} {current.sets}</p>}
         {current&&<div className="life-session-steps">{Array.from({length:current.sets},(_,i)=><i key={i} data-done={i<session.efforts.filter(e=>e.name===current.name).length||undefined}/>)}</div>}
         <form className="life-workout-effort" onSubmit={e=>{e.preventDefault();add();}}>
-          <label>Упражнение<input value={name} maxLength={200} required onChange={e=>setName(e.target.value)}/></label>
-          <label>Вес, кг<input value={kg} type="number" step=".01" min="0" max="1000" onChange={e=>setKg(e.target.value)}/></label>
-          <label>Повторы<input value={reps} required type="number" min="1" max="1000" onChange={e=>setReps(e.target.value)}/></label>
-          <button className="button primary" disabled={session.efforts.length>=500}><Check size={16}/>Подход готов</button>
+          <label>{t("Упражнение")}<input value={name} maxLength={200} required onChange={e=>setName(e.target.value)}/></label>
+          <label>{t("Вес, кг")}<input value={kg} type="number" step=".01" min="0" max="1000" onChange={e=>setKg(e.target.value)}/></label>
+          <label>{t("Повторы")}<input value={reps} required type="number" min="1" max="1000" onChange={e=>setReps(e.target.value)}/></label>
+          <button className="button primary" disabled={session.efforts.length>=500}><Check size={16}/>{t("Подход готов")}</button>
         </form>
-        {rest>0&&<div className="life-rest"><Clock3 size={16}/>Отдых после подхода · {clock(rest)}<button className="text-button" onClick={()=>record({...session,restUntil:0})}>Пропустить</button></div>}
-        {session.efforts.length>0&&<details className="hub-disclosure"><summary>Подходы · {session.efforts.length}</summary><ul>
-          {session.efforts.map((effort,i)=><li key={i}>{effort.name} · {effort.reps}{effort.kg!==null?' × '+effort.kg+' кг':' повторов'}</li>)}
+        {rest>0&&<div className="life-rest"><Clock3 size={16}/>{t("Отдых после подхода ·")} {clock(rest)}<button className="text-button" onClick={()=>record({...session,restUntil:0})}>{t("Пропустить")}</button></div>}
+        {session.efforts.length>0&&<details className="hub-disclosure"><summary>{t("Подходы ·")} {session.efforts.length}</summary><ul>
+          {session.efforts.map((effort,i)=><li key={i}>{effort.name} · {effort.reps}{effort.kg!==null?' × '+effort.kg+t(" кг"):t(" повторов")}</li>)}
         </ul></details>}
         {error&&<p className="field-error" role="alert">{error}</p>}
-        <footer><button className="button secondary" onClick={()=>setDiscard(true)} disabled={busy}><Trash2 size={16}/>Отменить</button>
-          <button className="button primary" onClick={()=>void finish()} disabled={busy}>{busy?'Сохраняю…':'Завершить и сохранить'}</button></footer>
+        <footer><button className="button secondary" onClick={()=>setDiscard(true)} disabled={busy}><Trash2 size={16}/>{t("Отменить")}</button>
+          <button className="button primary" onClick={()=>void finish()} disabled={busy}>{busy?t("Сохраняю…"):t("Завершить и сохранить")}</button></footer>
       </div>}
   </Modal>
-  {discard&&<ConfirmDialog title="Отменить тренировку?" description="Подходы из текущей тренировки будут удалены." onClose={()=>setDiscard(false)} onConfirm={async()=>{record(null);setOpen(false);}}/>}</>;
+  {discard&&<ConfirmDialog title={t("Отменить тренировку?")} description={t("Подходы из текущей тренировки будут удалены.")} onClose={()=>setDiscard(false)} onConfirm={async()=>{record(null);setOpen(false);}}/>}</>;
 }

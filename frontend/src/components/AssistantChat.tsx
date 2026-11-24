@@ -1,3 +1,4 @@
+import { t, locale } from '../lib/language';
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {ArrowUp, Check, LoaderCircle, MessageCircle, RefreshCw, Sparkles} from 'lucide-react';
 import {api, errorMessage, isDemo} from '../lib/api';
@@ -14,8 +15,8 @@ type History = {items:Entry[];next_before:string|null};
 import {AssistantPreferences} from './AssistantPreferences';
 import {useAssistantPreferences} from '../lib/assistantPreferences';
 
-const screenLabel={home:'Главная',planning:'Планирование',free_time:'Свободное время',habits:'Цели и привычки',
-  health:'Здоровье',finance:'Финансы',books:'Книжная полка',diary:'Дневник',insights:'Что видно вместе'};
+const screenLabel={home:t("Главная"),planning:t("Планирование"),free_time:t("Свободное время"),habits:t("Цели и привычки"),
+  health:t("Здоровье"),finance:t("Финансы"),books:t("Книжная полка"),diary:t("Дневник"),insights:t("Что видно вместе")};
 function currentScreen(path:string):keyof typeof screenLabel {
   if(path==='/planning/free-time')return 'free_time';
   if(path.startsWith('/planning'))return 'planning';
@@ -38,12 +39,12 @@ export function AssistantChat({user, path, navigate}: {user:User; path:string;na
   const draft=useRef(message);
   draft.current=message;
   async function transcribe(audio:Blob,signal:AbortSignal){
-    const data=await new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result).split(',')[1]);reader.onerror=()=>reject(new Error('Не удалось прочитать запись.'));reader.readAsDataURL(audio);});
+    const data=await new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result).split(',')[1]);reader.onerror=()=>reject(new Error(t("Не удалось прочитать запись.")));reader.readAsDataURL(audio);});
     try{
       const result=await api<{text:string}>('/ai/transcribe',{method:'POST',signal,body:{data,mime:audio.type,media_allowed:true}});
       if(!alive.current||signal.aborted)return;
       const combined=[draft.current.trim(),result.text].filter(Boolean).join(' ');
-      if(combined.length>4000)throw new Error('В сообщении слишком много текста. Сначала отправьте текущий текст.');
+      if(combined.length>4000)throw new Error(t("В сообщении слишком много текста. Сначала отправьте текущий текст."));
       signal.throwIfAborted();
       void send(false,combined);
     }catch(e){throw new Error(errorMessage(e));}
@@ -86,7 +87,7 @@ export function AssistantChat({user, path, navigate}: {user:User; path:string;na
   },[open,busy,entries,load]);
   useEffect(()=>{if(open)log.current?.scrollTo({top:log.current.scrollHeight,behavior:'instant'});},[open,entries.at(-1)?.id,entries.at(-1)?.response?.message,busy]);
   async function send(recover=false,voiceText?:string){
-    const text=recover?retry?.text:(voiceText||message.trim()||(photo?'Что на этой фотографии? Помоги разобраться с планами.':''));if(!text||lock.current||(mediaActive&&!voiceText)||!consent||!allowed)return;
+    const text=recover?retry?.text:(voiceText||message.trim()||(photo?t("Что на этой фотографии? Помоги разобраться с планами."):''));if(!text||lock.current||(mediaActive&&!voiceText)||!consent||!allowed)return;
     lock.current=true;setBusy(true);setError('');
     const request=recover&&retry?retry:{text,key:crypto.randomUUID(),day:path.startsWith('/planning')?selectedDay:todayKey(user.timezone),photo,screen:currentScreen(path)};
     setRetry(request); if(!recover){setMessage('');setPhoto(null);}
@@ -108,33 +109,33 @@ export function AssistantChat({user, path, navigate}: {user:User; path:string;na
     if(!response||response.confirmation==='pending'||response.confirmation==='cancelled')return null;
     return response.affected_resources.filter(item=>['task','event','list'].includes(item.type)).slice(0,3).map(item=>{
       const link=item.type==='event'?'/planning/calendar?event=':item.type==='task'?'/planning?task=':'/planning/lists?list=';
-      const title=item.type==='event'?'событие':item.type==='task'?'задачу':'список';
-      return <button className="button secondary" key={item.type+item.id} onClick={()=>{close();navigate(link+encodeURIComponent(item.id));}}>Открыть {title}</button>;
+      const title=item.type==='event'?t("событие"):item.type==='task'?t("задачу"):t("список");
+      return <button className="button secondary" key={item.type+item.id} onClick={()=>{close();navigate(link+encodeURIComponent(item.id));}}>{t("Открыть")} {title}</button>;
     });
   };
   return <>
-    {!open&&<button className="life-assistant" onClick={()=>setOpen(true)} aria-label="Спросить помощника" aria-haspopup="dialog">
-      <Sparkles size={21}/><span>Спросить помощника</span><kbd>⌘J</kbd>
+    {!open&&<button className="life-assistant" onClick={()=>setOpen(true)} aria-label={t("Спросить помощника")} aria-haspopup="dialog">
+      <Sparkles size={21}/><span>{t("Спросить помощника")}</span><kbd>⌘J</kbd>
     </button>}
-    {open&&<Modal title="Помощник" description="Один чат на все экраны" onClose={close} className="assistant-modal">
-      <div className="chat-context"><span className="live-dot"/>Контекст: {screenLabel[currentScreen(path)]} · {dayLabel(contextDay,{day:'numeric',month:'short'})}<span>История сохранена</span></div>
-      <div hidden={preferencesOpen} ref={log} className="chat-log" role="log" aria-label="История переписки" aria-live="polite" aria-relevant="additions text">
-        {cursor&&<button className="chat-load" disabled={loading||busy} onClick={()=>void load(cursor)}>Показать предыдущие сообщения</button>}
-        {loading&&entries.length===0&&<p className="chat-loading"><LoaderCircle className="spinner" size={18}/>Загружаю переписку…</p>}
-        {entries.length===0&&!loading&&<div className="chat-welcome"><span className="chat-orb"><Sparkles size={28}/></span><h3>Давайте разберёмся<br/>с вашими планами.</h3><p>Спросите о расписании, добавьте задачу или перенесите встречу. Можно уточнять — разговор сохранится.</p>{allowed&&!isDemo()&&<div className="chat-suggestions">{['Что у меня сегодня?','Помоги спланировать день','Что запланировано на завтра?'].map(t=><button key={t} onClick={()=>{setMessage(t);input.current?.focus();}}>{t}</button>)}</div>}</div>}
-        {entries.map(entry=><div className="chat-turn" key={entry.id}><div className="chat-bubble user-bubble"><span className="chat-speaker">Вы</span><p>{entry.message}</p>{entry.photos?.map((src,i)=><img key={i} className="chat-history-photo" src={src} alt="Прикреплённая фотография" loading="lazy"/>)}</div><div className="chat-bubble assistant-bubble"><span className="chat-speaker"><Sparkles size={13}/>Life Hub</span><p>{entry.response?.message||entry.error||(Date.now()-Date.parse(entry.created_at)>120000?'Ответ не завершён. Можно отправить запрос заново.':'Готовлю ответ…')}</p>{entry.response?.confirmation==='pending'&&<div className="chat-confirm"><small>Изменения ещё не применены. Подтвердите действие.</small><div><button className="button primary" disabled={busy} onClick={()=>void decide(entry,true)}><Check size={15}/>Подтвердить</button><button className="button secondary" disabled={busy} onClick={()=>void decide(entry,false)}>Отмена</button></div></div>}{resourceLinks(entry.response)}<time>{new Date(entry.created_at).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit',timeZone:user.timezone})}</time></div></div>)}
-        {busy&&retry&&!entries.some(e=>e.message===retry.text)&&<div className="chat-bubble user-bubble sending-bubble"><span className="chat-speaker">Вы</span><p>{retry.text}</p>{retry.photo&&<img className="chat-history-photo" src={retry.photo.data} alt="Отправляемая фотография"/>}</div>}
-        {busy&&<div className="chat-thinking" role="status"><span/><span/><span/>Помощник работает</div>}
+    {open&&<Modal title={t("Помощник")} description={t("Один чат на все экраны")} onClose={close} className="assistant-modal">
+      <div className="chat-context"><span className="live-dot"/>{t("Контекст:")} {screenLabel[currentScreen(path)]} · {dayLabel(contextDay,{day:'numeric',month:'short'})}<span>{t("История сохранена")}</span></div>
+      <div hidden={preferencesOpen} ref={log} className="chat-log" role="log" aria-label={t("История переписки")} aria-live="polite" aria-relevant="additions text">
+        {cursor&&<button className="chat-load" disabled={loading||busy} onClick={()=>void load(cursor)}>{t("Показать предыдущие сообщения")}</button>}
+        {loading&&entries.length===0&&<p className="chat-loading"><LoaderCircle className="spinner" size={18}/>{t("Загружаю переписку…")}</p>}
+        {entries.length===0&&!loading&&<div className="chat-welcome"><span className="chat-orb"><Sparkles size={28}/></span><h3>{t("Давайте разберёмся")}<br/>{t("с вашими планами.")}</h3><p>{t("Спросите о расписании, добавьте задачу или перенесите встречу. Можно уточнять — разговор сохранится.")}</p>{allowed&&!isDemo()&&<div className="chat-suggestions">{[t("Что у меня сегодня?"),t("Помоги спланировать день"),t("Что запланировано на завтра?")].map(t=><button key={t} onClick={()=>{setMessage(t);input.current?.focus();}}>{t}</button>)}</div>}</div>}
+        {entries.map(entry=><div className="chat-turn" key={entry.id}><div className="chat-bubble user-bubble"><span className="chat-speaker">{t("Вы")}</span><p>{entry.message}</p>{entry.photos?.map((src,i)=><img key={i} className="chat-history-photo" src={src} alt={t("Прикреплённая фотография")} loading="lazy"/>)}</div><div className="chat-bubble assistant-bubble"><span className="chat-speaker"><Sparkles size={13}/>Life Hub</span><p>{entry.response?.message||entry.error||(Date.now()-Date.parse(entry.created_at)>120000?t("Ответ не завершён. Можно отправить запрос заново."):t("Готовлю ответ…"))}</p>{entry.response?.confirmation==='pending'&&<div className="chat-confirm"><small>{t("Изменения ещё не применены. Подтвердите действие.")}</small><div><button className="button primary" disabled={busy} onClick={()=>void decide(entry,true)}><Check size={15}/>{t("Подтвердить")}</button><button className="button secondary" disabled={busy} onClick={()=>void decide(entry,false)}>{t("Отмена")}</button></div></div>}{resourceLinks(entry.response)}<time>{new Date(entry.created_at).toLocaleTimeString(locale,{hour:'2-digit',minute:'2-digit',timeZone:user.timezone})}</time></div></div>)}
+        {busy&&retry&&!entries.some(e=>e.message===retry.text)&&<div className="chat-bubble user-bubble sending-bubble"><span className="chat-speaker">{t("Вы")}</span><p>{retry.text}</p>{retry.photo&&<img className="chat-history-photo" src={retry.photo.data} alt={t("Отправляемая фотография")}/>}</div>}
+        {busy&&<div className="chat-thinking" role="status"><span/><span/><span/>{t("Помощник работает")}</div>}
       </div>
       <div className={`chat-bottom ${preferencesOpen?"editing-preferences":""}`}>
-        {preferencesOpen&&<div className="chat-permission"><AssistantPreferences userId={user.id}/><button type="button" className="text-button" onClick={()=>setPreferencesOpen(false)}>Готово</button></div>}
+        {preferencesOpen&&<div className="chat-permission"><AssistantPreferences userId={user.id}/><button type="button" className="text-button" onClick={()=>setPreferencesOpen(false)}>{t("Готово")}</button></div>}
         {!preferencesOpen&&<>
-        {error&&<div className="chat-error" role="alert"><p>{error}</p>{retry&&<div><button disabled={busy} onClick={()=>void send(true)}><RefreshCw size={14}/>Проверить результат</button><button disabled={busy} onClick={()=>{setMessage(retry.text);setPhoto(retry.photo);setRetry(null);setError('');}}>Вернуть сообщение</button></div>}</div>}
-        {isDemo()?<p className="chat-permission">Переписка с ИИ доступна после входа в аккаунт.</p>:!allowed?<p className="chat-permission">Для помощника нужен доступ к модулю «Планирование».</p>:!consent?<div className="chat-permission"><p>OpenAI получит сообщения, последние 20 сообщений диалога, задачи, списки и события календаря. Разрешение сохранится в аккаунте. Доступ к другим модулям можно включить в настройках.</p><button className="button primary" disabled={preferencesLoading} onClick={()=>{void savePreferences({...preferences,messages:true}).catch(e=>setError(errorMessage(e)));}}>Разрешить и начать</button></div>:<>
-          {mediaConsent?<ChatMedia photo={photo} onPhoto={setPhoto} onVoice={transcribe} onError={setError} onActivity={setMediaActive} disabled={busy}/>:<div className="chat-media-permission"><p>Фото и голос обрабатывает OpenAI. Фото сохраняются в истории и доступны для последующих вопросов; аудиозапись не сохраняется в Life Hub.</p><button type="button" disabled={preferencesLoading} onClick={()=>{void savePreferences({...preferences,media:true}).catch(e=>setError(errorMessage(e)));}}>Включить фото и голос</button></div>}
+        {error&&<div className="chat-error" role="alert"><p>{error}</p>{retry&&<div><button disabled={busy} onClick={()=>void send(true)}><RefreshCw size={14}/>{t("Проверить результат")}</button><button disabled={busy} onClick={()=>{setMessage(retry.text);setPhoto(retry.photo);setRetry(null);setError('');}}>{t("Вернуть сообщение")}</button></div>}</div>}
+        {isDemo()?<p className="chat-permission">{t("Переписка с ИИ доступна после входа в аккаунт.")}</p>:!allowed?<p className="chat-permission">{t("Для помощника нужен доступ к модулю «Планирование».")}</p>:!consent?<div className="chat-permission"><p>{t("OpenAI получит сообщения, последние 20 сообщений диалога, задачи, списки и события календаря. Разрешение сохранится в аккаунте. Доступ к другим модулям можно включить в настройках.")}</p><button className="button primary" disabled={preferencesLoading} onClick={()=>{void savePreferences({...preferences,messages:true}).catch(e=>setError(errorMessage(e)));}}>{t("Разрешить и начать")}</button></div>:<>
+          {mediaConsent?<ChatMedia photo={photo} onPhoto={setPhoto} onVoice={transcribe} onError={setError} onActivity={setMediaActive} disabled={busy}/>:<div className="chat-media-permission"><p>{t("Фото и голос обрабатывает OpenAI. Фото сохраняются в истории и доступны для последующих вопросов; аудиозапись не сохраняется в Life Hub.")}</p><button type="button" disabled={preferencesLoading} onClick={()=>{void savePreferences({...preferences,media:true}).catch(e=>setError(errorMessage(e)));}}>{t("Включить фото и голос")}</button></div>}
           {(user.plan==='pro'||(user.plan==='trial'&&!!user.trial_ends&&Date.parse(user.trial_ends)>Date.now())||user.free_modules.includes('finance'))&&<CsvImportButton disabled={busy||mediaActive} modulesAllowed={preferences.modules}/>}
-          <form className="chat-compose" hidden={mediaActive} onSubmit={e=>{e.preventDefault();void send();}}><label className="sr-only" htmlFor="assistant-message">Сообщение помощнику</label><textarea id="assistant-message" ref={input} rows={2} maxLength={4000} placeholder="Напишите, чем помочь…" value={message} disabled={busy||mediaActive} onChange={e=>setMessage(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.nativeEvent.isComposing&&window.matchMedia('(pointer: fine)').matches){e.preventDefault();void send();}}}/><button aria-label="Отправить сообщение" className="chat-send" disabled={busy||mediaActive||(!message.trim()&&!photo)}>{busy?<LoaderCircle className="spinner" size={20}/>:<ArrowUp size={21}/>}</button></form>
-          <div className="chat-footnote"><span>{preferences.modules?'Помогаю во всех доступных модулях.':'Планирование · другие модули можно подключить в настройках.'}</span><button type="button" onClick={()=>setPreferencesOpen(v=>!v)}>Настройки доступа</button></div>
+          <form className="chat-compose" hidden={mediaActive} onSubmit={e=>{e.preventDefault();void send();}}><label className="sr-only" htmlFor="assistant-message">{t("Сообщение помощнику")}</label><textarea id="assistant-message" ref={input} rows={2} maxLength={4000} placeholder={t("Напишите, чем помочь…")} value={message} disabled={busy||mediaActive} onChange={e=>setMessage(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.nativeEvent.isComposing&&window.matchMedia('(pointer: fine)').matches){e.preventDefault();void send();}}}/><button aria-label={t("Отправить сообщение")} className="chat-send" disabled={busy||mediaActive||(!message.trim()&&!photo)}>{busy?<LoaderCircle className="spinner" size={20}/>:<ArrowUp size={21}/>}</button></form>
+          <div className="chat-footnote"><span>{preferences.modules?t("Помогаю во всех доступных модулях."):t("Планирование · другие модули можно подключить в настройках.")}</span><button type="button" onClick={()=>setPreferencesOpen(v=>!v)}>{t("Настройки доступа")}</button></div>
         </>}
         </>}
       </div>

@@ -1,3 +1,4 @@
+import { locale, decimalSeparator } from './language';
 type MoneyRow = {currency:string;kind:'income'|'expense';amount:string};
 export function csvCents(value:string):bigint|null {
   if(!/^\d{1,14}(?:\.\d{1,2})?$/.test(value))return null;
@@ -11,5 +12,5 @@ export function csvTotals(rows:MoneyRow[]) {
   return totals;
 }
 export function formatCents(cents:bigint):string {
-  return (cents/100n).toLocaleString('ru-RU')+','+(cents%100n).toString().padStart(2,'0');
+  return (cents/100n).toLocaleString(locale)+decimalSeparator+(cents%100n).toString().padStart(2,'0');
 }

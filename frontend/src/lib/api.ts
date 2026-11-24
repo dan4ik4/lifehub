@@ -1,3 +1,4 @@
+import { t } from './language';
 import {Capacitor} from '@capacitor/core';
 import type { AuthSession, TokenPair } from './types';
 import { createDemoSession, demoRequest, DemoError } from './demo';
@@ -103,7 +104,7 @@ function onStorage(event: StorageEvent): void {
 
 export function setSession(value: AuthSession): void {
   if (!value?.user?.id || !validTokens(value.tokens)) {
-    throw new ApiError(502, 'invalid_response', 'Сервер вернул неполные данные входа. Попробуйте ещё раз.');
+    throw new ApiError(502, 'invalid_response', t("Сервер вернул неполные данные входа. Попробуйте ещё раз."));
   }
   const previous = getSession();
   if (!previous || previous.user.id !== value.user.id || Boolean(previous.demo) !== Boolean(value.demo) ||
@@ -138,74 +139,74 @@ export function startDemo(): AuthSession {
 export function isDemo(): boolean { return getSession()?.demo === true; }
 
 const messages: Record<string, string> = {
-  voice_not_configured: 'Распознавание голоса не подключено на этом сервере. Требуется ключ OpenAI.',
-  transcription_failed: 'Не удалось распознать запись. Попробуйте ещё раз.',
-  invalid_audio: 'Запись повреждена или слишком большая. Запишите голос заново.',
-  empty_audio: 'Не удалось услышать речь. Попробуйте записать ещё раз.',
-  voice_too_long: 'Слишком длинная запись. Запишите более короткое сообщение.',
-  invalid_credentials: 'Неверная почта или пароль.',
-  invalid_current_password: 'Текущий пароль указан неверно.',
-  invalid_otp: 'Код не подошёл. Проверьте шесть цифр из последнего письма.',
-  invalid_token: 'Код не подошёл. Проверьте последнее письмо или запросите новый код.',
-  otp_expired: 'Срок действия кода истёк. Запросите новый код.',
-  token_expired: 'Срок действия кода истёк. Запросите новый код.',
-  otp_locked: 'Попытки ввода кода закончились. Начните заново.',
-  registration_expired: 'Срок подтверждения регистрации истёк. Начните регистрацию заново.',
-  challenge_not_found: 'Подтверждение не найдено. Начните регистрацию заново.',
-  email_in_use: 'Эта почта уже зарегистрирована. Войдите или восстановите пароль.',
-  rate_limit: 'Слишком много попыток. Немного подождите и повторите.',
-  cooldown_or_limit: 'Нужно немного подождать перед следующей попыткой.',
-  unauthorized: 'Войдите в аккаунт, чтобы продолжить.',
-  invalid_access: 'Сессия истекла. Войдите снова.',
-  invalid_expired_or_reused_refresh: 'Сессия истекла. Войдите снова.',
-  invalid_refresh: 'Сессия истекла. Войдите снова.',
-  account_unavailable: 'Аккаунт недоступен.',
-  provider_unavailable: 'Сервис не настроен или временно недоступен. Проверьте настройки подключения на сервере.',
-  invalid_provider_token: 'Не удалось подтвердить вход через сервис. Попробуйте войти ещё раз.',
-  identity_conflict: 'Этот аккаунт сервиса уже связан с другим пользователем.',
-  version_conflict: 'Запись уже изменилась. Обновите данные и повторите действие.',
-  not_found: 'Запись не найдена. Возможно, она уже удалена.',
-  pro_required: 'Эта возможность доступна с Pro или во время пробного периода.',
-  module_locked: 'Этот модуль не входит в ваш выбор Free. Он доступен в Pro.',
-  invalid_date: 'Проверьте дату: запись не может быть в будущем или раньше начала истории.',
-  unscheduled_day: 'Привычка не запланирована на этот день недели.',
-  habit_archived: 'Сначала восстановите привычку из архива.',
-  invalid_password: 'Текущий пароль указан неверно.',
-  payment_exceeds_debt: 'Сумма погашения больше остатка долга.',
-  debt_has_payments: 'После погашений нельзя менять валюту и направление долга.',
-  duplicate_budget: 'Бюджет для этой категории, валюты и месяца уже есть.',
-  catalog_unavailable: 'Каталог книг сейчас недоступен. Книгу можно добавить вручную.',
-  export_not_ready: 'Копия данных ещё готовится.',
-  export_expired: 'Срок скачивания истёк. Закажите новую копию.',
-  invalid_image: 'Нужно фото JPG, PNG или WebP до 650 КБ и 16 мегапикселей.',
-  ai_limit: 'Лимит запросов к ИИ на сегодня исчерпан.',
-  system_list_locked: 'Список «Покупки» нельзя переименовать или удалить.',
-  already_completed: 'Задача уже выполнена. Обновите список.',
-  not_completed: 'Задача уже открыта. Обновите список.',
-  occurrence_required: 'Выберите конкретное повторение в календаре.',
-  invalid_occurrence: 'Это повторение больше не существует. Обновите календарь.',
-  invalid_rrule: 'Проверьте правило повторения и дату начала.',
-  invalid_local_time: 'Время не соответствует выбранному часовому поясу.',
-  recurrence_too_complex: 'Правило повторения слишком сложное. Упростите его.',
-  invalid_or_large_range: 'Выберите период длительностью не больше 93 дней.',
-  sync_conflict: 'Внешний календарь разрешает только просмотр этого события.',
-  immutable_free_modules: 'Набор бесплатных модулей уже выбран.',
-  trial_already_used: 'Пробный период уже был использован.',
-  plan_managed_by_billing: 'Изменить платный тариф здесь нельзя.',
-  password_account_required: 'Изменение почты доступно для аккаунтов с паролем.',
-  model_error: 'ИИ не смог обработать запрос. Попробуйте сформулировать его иначе.',
-  ai_quota_exceeded: 'Лимит запросов к ИИ на сегодня исчерпан.',
-  internal_error: 'На сервере произошла ошибка. Попробуйте позже.',
-  validation_error: 'Проверьте заполненные поля и даты.',
-  invalid_calendar_state: 'Ссылка подключения уже использована или устарела. Начните подключение заново в настройках календаря.',
-  invalid_authorization_code: 'Google не принял код подключения. Начните подключение заново в настройках календаря.',
-  calendar_reauth_required: 'Google отклонил доступ к календарю. Подключите календарь заново и подтвердите разрешения.',
-  calendar_permissions_required: 'Не предоставлены необходимые разрешения календаря. Подключите Google заново и разрешите доступ к событиям и списку календарей.',
-  calendar_api_disabled: 'Google Calendar API не включён для приложения. Сообщите об этом администратору Life Hub.',
-  calendar_oauth_misconfigured: 'Настройки подключения Google Calendar требуют исправления. Сообщите администратору Life Hub.',
-  calendar_offline_access_required: 'Google не предоставил постоянный доступ к календарю. Начните подключение заново и подтвердите разрешения.',
-  calendar_write_access_required: 'У выбранного аккаунта нет прав на изменение основного календаря.',
-  provider_rate_limited: 'Google временно ограничил запросы. Подождите немного и повторите подключение.',
+  voice_not_configured: t("Распознавание голоса не подключено на этом сервере. Требуется ключ OpenAI."),
+  transcription_failed: t("Не удалось распознать запись. Попробуйте ещё раз."),
+  invalid_audio: t("Запись повреждена или слишком большая. Запишите голос заново."),
+  empty_audio: t("Не удалось услышать речь. Попробуйте записать ещё раз."),
+  voice_too_long: t("Слишком длинная запись. Запишите более короткое сообщение."),
+  invalid_credentials: t("Неверная почта или пароль."),
+  invalid_current_password: t("Текущий пароль указан неверно."),
+  invalid_otp: t("Код не подошёл. Проверьте шесть цифр из последнего письма."),
+  invalid_token: t("Код не подошёл. Проверьте последнее письмо или запросите новый код."),
+  otp_expired: t("Срок действия кода истёк. Запросите новый код."),
+  token_expired: t("Срок действия кода истёк. Запросите новый код."),
+  otp_locked: t("Попытки ввода кода закончились. Начните заново."),
+  registration_expired: t("Срок подтверждения регистрации истёк. Начните регистрацию заново."),
+  challenge_not_found: t("Подтверждение не найдено. Начните регистрацию заново."),
+  email_in_use: t("Эта почта уже зарегистрирована. Войдите или восстановите пароль."),
+  rate_limit: t("Слишком много попыток. Немного подождите и повторите."),
+  cooldown_or_limit: t("Нужно немного подождать перед следующей попыткой."),
+  unauthorized: t("Войдите в аккаунт, чтобы продолжить."),
+  invalid_access: t("Сессия истекла. Войдите снова."),
+  invalid_expired_or_reused_refresh: t("Сессия истекла. Войдите снова."),
+  invalid_refresh: t("Сессия истекла. Войдите снова."),
+  account_unavailable: t("Аккаунт недоступен."),
+  provider_unavailable: t("Сервис не настроен или временно недоступен. Проверьте настройки подключения на сервере."),
+  invalid_provider_token: t("Не удалось подтвердить вход через сервис. Попробуйте войти ещё раз."),
+  identity_conflict: t("Этот аккаунт сервиса уже связан с другим пользователем."),
+  version_conflict: t("Запись уже изменилась. Обновите данные и повторите действие."),
+  not_found: t("Запись не найдена. Возможно, она уже удалена."),
+  pro_required: t("Эта возможность доступна с Pro или во время пробного периода."),
+  module_locked: t("Этот модуль не входит в ваш выбор Free. Он доступен в Pro."),
+  invalid_date: t("Проверьте дату: запись не может быть в будущем или раньше начала истории."),
+  unscheduled_day: t("Привычка не запланирована на этот день недели."),
+  habit_archived: t("Сначала восстановите привычку из архива."),
+  invalid_password: t("Текущий пароль указан неверно."),
+  payment_exceeds_debt: t("Сумма погашения больше остатка долга."),
+  debt_has_payments: t("После погашений нельзя менять валюту и направление долга."),
+  duplicate_budget: t("Бюджет для этой категории, валюты и месяца уже есть."),
+  catalog_unavailable: t("Каталог книг сейчас недоступен. Книгу можно добавить вручную."),
+  export_not_ready: t("Копия данных ещё готовится."),
+  export_expired: t("Срок скачивания истёк. Закажите новую копию."),
+  invalid_image: t("Нужно фото JPG, PNG или WebP до 650 КБ и 16 мегапикселей."),
+  ai_limit: t("Лимит запросов к ИИ на сегодня исчерпан."),
+  system_list_locked: t("Список «Покупки» нельзя переименовать или удалить."),
+  already_completed: t("Задача уже выполнена. Обновите список."),
+  not_completed: t("Задача уже открыта. Обновите список."),
+  occurrence_required: t("Выберите конкретное повторение в календаре."),
+  invalid_occurrence: t("Это повторение больше не существует. Обновите календарь."),
+  invalid_rrule: t("Проверьте правило повторения и дату начала."),
+  invalid_local_time: t("Время не соответствует выбранному часовому поясу."),
+  recurrence_too_complex: t("Правило повторения слишком сложное. Упростите его."),
+  invalid_or_large_range: t("Выберите период длительностью не больше 93 дней."),
+  sync_conflict: t("Внешний календарь разрешает только просмотр этого события."),
+  immutable_free_modules: t("Набор бесплатных модулей уже выбран."),
+  trial_already_used: t("Пробный период уже был использован."),
+  plan_managed_by_billing: t("Изменить платный тариф здесь нельзя."),
+  password_account_required: t("Изменение почты доступно для аккаунтов с паролем."),
+  model_error: t("ИИ не смог обработать запрос. Попробуйте сформулировать его иначе."),
+  ai_quota_exceeded: t("Лимит запросов к ИИ на сегодня исчерпан."),
+  internal_error: t("На сервере произошла ошибка. Попробуйте позже."),
+  validation_error: t("Проверьте заполненные поля и даты."),
+  invalid_calendar_state: t("Ссылка подключения уже использована или устарела. Начните подключение заново в настройках календаря."),
+  invalid_authorization_code: t("Google не принял код подключения. Начните подключение заново в настройках календаря."),
+  calendar_reauth_required: t("Google отклонил доступ к календарю. Подключите календарь заново и подтвердите разрешения."),
+  calendar_permissions_required: t("Не предоставлены необходимые разрешения календаря. Подключите Google заново и разрешите доступ к событиям и списку календарей."),
+  calendar_api_disabled: t("Google Calendar API не включён для приложения. Сообщите об этом администратору Life Hub."),
+  calendar_oauth_misconfigured: t("Настройки подключения Google Calendar требуют исправления. Сообщите администратору Life Hub."),
+  calendar_offline_access_required: t("Google не предоставил постоянный доступ к календарю. Начните подключение заново и подтвердите разрешения."),
+  calendar_write_access_required: t("У выбранного аккаунта нет прав на изменение основного календаря."),
+  provider_rate_limited: t("Google временно ограничил запросы. Подождите немного и повторите подключение."),
 };
 
 export function errorMessage(error: unknown): string {
@@ -214,13 +215,13 @@ export function errorMessage(error: unknown): string {
     if (error.code === 'ambiguous_command' || error.code.startsWith('demo_') ||
       ['network_error', 'session_changed', 'session_expired', 'invalid_response'].includes(error.code)) return error.message;
     if (error.status === 429) return messages.rate_limit;
-    if (error.status >= 500) return 'Сервис временно недоступен. Попробуйте позже.';
-    if (error.status === 403) return 'Недостаточно прав для этого действия.';
-    return error.message && /[А-Яа-яЁё]/.test(error.message) ? error.message : 'Не удалось выполнить действие. Попробуйте ещё раз.';
+    if (error.status >= 500) return t("Сервис временно недоступен. Попробуйте позже.");
+    if (error.status === 403) return t("Недостаточно прав для этого действия.");
+    return error.message && /[А-Яа-яЁё]/.test(error.message) ? error.message : t("Не удалось выполнить действие. Попробуйте ещё раз.");
   }
-  if (error instanceof Error && error.name === 'AbortError') return 'Запрос отменён.';
+  if (error instanceof Error && error.name === 'AbortError') return t("Запрос отменён.");
   if (error instanceof Error && error.message) return error.message;
-  return 'Не удалось выполнить действие. Проверьте соединение и попробуйте ещё раз.';
+  return t("Не удалось выполнить действие. Проверьте соединение и попробуйте ещё раз.");
 }
 
 function retrySeconds(value: string | null): number | null {
@@ -239,11 +240,11 @@ async function decode(response: Response): Promise<unknown> {
   if (!response.ok) {
     const envelope = body as { error?: { code?: string; message?: string; details?: ErrorDetail[] } } | undefined;
     throw new ApiError(response.status, envelope?.error?.code || 'http_error',
-      envelope?.error?.message || 'Не удалось выполнить запрос.',
+      envelope?.error?.message || t("Не удалось выполнить запрос."),
       Array.isArray(envelope?.error?.details) ? envelope.error.details : [], retrySeconds(response.headers.get('Retry-After')));
   }
   if (text && body === undefined) {
-    throw new ApiError(502, 'invalid_response', 'Сервер вернул неожиданный ответ. Проверьте подключение к API.');
+    throw new ApiError(502, 'invalid_response', t("Сервер вернул неожиданный ответ. Проверьте подключение к API."));
   }
   return body;
 }
@@ -262,12 +263,12 @@ async function request(path: string, options: ApiOptions, token?: string): Promi
     });
   } catch (error) {
     if (options.signal?.aborted || (error instanceof Error && error.name === 'AbortError')) throw error;
-    throw new ApiError(0, 'network_error', 'Нет связи с сервером. Проверьте соединение и запуск Life Hub.');
+    throw new ApiError(0, 'network_error', t("Нет связи с сервером. Проверьте соединение и запуск Life Hub."));
   }
   return decode(response);
 }
 
-const changedSession = () => new ApiError(409, 'session_changed', 'Аккаунт изменился. Повторите действие в текущей сессии.');
+const changedSession = () => new ApiError(409, 'session_changed', t("Аккаунт изменился. Повторите действие в текущей сессии."));
 
 async function refresh(expectedEpoch: number): Promise<void> {
   if (epoch !== expectedEpoch || !session || session.demo) throw changedSession();
@@ -283,7 +284,7 @@ async function refresh(expectedEpoch: number): Promise<void> {
       getSession();
       if (epoch !== expectedEpoch || !session) throw changedSession();
       if (session.tokens.refresh_token !== refreshToken) return;
-      if (!validTokens(tokens)) throw new ApiError(502, 'invalid_response', 'Не удалось обновить сессию. Попробуйте ещё раз.');
+      if (!validTokens(tokens)) throw new ApiError(502, 'invalid_response', t("Не удалось обновить сессию. Попробуйте ещё раз."));
       session = { ...session, tokens };
       publish();
     } catch (error) {
@@ -291,7 +292,7 @@ async function refresh(expectedEpoch: number): Promise<void> {
       if (epoch !== expectedEpoch) throw changedSession();
       if (error instanceof ApiError && error.status === 401) {
         clearSession();
-        throw new ApiError(401, 'session_expired', 'Сессия истекла. Войдите снова.');
+        throw new ApiError(401, 'session_expired', t("Сессия истекла. Войдите снова."));
       }
       throw error;
     }
@@ -309,7 +310,7 @@ async function refresh(expectedEpoch: number): Promise<void> {
 
 export async function api<T>(rawPath: string, options: ApiOptions = {}): Promise<T> {
   const path = rawPath.replace(/^\/api\/v1(?=\/)/, '');
-  if (!path.startsWith('/') || path.startsWith('//')) throw new ApiError(400, 'invalid_path', 'Неверный адрес запроса.');
+  if (!path.startsWith('/') || path.startsWith('//')) throw new ApiError(400, 'invalid_path', t("Неверный адрес запроса."));
   options.signal?.throwIfAborted();
   const current = getSession();
   const expectedEpoch = epoch;

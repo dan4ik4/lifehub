@@ -1,3 +1,4 @@
+import { t } from './language';
 import { api } from "./api";
 
 export function pushSupported() {
@@ -16,18 +17,18 @@ export async function currentPush() {
 export async function enablePush() {
   if (!pushSupported())
     throw new Error(
-      "Этот браузер не поддерживает уведомления. На iPhone добавьте Life Hub на экран «Домой» и откройте оттуда.",
+      t("Этот браузер не поддерживает уведомления. На iPhone добавьте Life Hub на экран «Домой» и откройте оттуда."),
     );
   // Request permission directly from the click handler, before asynchronous setup.
   // Safari requires a user gesture for the permission prompt.
   const permission = await Notification.requestPermission();
   if (permission !== "granted")
-    throw new Error("Уведомления не разрешены. Измените разрешение для Life Hub в настройках браузера.");
+    throw new Error(t("Уведомления не разрешены. Измените разрешение для Life Hub в настройках браузера."));
   const config = await api<{ enabled: boolean; public_key: string | null }>(
     "/notifications/push/config",
   );
   if (!config.enabled || !config.public_key)
-    throw new Error("Уведомления пока не настроены на сервере.");
+    throw new Error(t("Уведомления пока не настроены на сервере."));
   const registration = await navigator.serviceWorker.register("/sw.js", {
     scope: "/",
   });

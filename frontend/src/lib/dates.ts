@@ -1,3 +1,4 @@
+import { t, locale, language } from './language';
 const pad = (value: number) => String(value).padStart(2, '0');
 
 export function parts(value: Date | string, timezone: string) {
@@ -39,19 +40,20 @@ export function zonedISO(day: string, time: string, timezone: string) {
     if (!difference) return new Date(guess).toISOString();
     guess += difference;
   }
-  throw new Error('Это время пропущено при переводе часов. Выберите другое время.');
+  throw new Error(t("Это время пропущено при переводе часов. Выберите другое время."));
 }
 export const startOfDay = (day: string, timezone: string) => zonedISO(day, '00:00', timezone);
-export const timeText = (value: string, timezone: string) => new Intl.DateTimeFormat('ru-RU', { timeZone: timezone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(value));
-export const dayLabel = (key: string, options: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'long' }) => new Intl.DateTimeFormat('ru-RU', { ...options, timeZone: 'UTC' }).format(dayDate(key));
+export const timeText = (value: string, timezone: string) => new Intl.DateTimeFormat(locale, { timeZone: timezone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(value));
+export const dayLabel = (key: string, options: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'long' }) => new Intl.DateTimeFormat(locale, { ...options, timeZone: 'UTC' }).format(dayDate(key));
 export function shortDate(value: string, timezone: string) {
   const key = dateKey(value, timezone), today = todayKey(timezone);
-  return key === today ? 'Сегодня' : key === shiftDay(today, 1) ? 'Завтра' : dayLabel(key, { day: 'numeric', month: 'short' }).replace('.', '');
+  return key === today ? t("Сегодня") : key === shiftDay(today, 1) ? t("Завтра") : dayLabel(key, { day: 'numeric', month: 'short' }).replace('.', '');
 }
 export function minutesOfDay(value: string, timezone: string) {
   const p = parts(value, timezone); return Number(p.hour) * 60 + Number(p.minute);
 }
 export function plural(count: number, forms: [string, string, string]) {
+  if (language === 'en') return `${count} ${forms[count === 1 ? 0 : 2]}`;
   const last = count % 10, tens = count % 100;
   return `${count} ${forms[tens >= 11 && tens <= 14 ? 2 : last === 1 ? 0 : last >= 2 && last <= 4 ? 1 : 2]}`;
 }

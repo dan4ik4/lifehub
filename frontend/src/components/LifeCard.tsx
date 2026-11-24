@@ -1,3 +1,4 @@
+import { t } from '../lib/language';
 import type {ReactNode} from 'react';
 import {ArrowRight} from 'lucide-react';
 
@@ -24,8 +25,8 @@ export function LifeBars({values,format}:{values:(number|null)[];format:(value:n
   const max=Math.max(1,...values.map(x=>x??0));
   const min=Math.min(...values.filter((x):x is number=>x!==null));
   const last=values.reduce((index,value,current)=>value===null?index:current,-1);
-  return <span className="life-bars" role="img" aria-label={values.map(x=>x===null?'нет данных':format(x)).join(', ')}>
+  return <span className="life-bars" role="img" aria-label={values.map(x=>x===null?t("нет данных"):format(x)).join(', ')}>
     {values.map((value,index)=><i key={index} className={index===last?'latest':''} data-empty={value===null||undefined}
-      style={{height:value===null?'12%':(min===max?80:25+75*(value-min)/(max-min))+'%'}} title={value===null?'Нет данных':format(value)}/>)}
+      style={{height:value===null?'12%':(min===max?80:25+75*(value-min)/(max-min))+'%'}} title={value===null?t("Нет данных"):format(value)}/>)}
   </span>;
 }

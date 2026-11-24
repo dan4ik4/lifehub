@@ -1,3 +1,4 @@
+import { t } from './language';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, errorMessage } from './api';
 import { shiftDay, startOfDay } from './dates';
@@ -10,7 +11,7 @@ export async function allPages<T>(path: string, signal?: AbortSignal): Promise<T
     const separator = path.includes('?') ? '&' : '?';
     const page: Page<T> = await api<Page<T>>(`${path}${separator}limit=100${cursor ? '&cursor=' + encodeURIComponent(cursor) : ''}`, { signal });
     items.push(...page.items); cursor = page.next_cursor;
-    if (cursor && seen.has(cursor)) throw new Error('Не удалось загрузить следующую страницу. Обновите данные.');
+    if (cursor && seen.has(cursor)) throw new Error(t("Не удалось загрузить следующую страницу. Обновите данные."));
     if (cursor) seen.add(cursor);
   } while (cursor);
   return items;

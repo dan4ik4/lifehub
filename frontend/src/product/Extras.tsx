@@ -1,3 +1,4 @@
+import { t } from '../lib/language';
 import { displayWeight, storeWeight, weightLabel } from "./weight";
 import { useEffect, useState } from "react";
 import { Plus } from "lucide-react";
@@ -52,10 +53,10 @@ export function HealthChart({
       ),
     unit =
       section === "sleep"
-        ? "ч"
+        ? t("ч")
         : section === "weight"
           ? weightLabel(user.weight_unit)
-          : "мин";
+          : t("мин");
   const max = Math.max(1, ...rows.map(value), target || 0),
     shown = rows.slice(-31),
     min = Math.min(...rows.map(value), target ?? Infinity) - 1;
@@ -66,27 +67,27 @@ export function HealthChart({
       <header>
         <h3>
           {section === "sleep"
-            ? "Ритм сна"
+            ? t("Ритм сна")
             : section === "weight"
-              ? "История веса"
-              : "Время на движение"}
+              ? t("История веса")
+              : t("Время на движение")}
         </h3>
         <label>
-          <span className="sr-only">Период графика</span>
+          <span className="sr-only">{t("Период графика")}</span>
           <select
             value={days}
             onChange={(e) => setDays(Number(e.target.value))}
           >
-            <option value={7}>7 дней</option>
-            <option value={30}>30 дней</option>
-            {isPro(user) && <option value={90}>90 дней</option>}
+            <option value={7}>{t("7 дней")}</option>
+            <option value={30}>{t("30 дней")}</option>
+            {isPro(user) && <option value={90}>{t("90 дней")}</option>}
           </select>
         </label>
       </header>
       {error ? (
         <p role="alert">{error}</p>
       ) : !shown.length ? (
-        <p className="muted">Добавьте записи — здесь появится ваша история.</p>
+        <p className="muted">{t("Добавьте записи — здесь появится ваша история.")}</p>
       ) : (
         <>
           {section === "weight" ? (
@@ -94,7 +95,7 @@ export function HealthChart({
               className="weight-line-chart"
               viewBox="0 0 600 140"
               role="img"
-              aria-label="График веса; точные значения в таблице ниже"
+              aria-label={t("График веса; точные значения в таблице ниже")}
             >
               {[min,(min+max+1)/2,max+1].map(v=><g key={v}><line x1="60" x2="580" y1={y(v)} y2={y(v)} stroke="#edf0e8"/><text x="4" y={y(v)+4} fontSize="12" fill="#687465">{amount(v)}</text></g>)}
               {target !== null && (
@@ -108,7 +109,7 @@ export function HealthChart({
                     strokeDasharray="6 5"
                   />
                   <text x="24" y={y(target) - 6} fontSize="10" fill="#8e753c">
-                    Цель {amount(target)} {weightLabel(user.weight_unit)}
+                    {t("Цель")} {amount(target)} {weightLabel(user.weight_unit)}
                   </text>
                 </>
               )}
@@ -142,7 +143,7 @@ export function HealthChart({
             <div
               className="health-bars"
               role="img"
-              aria-label={`${shown.length} последних измерений; значения в таблице ниже`}
+              aria-label={t("{0} последних измерений; значения в таблице ниже", shown.length)}
             >
               {shown.map((r) => (
                 <div
@@ -159,13 +160,13 @@ export function HealthChart({
               ))}
             </div>
           )}
-          <div className="chart-caption"><span>{dateLabel(shown[0].day||shown[0].end_at)}</span><span>{unit}{shown.length>1?" · "+dateLabel(shown[shown.length-1].day||shown[shown.length-1].end_at):" · одно измерение"}</span></div>
+          <div className="chart-caption"><span>{dateLabel(shown[0].day||shown[0].end_at)}</span><span>{unit}{shown.length>1?" · "+dateLabel(shown[shown.length-1].day||shown[shown.length-1].end_at):t(" · одно измерение")}</span></div>
           <details>
-            <summary>Показать значения</summary>
+            <summary>{t("Показать значения")}</summary>
             <table>
               <thead>
                 <tr>
-                  <th>Дата</th>
+                  <th>{t("Дата")}</th>
                   <th>{unit}</th>
                 </tr>
               </thead>
@@ -181,8 +182,7 @@ export function HealthChart({
           </details>
           {rows.length > 31 && (
             <small className="muted">
-              На графике последние 31 измерение. Полная история периода — в
-              таблице.
+              {t("На графике последние 31 измерение. Полная история периода — в таблице.")}
             </small>
           )}
         </>
@@ -216,7 +216,7 @@ export function BookStats({ revision }: { revision: Row[] }) {
   return (
     <div className="book-stats">
       <label>
-        Мой год
+        {t("Мой год")}
         <select value={year} onChange={(e) => setYear(Number(e.target.value))}>
           {Array.from(
             { length: 10 },
@@ -229,15 +229,15 @@ export function BookStats({ revision }: { revision: Row[] }) {
       {data && (
         <>
           <span>
-            <strong>{data.finished}</strong> книг прочитано
+            <strong>{data.finished}</strong> {t("книг прочитано")}
           </span>
           <span>
-            <strong>{data.pages}</strong> страниц
+            <strong>{data.pages}</strong> {t("страниц")}
           </span>
-          {Object.keys(data.genres).length>0&&<span>Жанры: {Object.entries(data.genres).map(([genre,count])=>`${genre==='other'?'Без жанра':genre} — ${count}`).join(', ')}</span>}
+          {Object.keys(data.genres).length>0&&<span>{t("Жанры:")} {Object.entries(data.genres).map(([genre,count])=>`${genre==='other'?t("Без жанра"):genre} — ${count}`).join(', ')}</span>}
           {data.pages_per_reading_day !== null && (
             <span>
-              <strong>{data.pages_per_reading_day}</strong> стр. за день чтения
+              <strong>{data.pages_per_reading_day}</strong> {t("стр. за день чтения")}
             </span>
           )}
         </>
@@ -262,8 +262,8 @@ export function SmartGuide({
   });
   return (
     <Modal
-      title="Сформулировать цель"
-      description="Пять вопросов, которые помогут сделать цель понятной."
+      title={t("Сформулировать цель")}
+      description={t("Пять вопросов, которые помогут сделать цель понятной.")}
       onClose={onClose}
     >
       <form
@@ -271,7 +271,7 @@ export function SmartGuide({
           e.preventDefault();
           onComplete({
             title: values.title,
-            description: `Результат: ${values.measure}\nПервые шаги: ${values.steps}\nПочему это важно: ${values.why}`,
+            description: t("Результат: {0}\nПервые шаги: {1}\nПочему это важно: {2}", values.measure, values.steps, values.why),
             due_date: values.due_date,
             status: "active",
             progress: 0,
@@ -280,11 +280,11 @@ export function SmartGuide({
       >
         <div className="modal-body product-form">
           {[
-            ["title", "Чего вы хотите достичь?"],
-            ["measure", "Как вы поймёте, что цель достигнута?"],
-            ["steps", "Какие посильные шаги сделаете?"],
-            ["why", "Почему это важно для вас?"],
-            ["due_date", "К какому сроку?"],
+            ["title", t("Чего вы хотите достичь?")],
+            ["measure", t("Как вы поймёте, что цель достигнута?")],
+            ["steps", t("Какие посильные шаги сделаете?")],
+            ["why", t("Почему это важно для вас?")],
+            ["due_date", t("К какому сроку?")],
           ].map(([key, label]) => (
             <label className="product-field full" key={key}>
               {label}
@@ -302,9 +302,9 @@ export function SmartGuide({
         </div>
         <footer className="modal-footer">
           <button type="button" className="button secondary" onClick={onClose}>
-            Отмена
+            {t("Отмена")}
           </button>
-          <button className="button primary">Перейти к созданию</button>
+          <button className="button primary">{t("Перейти к созданию")}</button>
         </footer>
       </form>
     </Modal>
@@ -382,17 +382,17 @@ export function GoalLinks({
   }
   return (
     <section className="goal-links">
-      <h3>Связанные задачи</h3>
-      {linked.map((t) => (
-        <div className="intake-row" key={t.id}>
-          <span>{text(t.title)}</span>
+      <h3>{t("Связанные задачи")}</h3>
+      {linked.map((task) => (
+        <div className="intake-row" key={task.id}>
+          <span>{text(task.title)}</span>
           <button
             className="text-button"
             disabled={busy}
             onClick={async () => {
               setBusy(true);
               try {
-                await api(`/goals/${goalId}/tasks/${t.id}`, {
+                await api(`/goals/${goalId}/tasks/${task.id}`, {
                   method: "DELETE",
                 });
                 await onRefresh();
@@ -403,7 +403,7 @@ export function GoalLinks({
               }
             }}
           >
-            Отвязать
+            {t("Отвязать")}
           </button>
         </div>
       ))}
@@ -415,13 +415,13 @@ export function GoalLinks({
         }}
       >
         <label className="product-field">
-          Задача
+          {t("Задача")}
           <select
             required
             value={selected}
             onChange={(e) => setSelected(e.target.value)}
           >
-            <option value="">Выберите задачу</option>
+            <option value="">{t("Выберите задачу")}</option>
             {tasks
               .filter((t) => !linked.some((x) => x.id === t.id))
               .map((t) => (
@@ -433,11 +433,11 @@ export function GoalLinks({
         </label>
         <button className="button secondary" disabled={busy || !selected}>
           <Plus size={15} />
-          Связать
+          {t("Связать")}
         </button>
       </form>
-      {taskCursor&&<button className="text-button" disabled={busy} onClick={async()=>{setBusy(true);try{const r=await api<{items:Row[];next_cursor:string|null}>(`/planning/tasks?limit=100&completed=false&cursor=${encodeURIComponent(taskCursor)}`);setTasks(old=>[...old,...r.items]);setTaskCursor(r.next_cursor);}catch(e){setError(errorMessage(e));}finally{setBusy(false);}}}>Загрузить ещё задачи</button>}
-      <h3>Привычки для этой цели</h3>
+      {taskCursor&&<button className="text-button" disabled={busy} onClick={async()=>{setBusy(true);try{const r=await api<{items:Row[];next_cursor:string|null}>(`/planning/tasks?limit=100&completed=false&cursor=${encodeURIComponent(taskCursor)}`);setTasks(old=>[...old,...r.items]);setTaskCursor(r.next_cursor);}catch(e){setError(errorMessage(e));}finally{setBusy(false);}}}>{t("Загрузить ещё задачи")}</button>}
+      <h3>{t("Привычки для этой цели")}</h3>
       {((payload.habits as Row[]) || []).map((h) => (
         <div className="intake-row" key={h.id}>
           <span>{text(h.title)}</span>
@@ -472,7 +472,7 @@ export function GoalLinks({
               }
             }}
           >
-            Отвязать
+            {t("Отвязать")}
           </button>
         </div>
       ))}
@@ -484,13 +484,13 @@ export function GoalLinks({
         }}
       >
         <label className="product-field">
-          Привычка
+          {t("Привычка")}
           <select
             required
             value={habitId}
             onChange={(e) => setHabitId(e.target.value)}
           >
-            <option value="">Выберите привычку</option>
+            <option value="">{t("Выберите привычку")}</option>
             {habits
               .filter((h) => !h.goal_id&&!h.archived&&!((payload.habits as Row[])||[]).some(x=>x.id===h.id))
               .map((h) => (
@@ -502,10 +502,10 @@ export function GoalLinks({
         </label>
         <button className="button secondary" disabled={busy || !habitId}>
           <Plus size={15} />
-          Связать
+          {t("Связать")}
         </button>
       </form>
-      {habitMore&&<button className="text-button" disabled={busy} onClick={async()=>{setBusy(true);try{const r=await api<{items:Row[];has_more:boolean}>(`/habits?limit=100&offset=${habits.length}`);setHabits(old=>[...old,...r.items]);setHabitMore(r.has_more);}catch(e){setError(errorMessage(e));}finally{setBusy(false);}}}>Загрузить ещё привычки</button>}
+      {habitMore&&<button className="text-button" disabled={busy} onClick={async()=>{setBusy(true);try{const r=await api<{items:Row[];has_more:boolean}>(`/habits?limit=100&offset=${habits.length}`);setHabits(old=>[...old,...r.items]);setHabitMore(r.has_more);}catch(e){setError(errorMessage(e));}finally{setBusy(false);}}}>{t("Загрузить ещё привычки")}</button>}
       {error && (
         <p className="field-error" role="alert">
           {error}
@@ -566,7 +566,7 @@ export function WeightTarget({
       }}
     >
       <label>
-        Ваша цель по весу, {weightLabel(unit)}
+        {t("Ваша цель по весу,")} {weightLabel(unit)}
         <input
           type="number"
           min="0.001"
@@ -578,7 +578,7 @@ export function WeightTarget({
         />
       </label>
       <button className="button secondary" disabled={busy}>
-        {item ? "Обновить цель" : "Сохранить цель"}
+        {item ? t("Обновить цель") : t("Сохранить цель")}
       </button>
       {error && (
         <p role="alert" className="field-error">
@@ -613,7 +613,7 @@ export function NutritionBalance({
   return (
     <div className="book-stats">
       <label>
-        Питание за день
+        {t("Питание за день")}
         <input
           type="date"
           required
@@ -625,10 +625,10 @@ export function NutritionBalance({
       </label>
       {data &&
         [
-          ["calories", "ккал"],
-          ["protein", "г белка"],
-          ["fat", "г жиров"],
-          ["carbs", "г углеводов"],
+          ["calories", t("ккал")],
+          ["protein", t("г белка")],
+          ["fat", t("г жиров")],
+          ["carbs", t("г углеводов")],
         ].map(([k, label]) => (
           <span key={k}>
             <strong>{amount(data[k])}</strong> {label}
@@ -673,9 +673,9 @@ export function DiaryCalendar({
     count = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
   return (
     <details className="diary-calendar" open>
-      <summary>Настроение по дням</summary>
+      <summary>{t("Настроение по дням")}</summary>
       <label>
-        Месяц
+        {t("Месяц")}
         <input
           type="month"
           value={month}
@@ -687,7 +687,7 @@ export function DiaryCalendar({
         />
       </label>
       <div className="diary-calendar-grid">
-        {["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"].map((d) => (
+        {[t("Пн"), t("Вт"), t("Ср"), t("Чт"), t("Пт"), t("Сб"), t("Вс")].map((d) => (
           <small key={d}>{d}</small>
         ))}
         {Array.from({ length: offset }, (_, i) => (
@@ -704,7 +704,7 @@ export function DiaryCalendar({
               className={entries ? "has-entry" : ""}
               data-mood={snapshot?.mood?Math.round(snapshot.mood):undefined}
               aria-pressed={selected === day}
-              aria-label={`${dateLabel(day)}: записей ${entries}${snapshot?.mood?'; настроение '+snapshot.mood+' из 5':''}`}
+              aria-label={t("{0}: записей {1}{2}", dateLabel(day), entries, snapshot?.mood?t("; настроение ")+snapshot.mood+t(" из 5"):'')}
               onClick={() => onSelect(selected === day ? "" : day)}
             >
               {i + 1}
@@ -753,7 +753,7 @@ export function MilestoneEditor({
       }}
     >
       <label>
-        Этап
+        {t("Этап")}
         <input
           value={title}
           required
@@ -762,7 +762,7 @@ export function MilestoneEditor({
         />
       </label>
       <label>
-        Прогресс, %
+        {t("Прогресс, %")}
         <input
           type="number"
           value={progress}
@@ -773,7 +773,7 @@ export function MilestoneEditor({
         />
       </label>
       <button className="button secondary" disabled={busy}>
-        Сохранить
+        {t("Сохранить")}
       </button>
       <button
         className="text-button"
@@ -781,11 +781,11 @@ export function MilestoneEditor({
         disabled={busy}
         onClick={() => setRemoving(true)}
       >
-        Удалить
+        {t("Удалить")}
       </button>
       {removing && (
-        <div role="group" aria-label="Подтвердите удаление этапа">
-          <span>Удалить этот этап?</span>
+        <div role="group" aria-label={t("Подтвердите удаление этапа")}>
+          <span>{t("Удалить этот этап?")}</span>
           <button
             className="text-button"
             type="button"
@@ -805,14 +805,14 @@ export function MilestoneEditor({
               }
             }}
           >
-            Да, удалить
+            {t("Да, удалить")}
           </button>
           <button
             className="text-button"
             type="button"
             onClick={() => setRemoving(false)}
           >
-            Отмена
+            {t("Отмена")}
           </button>
         </div>
       )}

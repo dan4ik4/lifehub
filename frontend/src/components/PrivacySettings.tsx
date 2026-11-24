@@ -1,3 +1,4 @@
+import { t } from '../lib/language';
 import { useEffect, useState } from "react";
 import { Download, LoaderCircle, Trash2, Upload } from "lucide-react";
 import { api, errorMessage, isDemo } from "../lib/api";
@@ -64,7 +65,7 @@ export function PrivacySettings({
         body: { format },
       });
       setExports((old) => [job, ...old]);
-      notify("Готовим копию ваших данных");
+      notify(t("Готовим копию ваших данных"));
     } catch (e) {
       setError(errorMessage(e));
     } finally {
@@ -96,16 +97,16 @@ export function PrivacySettings({
     <section className="privacy-settings">
       <AssistantPreferences userId={user.id}/>
       <div className="settings-divider" />
-      <h3>Фото профиля</h3>
+      <h3>{t("Фото профиля")}</h3>
       <div className="privacy-avatar-row">
         {avatar ? (
-          <img src={avatar} alt="Ваше фото профиля" />
+          <img src={avatar} alt={t("Ваше фото профиля")} />
         ) : (
           <span className="profile-avatar">{user.name.slice(0, 1)}</span>
         )}
         <label className="button secondary">
           <Upload size={16} />
-          {busy === "avatar" ? "Загружаем…" : "Выбрать фото"}
+          {busy === "avatar" ? t("Загружаем…") : t("Выбрать фото")}
           <input
             className="sr-only"
             type="file"
@@ -116,7 +117,7 @@ export function PrivacySettings({
               if (!file) return;
               setError("");
               if (file.size > 650000) {
-                setError("Выберите фото меньше 650 КБ.");
+                setError(t("Выберите фото меньше 650 КБ."));
                 return;
               }
               setBusy("avatar");
@@ -135,7 +136,7 @@ export function PrivacySettings({
                   (await api<{ data: string }>("/users/me/avatar")).data,
                 );
                 window.dispatchEvent(new Event("lifehub:avatar"));
-                notify("Фото сохранено");
+                notify(t("Фото сохранено"));
               } catch (err) {
                 setError(errorMessage(err));
               } finally {
@@ -148,7 +149,7 @@ export function PrivacySettings({
         {avatar && (
           <button
             className="icon-button"
-            aria-label="Удалить фото"
+            aria-label={t("Удалить фото")}
             disabled={!!busy}
             onClick={async () => {
               setBusy("avatar");
@@ -168,12 +169,12 @@ export function PrivacySettings({
         )}
       </div>
       <p className="settings-help">
-        JPG, PNG или WebP до 650 КБ. Фото доступно только в вашем аккаунте.
+        {t("JPG, PNG или WebP до 650 КБ. Фото доступно только в вашем аккаунте.")}
       </p>
       <div className="settings-divider" />
-      <h3>Копия ваших данных</h3>
+      <h3>{t("Копия ваших данных")}</h3>
       <p className="settings-help">
-        Сохранённые записи из всех разделов. Файл будет доступен 24 часа.
+        {t("Сохранённые записи из всех разделов. Файл будет доступен 24 часа.")}
       </p>
       <div className="privacy-buttons">
         <button
@@ -182,7 +183,7 @@ export function PrivacySettings({
           onClick={() => void requestExport("json")}
         >
           <Download size={16} />
-          Экспорт JSON
+          {t("Экспорт JSON")}
         </button>
         <button
           className="button secondary"
@@ -190,7 +191,7 @@ export function PrivacySettings({
           onClick={() => void requestExport("csv")}
         >
           <Download size={16} />
-          Таблицы CSV
+          {t("Таблицы CSV")}
         </button>
       </div>
       {exports.map((job) => (
@@ -198,10 +199,10 @@ export function PrivacySettings({
           <span>
             {job.format.toUpperCase()} ·{" "}
             {job.status === "queued"
-              ? "Готовим файл…"
+              ? t("Готовим файл…")
               : job.status === "ready"
-                ? "Готов к скачиванию"
-                : "Не удалось подготовить"}
+                ? t("Готов к скачиванию")
+                : t("Не удалось подготовить")}
           </span>
           {job.status === "queued" && (
             <LoaderCircle size={16} className="spinner" />
@@ -212,29 +213,26 @@ export function PrivacySettings({
               disabled={!!busy}
               onClick={() => void download(job.id)}
             >
-              Скачать
+              {t("Скачать")}
             </button>
           )}
         </div>
       ))}
       <div className="settings-divider" />
-      <h3>Удаление аккаунта</h3>
+      <h3>{t("Удаление аккаунта")}</h3>
       <p className="settings-help">
-        Доступ закроется сразу. Через 30 дней аккаунт и его данные будут удалены
-        окончательно. В течение этих 30 дней восстановление доступно через
-        администратора.
+        {t("Доступ закроется сразу. Через 30 дней аккаунт и его данные будут удалены окончательно. В течение этих 30 дней восстановление доступно через администратора.")}
       </p>
       <button
         className="button ghost danger-text"
         disabled={demo || !user.auth_providers.includes("password")}
         onClick={() => setDeleting(true)}
       >
-        Удалить мой аккаунт
+        {t("Удалить мой аккаунт")}
       </button>
       {!user.auth_providers.includes("password") && (
         <p className="settings-help">
-          Для аккаунта Google или Apple пока требуется обращение к
-          администратору.
+          {t("Для аккаунта Google или Apple пока требуется обращение к администратору.")}
         </p>
       )}
       {error && (
@@ -244,7 +242,7 @@ export function PrivacySettings({
       )}
       {deleting && (
         <Modal
-          title="Удалить аккаунт?"
+          title={t("Удалить аккаунт?")}
           onClose={() => !busy && setDeleting(false)}
         >
           <form
@@ -258,7 +256,7 @@ export function PrivacySettings({
                   body: { password, confirm: "DELETE" },
                 });
                 setPassword("");
-                notify("Аккаунт отмечен для удаления");
+                notify(t("Аккаунт отмечен для удаления"));
                 onLogout();
               } catch (err) {
                 setError(errorMessage(err));
@@ -269,11 +267,10 @@ export function PrivacySettings({
           >
             <div className="modal-body">
               <p>
-                Доступ будет закрыт на всех устройствах. Введите пароль, чтобы
-                подтвердить удаление.
+                {t("Доступ будет закрыт на всех устройствах. Введите пароль, чтобы подтвердить удаление.")}
               </p>
               <label className="field">
-                Текущий пароль
+                {t("Текущий пароль")}
                 <input
                   className="input"
                   type="password"
@@ -296,10 +293,10 @@ export function PrivacySettings({
                 disabled={!!busy}
                 onClick={() => setDeleting(false)}
               >
-                Отмена
+                {t("Отмена")}
               </button>
               <button className="button danger" disabled={!!busy}>
-                Удалить аккаунт
+                {t("Удалить аккаунт")}
               </button>
             </footer>
           </form>

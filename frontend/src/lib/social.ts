@@ -1,3 +1,4 @@
+import { t, language } from './language';
 // Provider APIs: developers.google.com/identity/gsi/web/reference/js-reference
 // developer.apple.com/documentation/signinwithapple/configuring-your-webpage-for-sign-in-with-apple
 export interface SocialCredential { provider: 'google' | 'apple'; token: string; nonce: string }
@@ -31,7 +32,7 @@ function loadScript(source: string): Promise<void> {
     const fail = () => {
       window.clearTimeout(timeout);
       script.remove(); scripts.delete(source);
-      reject(new Error('Сервис входа не загрузился. Проверьте подключение и обновите страницу.'));
+      reject(new Error(t("Сервис входа не загрузился. Проверьте подключение и обновите страницу.")));
     };
     script.src = source; script.async = true;
     script.onload = () => { window.clearTimeout(timeout); resolve(); };
@@ -55,7 +56,7 @@ export function mountGoogleButton(element: HTMLElement, onCredential: (credentia
   void loadScript('https://accounts.google.com/gsi/client?hl=ru').then(() => {
     if (!active) return;
     const identity = window.google?.accounts.id;
-    if (!identity) throw new Error('Вход через Google сейчас недоступен.');
+    if (!identity) throw new Error(t("Вход через Google сейчас недоступен."));
     if (!googleReady) {
       googleNonce = randomValue();
       identity.initialize({ client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID, nonce: googleNonce,
@@ -68,7 +69,7 @@ export function mountGoogleButton(element: HTMLElement, onCredential: (credentia
     }
     googleListener = onCredential;
     identity.renderButton(element, { type: 'standard', theme: 'outline', size: 'large',
-      text: 'continue_with', shape: 'rectangular', width: Math.min(400, Math.max(220, element.clientWidth)), locale: 'ru' });
+      text: 'continue_with', shape: 'rectangular', width: Math.min(400, Math.max(220, element.clientWidth)), locale: language });
   }).catch(error => { if (active) onError(error); });
   return () => {
     active = false;
@@ -80,7 +81,7 @@ export function mountGoogleButton(element: HTMLElement, onCredential: (credentia
 export async function prepareAppleSignIn(): Promise<() => Promise<SocialCredential>> {
   await loadScript('https://appleid.cdn-apple.com/appleauth/static/jsapi/appleid/1/ru_RU/appleid.auth.js');
   const identity = window.AppleID?.auth;
-  if (!identity) throw new Error('Вход через Apple сейчас недоступен.');
+  if (!identity) throw new Error(t("Вход через Apple сейчас недоступен."));
   const nonce = randomValue();
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(nonce));
   const hashedNonce = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
@@ -91,16 +92,16 @@ export async function prepareAppleSignIn(): Promise<() => Promise<SocialCredenti
     try {
       const result = await identity.signIn();
       if (!result.authorization?.id_token || result.authorization.state !== state) {
-        throw new Error('Не удалось проверить ответ Apple. Повторите вход.');
+        throw new Error(t("Не удалось проверить ответ Apple. Повторите вход."));
       }
       return { provider: 'apple', token: result.authorization.id_token, nonce };
     } catch (error) {
       const reason = (error as { error?: string })?.error;
       if (reason === 'popup_closed_by_user' || reason === 'user_cancelled_authorize') {
-        throw new Error('Вход через Apple отменён. Можно попробовать снова.');
+        throw new Error(t("Вход через Apple отменён. Можно попробовать снова."));
       }
       if (error instanceof Error) throw error;
-      throw new Error('Не удалось войти через Apple. Проверьте разрешение всплывающих окон.');
+      throw new Error(t("Не удалось войти через Apple. Проверьте разрешение всплывающих окон."));
     }
   };
 }

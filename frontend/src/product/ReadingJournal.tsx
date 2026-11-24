@@ -1,3 +1,4 @@
+import { t } from '../lib/language';
 import {useEffect,useRef,useState} from 'react';
 import {BookOpen,Check,Pencil,Plus,Tag} from 'lucide-react';
 import {api,errorMessage} from '../lib/api';
@@ -17,22 +18,22 @@ export function DiaryComposer({user,day,onSaved,notify}:{user:User;day:string;on
     saving.current=true;setBusy(true);setError('');
     try{
       await api('/diary/entries',{method:'POST',body:{day,title:title.trim(),text:text.trim(),mood,tags:tags.split(',').map(t=>t.trim()).filter(Boolean)}});
-      setText('');setTitle('');setMood(null);setTags('');setExtras(false);onSaved();notify('Запись сохранена');
+      setText('');setTitle('');setMood(null);setTags('');setExtras(false);onSaved();notify(t("Запись сохранена"));
     }catch(e){setError(errorMessage(e));}
     finally{saving.current=false;setBusy(false);}
   }
   return <form className="life-diary-compose" onSubmit={e=>{e.preventDefault();void save();}}>
-    <div className="life-diary-compose-head"><label><span className="sr-only">Дата записи</span>{dayLabel(day,{weekday:'long',day:'numeric',month:'long'})}</label>
-      <div className="life-mood" role="group" aria-label="Как прошёл день?"><span>Как прошёл день?</span>{[1,2,3,4,5].map(value=><button key={value} type="button" aria-pressed={mood===value} onClick={()=>setMood(mood===value?null:value)}>{value}</button>)}</div>
+    <div className="life-diary-compose-head"><label><span className="sr-only">{t("Дата записи")}</span>{dayLabel(day,{weekday:'long',day:'numeric',month:'long'})}</label>
+      <div className="life-mood" role="group" aria-label={t("Как прошёл день?")}><span>{t("Как прошёл день?")}</span>{[1,2,3,4,5].map(value=><button key={value} type="button" aria-pressed={mood===value} onClick={()=>setMood(mood===value?null:value)}>{value}</button>)}</div>
     </div>
-    <label className="sr-only" htmlFor="life-diary-draft">Запись в дневник</label>
+    <label className="sr-only" htmlFor="life-diary-draft">{t("Запись в дневник")}</label>
     <textarea id="life-diary-draft" required maxLength={100000} value={text} onChange={e=>setText(e.target.value)} rows={3}
-      placeholder="Что хочется сохранить сегодня?" onKeyDown={e=>{if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();void save();}}}/>
-    {extras&&<div className="life-diary-extras"><label>Название<input maxLength={300} value={title} onChange={e=>setTitle(e.target.value)}/></label>
-      <label>Теги через запятую<input maxLength={390} value={tags} onChange={e=>setTags(e.target.value)}/></label></div>}
+      placeholder={t("Что хочется сохранить сегодня?")} onKeyDown={e=>{if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();void save();}}}/>
+    {extras&&<div className="life-diary-extras"><label>{t("Название")}<input maxLength={300} value={title} onChange={e=>setTitle(e.target.value)}/></label>
+      <label>{t("Теги через запятую")}<input maxLength={390} value={tags} onChange={e=>setTags(e.target.value)}/></label></div>}
     {error&&<p className="field-error" role="alert">{error}</p>}
-    <footer><button type="button" className="life-text-link" aria-expanded={extras} onClick={()=>setExtras(open=>!open)}><Tag size={16}/>Название и теги</button>
-      <button className="button primary" disabled={busy||!text.trim()}><Check size={15}/>{busy?'Сохраняю…':'Сохранить'}</button></footer>
+    <footer><button type="button" className="life-text-link" aria-expanded={extras} onClick={()=>setExtras(open=>!open)}><Tag size={16}/>{t("Название и теги")}</button>
+      <button className="button primary" disabled={busy||!text.trim()}><Check size={15}/>{busy?t("Сохраняю…"):t("Сохранить")}</button></footer>
   </form>;
 }
 
@@ -62,31 +63,31 @@ export function ReadingPanel({user,rows,pro,notify,onOpen,onEdit,onSaved}:{user:
     try{
       const body={...bodyFor(sections.books[0],{...book,...next}),version:book.version};
       const updated=await api<Row>('/books/'+book.id,{method:'PATCH',body});
-      setBook(updated.status==='reading'?updated:null);setFinish(false);onSaved();notify('Прогресс чтения сохранён');
+      setBook(updated.status==='reading'?updated:null);setFinish(false);onSaved();notify(t("Прогресс чтения сохранён"));
     }catch(e){setError(errorMessage(e));}
     finally{setBusy(false);}
   }
   return <div className="life-reading-grid">
     <LifeCard className="life-reading-current">
-      {book?<><button className="life-book-cover-button" onClick={()=>onOpen(book)} aria-label={'Открыть '+book.title}><BookCover book={book}/></button>
-        <div><span className="life-tag"><BookOpen size={13}/>Читаю</span><h2>{String(book.title)}</h2><p>{String(book.author??'')}{book.total_pages?' · '+book.total_pages+' стр.':''}</p>
-          {pct!==null&&<div className="life-reading-progress"><progress max={100} value={pct} aria-label="Прогресс чтения"/><strong>{pct}%</strong></div>}
-          <p>{String(book.current_page)}{book.total_pages?' из '+book.total_pages:''} стр.</p>
-          <div className="life-reading-actions">{[10,25,50].map(delta=><button key={delta} onClick={()=>void save({current_page:Math.min(Number(book.total_pages??100000),Number(book.current_page)+delta)})} disabled={busy||pct===100}>+{delta} стр.</button>)}
-            <button onClick={()=>onEdit(book)} disabled={busy}><Pencil size={14}/>Стр. {String(book.current_page)}</button>
-            <button className="finish" onClick={()=>{setRating(0);setFinish(true);}} disabled={busy}><Check size={15}/>Дочитал</button></div>
+      {book?<><button className="life-book-cover-button" onClick={()=>onOpen(book)} aria-label={t("Открыть ")+book.title}><BookCover book={book}/></button>
+        <div><span className="life-tag"><BookOpen size={13}/>{t("Читаю")}</span><h2>{String(book.title)}</h2><p>{String(book.author??'')}{book.total_pages?' · '+book.total_pages+t(" стр."):''}</p>
+          {pct!==null&&<div className="life-reading-progress"><progress max={100} value={pct} aria-label={t("Прогресс чтения")}/><strong>{pct}%</strong></div>}
+          <p>{String(book.current_page)}{book.total_pages?t(" из ")+book.total_pages:''} {t("стр.")}</p>
+          <div className="life-reading-actions">{[10,25,50].map(delta=><button key={delta} onClick={()=>void save({current_page:Math.min(Number(book.total_pages??100000),Number(book.current_page)+delta)})} disabled={busy||pct===100}>+{delta} {t("стр.")}</button>)}
+            <button onClick={()=>onEdit(book)} disabled={busy}><Pencil size={14}/>{t("Стр.")} {String(book.current_page)}</button>
+            <button className="finish" onClick={()=>{setRating(0);setFinish(true);}} disabled={busy}><Check size={15}/>{t("Дочитал")}</button></div>
           {error&&!finish&&<p className="field-error" role="alert">{error}</p>}</div></>
-        :<div><h2>Сейчас читаю</h2><p>Выберите книгу на полке и переведите её в «Читаю», чтобы отмечать страницы.</p></div>}
+        :<div><h2>{t("Сейчас читаю")}</h2><p>{t("Выберите книгу на полке и переведите её в «Читаю», чтобы отмечать страницы.")}</p></div>}
     </LifeCard>
-    {pro&&<LifeCard className="life-reading-goal"><h3>Цель {year}</h3><LifeRings size={119} label={(total??0)+' прочитано'} values={[{value:target&&total!==null?total/target:0,color:'#245447'}]}/>
-      <strong>{total??'—'} {target?'из '+target+' книг':'прочитано'}</strong>
-      <button className="button secondary" onClick={()=>setGoal(target?String(target):'12')}>{target?'Изменить цель':'Установить цель'}</button></LifeCard>}
-    {goal!==null&&<Modal title={'Цель на '+year+' год'} onClose={()=>setGoal(null)}><form onSubmit={e=>{e.preventDefault();setTarget(Number(goal));try{localStorage.setItem(storage,goal);}catch{}setGoal(null);}}>
-      <div className="modal-body product-form"><label>Сколько книг хотите прочитать?<input required type="number" min={1} max={1000} value={goal} onChange={e=>setGoal(e.target.value)}/></label></div>
-      <footer className="modal-footer"><button className="button primary">Сохранить</button></footer></form></Modal>}
-    {finish&&<Modal title="Книга прочитана" description="Можно поставить оценку или сохранить сразу." onClose={()=>!busy&&setFinish(false)}>
-      <div className="modal-body life-mood">{[1,2,3,4,5].map(value=><button key={value} type="button" aria-label={'Оценка '+value} aria-pressed={rating===value} onClick={()=>setRating(value)}>{value}</button>)}
+    {pro&&<LifeCard className="life-reading-goal"><h3>{t("Цель")} {year}</h3><LifeRings size={119} label={(total??0)+t(" прочитано")} values={[{value:target&&total!==null?total/target:0,color:'#245447'}]}/>
+      <strong>{total??'—'} {target?t("из ")+target+t(" книг"):t("прочитано")}</strong>
+      <button className="button secondary" onClick={()=>setGoal(target?String(target):'12')}>{target?t("Изменить цель"):t("Установить цель")}</button></LifeCard>}
+    {goal!==null&&<Modal title={t("Цель на ")+year+t(" год")} onClose={()=>setGoal(null)}><form onSubmit={e=>{e.preventDefault();setTarget(Number(goal));try{localStorage.setItem(storage,goal);}catch{}setGoal(null);}}>
+      <div className="modal-body product-form"><label>{t("Сколько книг хотите прочитать?")}<input required type="number" min={1} max={1000} value={goal} onChange={e=>setGoal(e.target.value)}/></label></div>
+      <footer className="modal-footer"><button className="button primary">{t("Сохранить")}</button></footer></form></Modal>}
+    {finish&&<Modal title={t("Книга прочитана")} description={t("Можно поставить оценку или сохранить сразу.")} onClose={()=>!busy&&setFinish(false)}>
+      <div className="modal-body life-mood">{[1,2,3,4,5].map(value=><button key={value} type="button" aria-label={t("Оценка ")+value} aria-pressed={rating===value} onClick={()=>setRating(value)}>{value}</button>)}
         {error&&<p className="field-error" role="alert">{error}</p>}</div>
-      <footer className="modal-footer"><button className="button primary" disabled={busy} onClick={()=>void save({status:'read',rating:rating||null,finished_on:today})}>Сохранить</button></footer></Modal>}
+      <footer className="modal-footer"><button className="button primary" disabled={busy} onClick={()=>void save({status:'read',rating:rating||null,finished_on:today})}>{t("Сохранить")}</button></footer></Modal>}
   </div>;
 }

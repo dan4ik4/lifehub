@@ -1,3 +1,4 @@
+import { t } from '../lib/language';
 import { useEffect, useState } from "react";
 import { Bell, LoaderCircle } from "lucide-react";
 import {
@@ -37,17 +38,17 @@ export function PushSettings() {
     }
   };
   return (
-    <section className="settings-expand" aria-label="Уведомления">
+    <section className="settings-expand" aria-label={t("Уведомления")}>
       <div className="settings-row">
         <span className="settings-row-icon">
           <Bell size={19} />
         </span>
         <div className="settings-row-copy">
-          <strong>Напоминания на этом устройстве</strong>
+          <strong>{t("Напоминания на этом устройстве")}</strong>
           <span>
             {enabled
-              ? "Уведомления включены"
-              : "Получайте напоминания о ваших планах"}
+              ? t("Уведомления включены")
+              : t("Получайте напоминания о ваших планах")}
           </span>
         </div>
         <button
@@ -57,13 +58,11 @@ export function PushSettings() {
           disabled={busy || isDemo() || !pushSupported()}
         >
           {busy && <LoaderCircle size={16} className="spinner" />}
-          {enabled ? "Выключить" : "Включить"}
+          {enabled ? t("Выключить") : t("Включить")}
         </button>
       </div>
       <p className="settings-help">
-        Разрешение действует только для этого браузера. На iPhone установите
-        сайт на экран «Домой». Содержимое личных планов не показывается на
-        экране блокировки.
+        {t("Разрешение действует только для этого браузера. На iPhone установите сайт на экран «Домой». Содержимое личных планов не показывается на экране блокировки.")}
       </p>
       {error && (
         <p role="alert" className="field-error">
