@@ -60,13 +60,13 @@ export function DiaryReview({user,pro,revision,onSource}:{user:User;pro:boolean;
         {output.reflection_question&&<div className="review-question"><h3>{t("Вопрос для себя")}</h3><p>{output.reflection_question}</p></div>}
         <p className="review-note">{t("Обзор сохранён. При изменении или удалении записей он будет удалён — для новых данных можно создать новый.")}</p>
         <button type="button" className="button ghost" disabled={busy} onClick={()=>setDeleting(true)}><Trash2 size={15}/>{t("Удалить обзор")}</button>
-      </div>:<>
+      </div>:<div className="diary-review-action">
         {!permitted&&!preferencesLoading&&<div className="review-note">{t("Для обзора включите сообщения и доступ к модулям в настройках помощника.")} <button type="button" className="text-button" onClick={()=>setSettings(!settings)}>{t("Настройки доступа")}</button></div>}
         {settings&&<AssistantPreferences userId={user.id}/>}
         <label className="review-consent"><input type="checkbox" checked={consent} disabled={busy||inProgress} onChange={e=>setConsent(e.target.checked)}/>{t("Разрешаю отправить в OpenAI даты, заголовки и тексты моих записей за выбранные семь дней для подготовки обзора. Другие модули и история чата в этот запрос не входят.")}</label>
         <button type="button" className="button primary" disabled={busy||loading||preferencesLoading||!permitted||!consent||!data?.entry_count||inProgress} onClick={()=>void generate()}>{busy||inProgress?<LoaderCircle size={16} className="spinner"/>:<Sparkles size={16}/>} {busy||inProgress?t("Готовлю обзор…"):t("Создать обзор")}</button>
-        <p className="review-note">{t("Одна генерация использует один запрос из общего лимита ИИ. Повторное открытие готового обзора лимит не расходует. До 100 записей и 60 000 символов; записи не обрезаются. Ничего не публикуется и не добавляется в привычки автоматически.")}</p>
-      </>}
+        <details className="review-help"><summary>{t("Как работает обзор")}</summary><p className="review-note">{t("Одна генерация использует один запрос из общего лимита ИИ. Повторное открытие готового обзора лимит не расходует. До 100 записей и 60 000 символов; записи не обрезаются. Ничего не публикуется и не добавляется в привычки автоматически.")}</p></details>
+      </div>}
       {deleting&&data?.review&&<ConfirmDialog title={t("Удалить обзор?")} description={t("Будет удалён только обзор ИИ. Ваши записи дневника останутся.")} confirmLabel={t("Удалить обзор")} onClose={()=>setDeleting(false)} onConfirm={async()=>{await api(`/diary/weekly-review/${data.review!.id}`,{method:'DELETE'});await load();}}/>}
     </>}
   </section>;

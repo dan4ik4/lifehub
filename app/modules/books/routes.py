@@ -1,4 +1,5 @@
 from datetime import date
+from unicodedata import normalize
 from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import select, func, delete, or_
@@ -32,6 +33,14 @@ def book_output(book, user):
 
 
 def book_valid(db, user, values, item):
+    key = values["open_library_key"]
+    if key and (item is None or item.open_library_key != key):
+        # CRUD writes already hold the owner's row lock. Existing copies remain editable.
+        existing = db.scalar(select(Book.id).where(
+            Book.user_id == user.id, Book.open_library_key == key, Book.deleted_at.is_(None)
+        ).limit(1))
+        if existing:
+            raise AppError(409, "book_already_on_shelf", "This book is already on your shelf")
     if not EntitlementService.is_pro(user):
         if values["notes"]:
             EntitlementService.require_pro(user)
@@ -64,6 +73,27 @@ def catalog(
 ):
     request.app.state.rate_limiter.hit("book-search:" + str(user.id), 30, 60)
     return search_catalog(q, page)
+
+
+@router.get("/books/shelf-match")
+def shelf_match(
+    title: str = Query(min_length=1, max_length=300),
+    author: str = Query(default="", max_length=300),
+    user=Depends(member),
+    db=Depends(get_db),
+):
+    def normalized(value):
+        return " ".join(normalize("NFC", value).casefold().split())
+
+    expected = normalized(title), normalized(author)
+    # Stream only identifying fields; reading notes can be up to 50,000 characters.
+    shelf = select(Book.id, Book.title, Book.author).where(
+        Book.user_id == user.id, Book.deleted_at.is_(None)
+    ).order_by(Book.updated_at.desc(), Book.id).execution_options(yield_per=100)
+    for book_id, book_title, book_author in db.execute(shelf):
+        if (normalized(book_title), normalized(book_author)) == expected:
+            return {"id": book_id}
+    return {"id": None}
 
 
 @router.get("/books/stats")
@@ -147,7 +177,8 @@ def search(
     return {"items": [record(i) for i in items[:limit]], "has_more": len(items) > limit}
 
 
-add_resource(router, "/books", Book, BookInput, "books", validate=book_valid, serialize=book_output)
+add_resource(router, "/books", Book, BookInput, "books", validate=book_valid, serialize=book_output,
+             preserve_omitted=("open_library_key", "cover_id"))
 def invalidate_reviews(db, user, item, previous):
     days = {item.day}
     if previous:

@@ -321,7 +321,7 @@ export function createDemoSession(): AuthSession {
 
 function taskResponse(task: Task, data: DemoState): Task {
   const rec = recurrence(task.recurrence?.rrule || null, task.start_at || task.due_at, task.timezone, new Set(Object.keys(data.completions[task.id] || {})));
-  return { ...task, recurrence: rec, next_occurrence_at: rec?.next_occurrence_at || null };
+  return { ...task, completed_at: data.completions[task.id]?.once ?? null, recurrence: rec, next_occurrence_at: rec?.next_occurrence_at || null };
 }
 
 function eventResponse(event: CalendarEvent, data: DemoState, occurrence: string | null = null): CalendarEvent {

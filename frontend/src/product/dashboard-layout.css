@@ -1,0 +1,99 @@
+.life-home {color:var(--life-text)}
+.life-home-title {display:flex;align-items:end;justify-content:space-between;gap:16px;margin:24px 0 38px}
+.life-home-title:has(+.product-error) {margin-bottom:20px}
+.life-home-actions {display:flex;gap:10px;align-items:center}
+.life-home-actions .button {white-space:nowrap}
+.life-home-actions kbd,.life-agenda-add kbd {font-size:10px;background:#e8f0e9;border:0;color:var(--life-primary);padding:2px 5px;border-radius:5px}
+.life-home-primary {display:grid;grid-template-columns:minmax(0,1.57fr) minmax(0,1fr);gap:16px;align-items:stretch}
+.life-home-primary.no-plans {grid-template-columns:1fr}
+.life-home-side {display:grid;gap:16px;align-content:stretch}
+.life-agenda {display:flex;flex-direction:column;min-height:455px}
+.life-home-timeline {display:grid;gap:6px;margin:18px 0 24px}
+.life-home-event,.life-home-task {display:grid;grid-template-columns:46px 14px minmax(0,1fr) auto;gap:11px;align-items:start;text-align:left;padding:12px 0;background:none;border:0;border-radius:15px;color:var(--life-text)}
+.life-home-event time,.life-home-task time {font-size:13px;font-weight:800;margin-top:3px;line-height:1.4}
+.life-home-event>i,.life-home-task>i {width:9px;height:9px;margin:6px 0 0 2px;border-radius:50%;background:var(--life-indigo)}
+.life-home-event.passed {opacity:.65}
+.life-home-event.passed>i {background:#acbab2}
+.life-home-event.current {background:var(--life-indigo-tint);padding:12px}
+.life-home-event.current>i {background:#b84632}
+.life-home-event em {background:#f8e1db;color:#a33925;font-size:10px;font-style:normal;font-weight:800;border-radius:999px;padding:3px 7px}
+.life-home-event strong,.life-task-name {font-size:15px;line-height:1.35;font-weight:800;overflow-wrap:anywhere}
+.life-home-event small,.life-task-name small {display:block;color:var(--life-muted);font-size:13px;font-weight:600;margin-top:4px}
+.life-home-task {grid-template-columns:46px 14px 24px minmax(0,1fr);align-items:start}
+.life-home-task>i {background:transparent;border:2px solid var(--life-primary)}
+.life-home-task.done .life-task-name {color:var(--life-muted);text-decoration:line-through}
+.life-task-name,.life-task-check {background:none;border:0;text-align:left;padding:0;color:inherit}
+.life-task-check {width:22px;height:22px;border:1px solid #a9bcb2;border-radius:50%;display:grid;place-items:center}
+.life-task-check[aria-checked=true] {background:var(--life-primary);border-color:var(--life-primary);color:white}
+.life-home-event progress,.life-live progress,.life-metric progress {display:block;width:100%;height:6px;border:0;border-radius:8px;background:var(--life-subtle);color:var(--life-accent);overflow:hidden}
+.life-home-event progress {height:4px;margin-top:6px;background:#d6d8ef;color:var(--life-indigo)}
+.life-metric progress::-webkit-progress-bar,.life-home-event progress::-webkit-progress-bar,.life-live progress::-webkit-progress-bar {background:transparent}
+.life-metric progress::-webkit-progress-value,.life-home-event progress::-webkit-progress-value,.life-live progress::-webkit-progress-value {background:currentColor;border-radius:999px}
+.life-metric progress::-moz-progress-bar,.life-home-event progress::-moz-progress-bar,.life-live progress::-moz-progress-bar {background:currentColor}
+.life-agenda-add {display:flex;align-items:center;gap:10px;text-align:left;min-height:46px;margin-top:auto;padding:0 14px;background:var(--life-bg);border:0;border-radius:14px;color:var(--life-muted);font-size:14px}
+.life-agenda-add kbd {margin-left:auto;background:white}
+.life-day-progress .life-card-head strong {color:var(--life-primary);font-size:17px}
+.life-progress-body {display:flex;align-items:center;gap:22px;margin-top:18px}
+.life-progress-body dl {display:grid;gap:12px;margin:0;flex:1}
+.life-progress-body dl>div {display:flex;align-items:center;justify-content:space-between;gap:8px}
+.life-progress-body dt,.life-progress-body dd {font-size:14px;margin:0;white-space:nowrap}
+.life-progress-body dt {color:var(--life-muted)}
+.life-progress-body dd {font-weight:800}
+.life-progress-body dd small {font-weight:600;color:var(--life-muted)}
+.life-progress-body dt i {display:inline-block;width:10px;height:10px;margin-right:9px;border-radius:50%;background:var(--life-primary)}
+.life-progress-body dt i.indigo {background:var(--life-indigo)}
+.life-progress-body dt i.brown {background:var(--life-brown)}
+.life-home-habits .life-card-head>span {color:var(--life-muted);font-size:13px}
+.life-habit-icons {display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:18px 0}
+.life-habit-icons button {min-width:0;background:none;border:0;display:grid;gap:7px;justify-items:center;color:var(--life-text);padding:0;font:inherit;font-size:13px}
+.life-habit-icons button>span {display:grid;place-items:center;width:68px;height:68px;border:2px solid var(--life-primary);color:var(--life-primary);border-radius:50%}
+.life-habit-icons button[aria-pressed=true]>span {background:var(--life-primary);color:white}
+.life-habit-icons button.new>span {border:1px dashed #a9bcb2;color:var(--life-muted)}
+.life-habit-icons strong {overflow-wrap:anywhere}
+.life-home-habits>.life-text-link {width:100%;border-top:1px solid var(--life-subtle);padding-top:12px}
+.life-home-widgets {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;margin-top:16px}
+.life-metric {min-width:0;overflow:hidden;min-height:174px;display:flex;flex-direction:column;align-items:start;gap:9px;padding:20px;background:white;border:0;border-radius:24px;color:var(--life-text);text-align:left}
+.life-metric:hover {box-shadow:0 0 0 1px var(--life-line)}
+.life-metric-heading {display:flex;align-items:center;gap:8px;color:var(--life-muted);font-weight:800;font-size:14px;width:100%}
+.life-metric-heading>span {display:grid;place-items:center;height:28px;width:28px;flex:none;background:var(--life-tint);color:var(--life-accent);border-radius:8px}
+.life-metric-heading>svg {margin-left:auto;color:var(--life-accent)}
+.life-metric>strong {font-size:31px;font-weight:800;letter-spacing:-.045em;margin-top:auto;line-height:1.1;overflow-wrap:anywhere}
+.life-metric>strong small,.life-metric-hint {font-size:12px;font-weight:650;color:var(--life-muted);letter-spacing:normal}
+.life-metric progress {margin:12px 0 7px}
+.life-bars {display:flex;align-items:end;justify-content:start;gap:5px;height:35px;width:100%;margin-top:4px;color:var(--life-accent)}
+.life-bars i {width:min(18px,12%);background:color-mix(in srgb,currentColor,white 72%);border-radius:5px;min-height:3px}
+.life-bars i.latest {background:currentColor}
+.life-bars i[data-empty] {background:var(--life-subtle)}
+.life-live-wrapper {position:relative;width:max-content;max-width:100%;margin:0 auto}
+.life-live {display:flex;align-items:center;gap:10px;max-width:100%;background:var(--life-dark);color:white;border:0;border-radius:30px;padding:7px 12px 7px 8px;text-align:left}
+.life-live>span:nth-child(2) {min-width:120px;max-width:320px}
+.life-live strong {display:block;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.life-live small {color:#d0d3f2;font-weight:800;white-space:nowrap}
+.life-live-icon {display:grid;place-items:center;background:var(--life-indigo);border-radius:50%;width:31px;height:31px;flex:none}
+.life-live progress {height:4px;margin-top:5px;background:#ffffff22;color:#c9cdf5}
+.life-live-details {position:absolute;top:calc(100% + 8px);left:0;z-index:8;width:100%;padding:16px!important;box-shadow:0 10px 35px #17282224}
+.life-live-details .button {margin-left:8px}
+.life-widget-options {display:grid;gap:14px}
+.life-widget-options label {display:flex;align-items:center;gap:10px}
+.life-widget-options p {color:var(--life-muted);font-size:13px}
+@media(max-width:960px) {
+  .life-home-primary {grid-template-columns:1fr minmax(270px,.85fr)}
+  .life-progress-body {gap:12px}.life-progress-body svg {width:100px;height:100px}
+}
+@media(max-width:760px){
+  .life-home-title {margin:6px 0 19px;align-items:start}
+  .life-home-title h1 {max-width:260px}
+  .life-home-actions .primary {display:none}
+  .life-home-actions .secondary {font-size:0;padding:0;width:42px;height:42px;border-radius:50%}
+  .life-home-primary {grid-template-columns:1fr;gap:12px}
+  .life-home-side {gap:12px}
+  .life-agenda {min-height:280px}
+  .life-home-event,.life-home-task {gap:6px;grid-template-columns:44px 10px minmax(0,1fr) auto}
+  .life-home-task {grid-template-columns:34px 0 20px minmax(0,1fr)}
+  .life-home-task>i {display:none}
+  .life-home-widgets {grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+  .life-metric {padding:16px;min-height:144px}
+  .life-day-progress {display:none}
+  .life-habit-icons button>span {width:52px;height:52px}
+  .life-home-timeline {margin-top:10px}
+}

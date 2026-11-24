@@ -4,6 +4,8 @@ from fastapi import APIRouter, Depends, Request, Response
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db
+from app.modules.auth.browser import expire_cookies, presented_refresh, sign_in_response, token_response, web_client
+from app.modules.auth.schemas import BrowserAuthSession, BrowserSessionTokens
 from app.modules.auth.dependencies import get_current_user
 from app.modules.auth.models import User
 from app.modules.auth.schemas import (AuthSessionResponse, ChangeEmailRequest, ChangePasswordRequest, ConfirmEmailChangeRequest,
@@ -39,10 +41,11 @@ def preregister(payload: PreregisterRequest, request: Request, auth: AuthService
     return auth.preregister(payload)
 
 
-@router.post("/confirm", response_model=AuthSessionResponse, status_code=201)
-def confirm(payload: ConfirmRegistrationRequest, request: Request, auth: AuthService = Depends(service)):
+@router.post("/confirm", response_model=AuthSessionResponse | BrowserAuthSession, status_code=201)
+def confirm(payload: ConfirmRegistrationRequest, request: Request, response: Response, auth: AuthService = Depends(service)):
+    web_client(request)
     ip_limit(request, "confirm", 30)
-    return auth.confirm(payload, device_info(request))
+    return sign_in_response(request, response, auth, auth.confirm(payload, device_info(request)))
 
 
 @router.post("/send-code", response_model=OtpChallengeResponse, status_code=202, include_in_schema=False)
@@ -52,30 +55,36 @@ def resend(payload: ResendOtpRequest, request: Request, auth: AuthService = Depe
     return auth.resend(payload.challenge_id)
 
 
-@router.post("/login", response_model=AuthSessionResponse)
-def login(payload: LoginRequest, request: Request, auth: AuthService = Depends(service)):
+@router.post("/login", response_model=AuthSessionResponse | BrowserAuthSession)
+def login(payload: LoginRequest, request: Request, response: Response, auth: AuthService = Depends(service)):
+    web_client(request)
     ip_limit(request, "login", 20)
-    return auth.login(payload, device_info(request))
+    return sign_in_response(request, response, auth, auth.login(payload, device_info(request)))
 
 
-@router.post("/social", response_model=AuthSessionResponse)
+@router.post("/social", response_model=AuthSessionResponse | BrowserAuthSession)
 def social(payload: SocialLoginRequest, request: Request, response: Response, auth: AuthService = Depends(service)):
+    web_client(request)
     ip_limit(request, "social", 20)
     result = auth.social(payload, device_info(request))
     response.status_code = 201 if result.is_new_user else 200
-    return result
+    return sign_in_response(request, response, auth, result)
 
 
-@router.post("/refresh", response_model=TokenPairResponse)
-def refresh(payload: RefreshTokenRequest, request: Request, auth: AuthService = Depends(service)):
+@router.post("/refresh", response_model=TokenPairResponse | BrowserSessionTokens)
+def refresh(payload: RefreshTokenRequest, request: Request, response: Response, auth: AuthService = Depends(service)):
+    web_client(request)
     ip_limit(request, "refresh", 120)
-    return auth.tokens.refresh(payload.refresh_token, device_info(request))
+    return token_response(request, response, auth, auth.tokens.refresh(presented_refresh(request, payload), device_info(request)))
 
 
 @router.post("/logout", status_code=204)
-def logout(payload: LogoutRequest, auth: AuthService = Depends(service)):
-    auth.tokens.logout(payload.refresh_token)
-    return Response(status_code=204)
+def logout(payload: LogoutRequest, request: Request, auth: AuthService = Depends(service)):
+    web_client(request)
+    auth.tokens.logout(presented_refresh(request, payload))
+    response = Response(status_code=204)
+    expire_cookies(request, response)
+    return response
 
 
 @router.post("/forgot-password", response_model=MessageResponse, status_code=202)

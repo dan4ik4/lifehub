@@ -19,3 +19,4 @@ from app.modules.books import models as books_models
 
 from app.modules.users import models as user_models
 from app.modules.dashboard import insight_models
+from app.modules.dashboard import day_progress

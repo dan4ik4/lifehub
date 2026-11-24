@@ -66,6 +66,12 @@ def workout_validate(db, user, values, item):
         EntitlementService.require_pro(user)
 
 
+def observe_workout(db, user, item, previous):
+    if item.day == today(user):
+        from app.modules.dashboard.day_progress import observe_day
+        observe_day(db, user)
+
+
 @router.get("/summary")
 def summary(from_: date = Query(alias="from"), to: date = Query(), user=Depends(member), db=Depends(get_db)):
     if to < from_ or (to - from_).days > 366:
@@ -151,6 +157,28 @@ def intakes(medication_id: UUID, day: date, user=Depends(member), db=Depends(get
     }
 
 
+@router.get("/medication-schedule")
+def medication_schedule(day: date, user=Depends(member), db=Depends(get_db)):
+    EntitlementService.require_pro(user)
+    medications = db.scalars(
+        select(Medication).where(Medication.user_id == user.id, Medication.deleted_at.is_(None))
+        .order_by(Medication.title, Medication.id)
+    )
+    taken = set(db.execute(
+        select(MedicationIntake.medication_id, MedicationIntake.time).where(
+            MedicationIntake.user_id == user.id,
+            MedicationIntake.deleted_at.is_(None),
+            MedicationIntake.day == day,
+        )
+    ).tuples())
+    slots = [
+        {"row": {"id": medication.id, "title": medication.title, "version": medication.version},
+         "time": slot, "taken": (medication.id, slot) in taken}
+        for medication in medications for slot in medication.times
+    ]
+    return {"items": sorted(slots, key=lambda item: item["time"])}
+
+
 @router.get("/nutrition-summary")
 def nutrition_summary(day: date, user=Depends(member), db=Depends(get_db)):
     EntitlementService.require_pro(user)
@@ -183,6 +211,7 @@ for path, model, schema, paid, validator in [
         validate=validator,
         read_filter=history_filter(model) if not paid else None,
         preserve_omitted=("efforts",) if model is Workout else (),
+        after_write=observe_workout if model is Workout else None,
     )
 
 from app.modules.health.models import WorkoutProgram, WeightTarget

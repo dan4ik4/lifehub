@@ -439,4 +439,744 @@ CREATE INDEX ix_apple_outbound_changes_job_id ON apple_outbound_changes (job_id)
 
 INSERT INTO alembic_version (version_num) VALUES ('0001') RETURNING alembic_version.version_num;
 
+-- Running upgrade 0001 -> 0002_web_push
+
+CREATE TABLE push_subscriptions (
+    id UUID NOT NULL,
+    user_id UUID NOT NULL,
+    endpoint_hash VARCHAR(64) NOT NULL,
+    encrypted_subscription TEXT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    CONSTRAINT pk_push_subscriptions PRIMARY KEY (id),
+    CONSTRAINT fk_push_subscriptions_user_id_users FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE,
+    CONSTRAINT uq_push_subscriptions_endpoint_hash UNIQUE (endpoint_hash)
+);
+
+CREATE INDEX ix_push_subscriptions_user_id ON push_subscriptions (user_id);
+
+UPDATE alembic_version SET version_num='0002_web_push' WHERE alembic_version.version_num = '0001';
+
+-- Running upgrade 0002_web_push -> 0003_product_modules
+
+CREATE TABLE books (
+    title VARCHAR(300) NOT NULL,
+    author VARCHAR(300) NOT NULL,
+    status VARCHAR(10) NOT NULL,
+    total_pages INTEGER,
+    current_page INTEGER NOT NULL,
+    rating INTEGER,
+    genre VARCHAR(100) NOT NULL,
+    cover_id INTEGER,
+    open_library_key VARCHAR(60),
+    notes TEXT NOT NULL,
+    started_on DATE,
+    finished_on DATE,
+    id UUID NOT NULL,
+    user_id UUID NOT NULL,
+    version INTEGER NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    deleted_at TIMESTAMP WITH TIME ZONE,
+    CONSTRAINT pk_books PRIMARY KEY (id),
+    CONSTRAINT fk_books_user_id_users FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+CREATE INDEX ix_books_deleted_at ON books (deleted_at);
+
+CREATE INDEX ix_books_user_id ON books (user_id);
+
+CREATE TABLE diary_entries (
+    day DATE NOT NULL,
+    title VARCHAR(300) NOT NULL,
+    text TEXT NOT NULL,
+    id UUID NOT NULL,
+    user_id UUID NOT NULL,
+    version INTEGER NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    deleted_at TIMESTAMP WITH TIME ZONE,
+    CONSTRAINT pk_diary_entries PRIMARY KEY (id),
+    CONSTRAINT fk_diary_entries_user_id_users FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+CREATE INDEX ix_diary_entries_day ON diary_entries (day);
+
+CREATE INDEX ix_diary_entries_deleted_at ON diary_entries (deleted_at);
+
+CREATE INDEX ix_diary_entries_user_id ON diary_entries (user_id);
+
+CREATE TABLE finance_budgets (
+    month VARCHAR(7) NOT NULL,
+    category VARCHAR(100) NOT NULL,
+    amount NUMERIC(16, 2) NOT NULL,
+    currency VARCHAR(3) NOT NULL,
+    id UUID NOT NULL,
+    user_id UUID NOT NULL,
+    version INTEGER NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    deleted_at TIMESTAMP WITH TIME ZONE,
+    CONSTRAINT pk_finance_budgets PRIMARY KEY (id),
+    CONSTRAINT fk_finance_budgets_user_id_users FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+CREATE INDEX ix_finance_budgets_deleted_at ON finance_budgets (deleted_at);
+
+CREATE INDEX ix_finance_budgets_month ON finance_budgets (month);
+
+CREATE INDEX ix_finance_budgets_user_id ON finance_budgets (user_id);
+
+CREATE TABLE finance_debts (
+    title VARCHAR(300) NOT NULL,
+    direction VARCHAR(12) NOT NULL,
+    amount NUMERIC(16, 2) NOT NULL,
+    currency VARCHAR(3) NOT NULL,
+    due_date DATE,
+    status VARCHAR(10) NOT NULL,
+    id UUID NOT NULL,
+    user_id UUID NOT NULL,
+    version INTEGER NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    deleted_at TIMESTAMP WITH TIME ZONE,
+    CONSTRAINT pk_finance_debts PRIMARY KEY (id),
+    CONSTRAINT fk_finance_debts_user_id_users FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+CREATE INDEX ix_finance_debts_deleted_at ON finance_debts (deleted_at);
+
+CREATE INDEX ix_finance_debts_user_id ON finance_debts (user_id);
+
+CREATE TABLE finance_goals (
+    title VARCHAR(300) NOT NULL,
+    target NUMERIC(16, 2) NOT NULL,
+    saved NUMERIC(16, 2) NOT NULL,
+    currency VARCHAR(3) NOT NULL,
+    due_date DATE NOT NULL,
+    id UUID NOT NULL,
+    user_id UUID NOT NULL,
+    version INTEGER NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    deleted_at TIMESTAMP WITH TIME ZONE,
+    CONSTRAINT pk_finance_goals PRIMARY KEY (id),
+    CONSTRAINT fk_finance_goals_user_id_users FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+CREATE INDEX ix_finance_goals_deleted_at ON finance_goals (deleted_at);
+
+CREATE INDEX ix_finance_goals_user_id ON finance_goals (user_id);
+
+CREATE TABLE finance_savings (
+    title VARCHAR(300) NOT NULL,
+    kind VARCHAR(20) NOT NULL,
+    amount NUMERIC(16, 2) NOT NULL,
+    currency VARCHAR(3) NOT NULL,
+    id UUID NOT NULL,
+    user_id UUID NOT NULL,
+    version INTEGER NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    deleted_at TIMESTAMP WITH TIME ZONE,
+    CONSTRAINT pk_finance_savings PRIMARY KEY (id),
+    CONSTRAINT fk_finance_savings_user_id_users FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+CREATE INDEX ix_finance_savings_deleted_at ON finance_savings (deleted_at);
+
+CREATE INDEX ix_finance_savings_user_id ON finance_savings (user_id);
+
+CREATE TABLE finance_subscriptions (
+    title VARCHAR(300) NOT NULL,
+    amount NUMERIC(16, 2) NOT NULL,
+    currency VARCHAR(3) NOT NULL,
+    period VARCHAR(12) NOT NULL,
+    next_payment DATE NOT NULL,
+    id UUID NOT NULL,
+    user_id UUID NOT NULL,
+    version INTEGER NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    deleted_at TIMESTAMP WITH TIME ZONE,
+    CONSTRAINT pk_finance_subscriptions PRIMARY KEY (id),
+    CONSTRAINT fk_finance_subscriptions_user_id_users FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+CREATE INDEX ix_finance_subscriptions_deleted_at ON finance_subscriptions (deleted_at);
+
+CREATE INDEX ix_finance_subscriptions_user_id ON finance_subscriptions (user_id);
+
+CREATE TABLE finance_transactions (
+    day DATE NOT NULL,
+    title VARCHAR(300) NOT NULL,
+    kind VARCHAR(8) NOT NULL,
+    amount NUMERIC(16, 2) NOT NULL,
+    currency VARCHAR(3) NOT NULL,
+    category VARCHAR(100) NOT NULL,
+    notes TEXT NOT NULL,
+    id UUID NOT NULL,
+    user_id UUID NOT NULL,
+    version INTEGER NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    deleted_at TIMESTAMP WITH TIME ZONE,
+    CONSTRAINT pk_finance_transactions PRIMARY KEY (id),
+    CONSTRAINT fk_finance_transactions_user_id_users FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+CREATE INDEX ix_finance_transactions_day ON finance_transactions (day);
+
+CREATE INDEX ix_finance_transactions_deleted_at ON finance_transactions (deleted_at);
+
+CREATE INDEX ix_finance_transactions_user_id ON finance_transactions (user_id);
+
+CREATE TABLE goals (
+    title VARCHAR(300) NOT NULL,
+    description TEXT NOT NULL,
+    due_date DATE,
+    status VARCHAR(16) NOT NULL,
+    progress INTEGER NOT NULL,
+    id UUID NOT NULL,
+    user_id UUID NOT NULL,
+    version INTEGER NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    deleted_at TIMESTAMP WITH TIME ZONE,
+    CONSTRAINT pk_goals PRIMARY KEY (id),
+    CONSTRAINT fk_goals_user_id_users FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+CREATE INDEX ix_goals_deleted_at ON goals (deleted_at);
+
+CREATE INDEX ix_goals_user_id ON goals (user_id);
+
+CREATE TABLE health_medications (
+    title VARCHAR(300) NOT NULL,
+    dosage VARCHAR(100) NOT NULL,
+    times JSON NOT NULL,
+    id UUID NOT NULL,
+    user_id UUID NOT NULL,
+    version INTEGER NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    deleted_at TIMESTAMP WITH TIME ZONE,
+    CONSTRAINT pk_health_medications PRIMARY KEY (id),
+    CONSTRAINT fk_health_medications_user_id_users FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+CREATE INDEX ix_health_medications_deleted_at ON health_medications (deleted_at);
+
+CREATE INDEX ix_health_medications_user_id ON health_medications (user_id);
+
+CREATE TABLE health_nutrition (
+    day DATE NOT NULL,
+    meal VARCHAR(12) NOT NULL,
+    title VARCHAR(300) NOT NULL,
+    calories NUMERIC(10, 2) NOT NULL,
+    protein NUMERIC(10, 2) NOT NULL,
+    fat NUMERIC(10, 2) NOT NULL,
+    carbs NUMERIC(10, 2) NOT NULL,
+    id UUID NOT NULL,
+    user_id UUID NOT NULL,
+    version INTEGER NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    deleted_at TIMESTAMP WITH TIME ZONE,
+    CONSTRAINT pk_health_nutrition PRIMARY KEY (id),
+    CONSTRAINT fk_health_nutrition_user_id_users FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+CREATE INDEX ix_health_nutrition_day ON health_nutrition (day);
+
+CREATE INDEX ix_health_nutrition_deleted_at ON health_nutrition (deleted_at);
+
+CREATE INDEX ix_health_nutrition_user_id ON health_nutrition (user_id);
+
+CREATE TABLE health_sleep (
+    start_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    end_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    quality INTEGER NOT NULL,
+    id UUID NOT NULL,
+    user_id UUID NOT NULL,
+    version INTEGER NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    deleted_at TIMESTAMP WITH TIME ZONE,
+    CONSTRAINT pk_health_sleep PRIMARY KEY (id),
+    CONSTRAINT fk_health_sleep_user_id_users FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+CREATE INDEX ix_health_sleep_deleted_at ON health_sleep (deleted_at);
+
+CREATE INDEX ix_health_sleep_end_at ON health_sleep (end_at);
+
+CREATE INDEX ix_health_sleep_user_id ON health_sleep (user_id);
+
+CREATE TABLE health_weight (
+    day DATE NOT NULL,
+    kg NUMERIC(7, 3) NOT NULL,
+    id UUID NOT NULL,
+    user_id UUID NOT NULL,
+    version INTEGER NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    deleted_at TIMESTAMP WITH TIME ZONE,
+    CONSTRAINT pk_health_weight PRIMARY KEY (id),
+    CONSTRAINT fk_health_weight_user_id_users FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+CREATE INDEX ix_health_weight_day ON health_weight (day);
+
+CREATE INDEX ix_health_weight_deleted_at ON health_weight (deleted_at);
+
+CREATE INDEX ix_health_weight_user_id ON health_weight (user_id);
+
+CREATE TABLE health_workouts (
+    day DATE NOT NULL,
+    title VARCHAR(300) NOT NULL,
+    minutes INTEGER NOT NULL,
+    notes TEXT NOT NULL,
+    id UUID NOT NULL,
+    user_id UUID NOT NULL,
+    version INTEGER NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    deleted_at TIMESTAMP WITH TIME ZONE,
+    CONSTRAINT pk_health_workouts PRIMARY KEY (id),
+    CONSTRAINT fk_health_workouts_user_id_users FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+CREATE INDEX ix_health_workouts_day ON health_workouts (day);
+
+CREATE INDEX ix_health_workouts_deleted_at ON health_workouts (deleted_at);
+
+CREATE INDEX ix_health_workouts_user_id ON health_workouts (user_id);
+
+CREATE TABLE finance_debt_payments (
+    debt_id UUID NOT NULL,
+    day DATE NOT NULL,
+    amount NUMERIC(16, 2) NOT NULL,
+    id UUID NOT NULL,
+    user_id UUID NOT NULL,
+    version INTEGER NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    deleted_at TIMESTAMP WITH TIME ZONE,
+    CONSTRAINT pk_finance_debt_payments PRIMARY KEY (id),
+    CONSTRAINT fk_finance_debt_payments_debt_id_finance_debts FOREIGN KEY(debt_id) REFERENCES finance_debts (id) ON DELETE CASCADE,
+    CONSTRAINT fk_finance_debt_payments_user_id_users FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+CREATE INDEX ix_finance_debt_payments_debt_id ON finance_debt_payments (debt_id);
+
+CREATE INDEX ix_finance_debt_payments_deleted_at ON finance_debt_payments (deleted_at);
+
+CREATE INDEX ix_finance_debt_payments_user_id ON finance_debt_payments (user_id);
+
+CREATE TABLE goal_milestones (
+    goal_id UUID NOT NULL,
+    title VARCHAR(300) NOT NULL,
+    progress INTEGER NOT NULL,
+    id UUID NOT NULL,
+    user_id UUID NOT NULL,
+    version INTEGER NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    deleted_at TIMESTAMP WITH TIME ZONE,
+    CONSTRAINT pk_goal_milestones PRIMARY KEY (id),
+    CONSTRAINT fk_goal_milestones_goal_id_goals FOREIGN KEY(goal_id) REFERENCES goals (id) ON DELETE CASCADE,
+    CONSTRAINT fk_goal_milestones_user_id_users FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+CREATE INDEX ix_goal_milestones_deleted_at ON goal_milestones (deleted_at);
+
+CREATE INDEX ix_goal_milestones_goal_id ON goal_milestones (goal_id);
+
+CREATE INDEX ix_goal_milestones_user_id ON goal_milestones (user_id);
+
+CREATE TABLE goal_task_links (
+    goal_id UUID NOT NULL,
+    task_id UUID NOT NULL,
+    CONSTRAINT pk_goal_task_links PRIMARY KEY (goal_id, task_id),
+    CONSTRAINT fk_goal_task_links_goal_id_goals FOREIGN KEY(goal_id) REFERENCES goals (id) ON DELETE CASCADE,
+    CONSTRAINT fk_goal_task_links_task_id_tasks FOREIGN KEY(task_id) REFERENCES tasks (id) ON DELETE CASCADE
+);
+
+CREATE TABLE habits (
+    title VARCHAR(300) NOT NULL,
+    kind VARCHAR(16) NOT NULL,
+    target NUMERIC(14, 4) NOT NULL,
+    unit VARCHAR(40) NOT NULL,
+    weekdays JSON NOT NULL,
+    reminder_time VARCHAR(5),
+    goal_id UUID,
+    archived BOOLEAN NOT NULL,
+    id UUID NOT NULL,
+    user_id UUID NOT NULL,
+    version INTEGER NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    deleted_at TIMESTAMP WITH TIME ZONE,
+    CONSTRAINT pk_habits PRIMARY KEY (id),
+    CONSTRAINT fk_habits_goal_id_goals FOREIGN KEY(goal_id) REFERENCES goals (id) ON DELETE SET NULL,
+    CONSTRAINT fk_habits_user_id_users FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+CREATE INDEX ix_habits_deleted_at ON habits (deleted_at);
+
+CREATE INDEX ix_habits_goal_id ON habits (goal_id);
+
+CREATE INDEX ix_habits_user_id ON habits (user_id);
+
+CREATE TABLE health_medication_intakes (
+    medication_id UUID NOT NULL,
+    day DATE NOT NULL,
+    time VARCHAR(5) NOT NULL,
+    id UUID NOT NULL,
+    user_id UUID NOT NULL,
+    version INTEGER NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    deleted_at TIMESTAMP WITH TIME ZONE,
+    CONSTRAINT pk_health_medication_intakes PRIMARY KEY (id),
+    CONSTRAINT fk_health_medication_intakes_medication_id_health_medications FOREIGN KEY(medication_id) REFERENCES health_medications (id) ON DELETE CASCADE,
+    CONSTRAINT fk_health_medication_intakes_user_id_users FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE,
+    CONSTRAINT uq_medication_intake_slot UNIQUE (medication_id, day, time)
+);
+
+CREATE INDEX ix_health_medication_intakes_day ON health_medication_intakes (day);
+
+CREATE INDEX ix_health_medication_intakes_deleted_at ON health_medication_intakes (deleted_at);
+
+CREATE INDEX ix_health_medication_intakes_medication_id ON health_medication_intakes (medication_id);
+
+CREATE INDEX ix_health_medication_intakes_user_id ON health_medication_intakes (user_id);
+
+CREATE TABLE habit_checkins (
+    habit_id UUID NOT NULL,
+    day DATE NOT NULL,
+    value NUMERIC(14, 4) NOT NULL,
+    id UUID NOT NULL,
+    user_id UUID NOT NULL,
+    version INTEGER NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    deleted_at TIMESTAMP WITH TIME ZONE,
+    CONSTRAINT pk_habit_checkins PRIMARY KEY (id),
+    CONSTRAINT fk_habit_checkins_habit_id_habits FOREIGN KEY(habit_id) REFERENCES habits (id) ON DELETE CASCADE,
+    CONSTRAINT fk_habit_checkins_user_id_users FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE,
+    CONSTRAINT uq_habit_checkin_day UNIQUE (habit_id, day)
+);
+
+CREATE INDEX ix_habit_checkins_day ON habit_checkins (day);
+
+CREATE INDEX ix_habit_checkins_deleted_at ON habit_checkins (deleted_at);
+
+CREATE INDEX ix_habit_checkins_habit_id ON habit_checkins (habit_id);
+
+CREATE INDEX ix_habit_checkins_user_id ON habit_checkins (user_id);
+
+UPDATE alembic_version SET version_num='0003_product_modules' WHERE alembic_version.version_num = '0002_web_push';
+
+-- Running upgrade 0003_product_modules -> 0004_user_privacy
+
+CREATE TABLE user_avatars (
+    user_id UUID NOT NULL,
+    image BYTEA NOT NULL,
+    CONSTRAINT pk_user_avatars PRIMARY KEY (user_id),
+    CONSTRAINT fk_user_avatars_user_id_users FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+CREATE TABLE user_exports (
+    id UUID NOT NULL,
+    user_id UUID NOT NULL,
+    format VARCHAR(8) NOT NULL,
+    status VARCHAR(12) NOT NULL,
+    encrypted_data BYTEA,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    notified BOOLEAN NOT NULL,
+    notification_attempts INTEGER NOT NULL,
+    notification_retry_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    CONSTRAINT pk_user_exports PRIMARY KEY (id),
+    CONSTRAINT fk_user_exports_user_id_users FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+CREATE INDEX ix_user_exports_status ON user_exports (status);
+
+CREATE INDEX ix_user_exports_user_id ON user_exports (user_id);
+
+UPDATE alembic_version SET version_num='0004_user_privacy' WHERE alembic_version.version_num = '0003_product_modules';
+
+-- Running upgrade 0004_user_privacy -> 0005_product_notices
+
+CREATE TABLE product_notices (
+    key VARCHAR(160) NOT NULL,
+    user_id UUID NOT NULL,
+    module VARCHAR(32) NOT NULL,
+    pro_only BOOLEAN NOT NULL,
+    url VARCHAR(100) NOT NULL,
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    delivered_at TIMESTAMP WITH TIME ZONE,
+    retry_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    attempts INTEGER NOT NULL,
+    CONSTRAINT pk_product_notices PRIMARY KEY (key),
+    CONSTRAINT fk_product_notices_user_id_users FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+CREATE INDEX ix_product_notices_expires_at ON product_notices (expires_at);
+
+CREATE INDEX ix_product_notices_retry_at ON product_notices (retry_at);
+
+CREATE INDEX ix_product_notices_user_id ON product_notices (user_id);
+
+UPDATE alembic_version SET version_num='0005_product_notices' WHERE alembic_version.version_num = '0004_user_privacy';
+
+-- Running upgrade 0005_product_notices -> 0006_health_programs
+
+CREATE TABLE health_programs (
+    title VARCHAR(300) NOT NULL,
+    exercises JSON NOT NULL,
+    id UUID NOT NULL,
+    user_id UUID NOT NULL,
+    version INTEGER NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    deleted_at TIMESTAMP WITH TIME ZONE,
+    CONSTRAINT pk_health_programs PRIMARY KEY (id),
+    CONSTRAINT fk_health_programs_user_id_users FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+CREATE INDEX ix_health_programs_user_id ON health_programs (user_id);
+
+CREATE INDEX ix_health_programs_deleted_at ON health_programs (deleted_at);
+
+CREATE TABLE health_weight_targets (
+    kg NUMERIC(7, 3) NOT NULL,
+    id UUID NOT NULL,
+    user_id UUID NOT NULL,
+    version INTEGER NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    deleted_at TIMESTAMP WITH TIME ZONE,
+    CONSTRAINT pk_health_weight_targets PRIMARY KEY (id),
+    CONSTRAINT fk_health_weight_targets_user_id_users FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+CREATE INDEX ix_health_weight_targets_user_id ON health_weight_targets (user_id);
+
+CREATE INDEX ix_health_weight_targets_deleted_at ON health_weight_targets (deleted_at);
+
+UPDATE alembic_version SET version_num='0006_health_programs' WHERE alembic_version.version_num = '0005_product_notices';
+
+-- Running upgrade 0006_health_programs -> 0007_savings_history
+
+CREATE TABLE finance_savings_history (
+    savings_id UUID NOT NULL,
+    amount NUMERIC(16, 2) NOT NULL,
+    currency VARCHAR(3) NOT NULL,
+    previous_amount NUMERIC(16, 2),
+    previous_currency VARCHAR(3),
+    id UUID NOT NULL,
+    user_id UUID NOT NULL,
+    version INTEGER NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    deleted_at TIMESTAMP WITH TIME ZONE,
+    CONSTRAINT pk_finance_savings_history PRIMARY KEY (id),
+    CONSTRAINT fk_finance_savings_history_savings_id_finance_savings FOREIGN KEY(savings_id) REFERENCES finance_savings (id) ON DELETE CASCADE,
+    CONSTRAINT fk_finance_savings_history_user_id_users FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+CREATE INDEX ix_finance_savings_history_deleted_at ON finance_savings_history (deleted_at);
+
+CREATE INDEX ix_finance_savings_history_savings_id ON finance_savings_history (savings_id);
+
+CREATE INDEX ix_finance_savings_history_user_id ON finance_savings_history (user_id);
+
+UPDATE alembic_version SET version_num='0007_savings_history' WHERE alembic_version.version_num = '0006_health_programs';
+
+-- Running upgrade 0007_savings_history -> 0008_weight_unit
+
+ALTER TABLE users ADD COLUMN weight_unit VARCHAR(2) DEFAULT 'kg' NOT NULL;
+
+UPDATE alembic_version SET version_num='0008_weight_unit' WHERE alembic_version.version_num = '0007_savings_history';
+
+-- Running upgrade 0008_weight_unit -> 0009_chat_history
+
+ALTER TABLE planning_commands ADD COLUMN request_text TEXT;
+
+UPDATE alembic_version SET version_num='0009_chat_history' WHERE alembic_version.version_num = '0008_weight_unit';
+
+-- Running upgrade 0009_chat_history -> 0010_chat_photos
+
+ALTER TABLE planning_commands ADD COLUMN request_photos JSON;
+
+UPDATE alembic_version SET version_num='0010_chat_photos' WHERE alembic_version.version_num = '0009_chat_history';
+
+-- Running upgrade 0010_chat_photos -> 0011_device_health
+
+CREATE TABLE health_connections (
+    user_id UUID NOT NULL,
+    provider VARCHAR(20) NOT NULL,
+    enabled BOOLEAN NOT NULL,
+    sync_token UUID NOT NULL,
+    revision INTEGER NOT NULL,
+    last_synced_at TIMESTAMP WITH TIME ZONE,
+    CONSTRAINT pk_health_connections PRIMARY KEY (user_id),
+    CONSTRAINT fk_health_connections_user_id_users FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+CREATE TABLE health_device_days (
+    user_id UUID NOT NULL,
+    provider VARCHAR(20) NOT NULL,
+    day DATE NOT NULL,
+    timezone VARCHAR(100) NOT NULL,
+    steps INTEGER,
+    sleep_seconds INTEGER,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    CONSTRAINT pk_health_device_days PRIMARY KEY (user_id, provider, day),
+    CONSTRAINT fk_health_device_days_user_id_users FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+UPDATE alembic_version SET version_num='0011_device_health' WHERE alembic_version.version_num = '0010_chat_photos';
+
+-- Running upgrade 0011_device_health -> 0012_assistant_preferences
+
+ALTER TABLE users ADD COLUMN chat_preferences JSON DEFAULT '{}' NOT NULL;
+
+UPDATE alembic_version SET version_num='0012_assistant_preferences' WHERE alembic_version.version_num = '0011_device_health';
+
+-- Running upgrade 0012_assistant_preferences -> 0013_goal_tracking
+
+ALTER TABLE goals ADD COLUMN target_value NUMERIC(14, 4);
+
+ALTER TABLE goals ADD COLUMN current_value NUMERIC(14, 4) DEFAULT '0' NOT NULL;
+
+ALTER TABLE goals ADD COLUMN unit VARCHAR(40) DEFAULT '' NOT NULL;
+
+ALTER TABLE habits ADD COLUMN contributes BOOLEAN DEFAULT false NOT NULL;
+
+UPDATE alembic_version SET version_num='0013_goal_tracking' WHERE alembic_version.version_num = '0012_assistant_preferences';
+
+-- Running upgrade 0013_goal_tracking -> 0014_csv_import
+
+CREATE TABLE finance_csv_imports (
+    id UUID NOT NULL,
+    user_id UUID NOT NULL,
+    request_key VARCHAR(128) NOT NULL,
+    request_hash VARCHAR(64) NOT NULL,
+    account VARCHAR(100) NOT NULL,
+    status VARCHAR(16) NOT NULL,
+    rows JSON NOT NULL,
+    result JSON,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    CONSTRAINT pk_finance_csv_imports PRIMARY KEY (id),
+    CONSTRAINT uq_finance_csv_imports_user_id UNIQUE (user_id, request_key),
+    CONSTRAINT fk_finance_csv_imports_user_id_users FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+CREATE INDEX ix_finance_csv_imports_user_id ON finance_csv_imports (user_id);
+
+CREATE TABLE finance_csv_rows (
+    user_id UUID NOT NULL,
+    account_hash VARCHAR(64) NOT NULL,
+    fingerprint VARCHAR(64) NOT NULL,
+    transaction_id UUID NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    CONSTRAINT pk_finance_csv_rows PRIMARY KEY (user_id, account_hash, fingerprint),
+    CONSTRAINT fk_finance_csv_rows_user_id_users FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE,
+    CONSTRAINT fk_finance_csv_rows_transaction_id_finance_transactions FOREIGN KEY(transaction_id) REFERENCES finance_transactions (id) ON DELETE CASCADE
+);
+
+UPDATE alembic_version SET version_num='0014_csv_import' WHERE alembic_version.version_num = '0013_goal_tracking';
+
+-- Running upgrade 0014_csv_import -> 0015_diary_review
+
+CREATE TABLE diary_weekly_reviews (
+    id UUID NOT NULL,
+    user_id UUID NOT NULL,
+    end_day DATE NOT NULL,
+    source_hash VARCHAR(64) NOT NULL,
+    status VARCHAR(16) NOT NULL,
+    output JSON,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    CONSTRAINT pk_diary_weekly_reviews PRIMARY KEY (id),
+    CONSTRAINT uq_diary_weekly_reviews_user_id UNIQUE (user_id, end_day, source_hash),
+    CONSTRAINT fk_diary_weekly_reviews_user_id_users FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+CREATE INDEX ix_diary_weekly_reviews_user_id ON diary_weekly_reviews (user_id);
+
+UPDATE alembic_version SET version_num='0015_diary_review' WHERE alembic_version.version_num = '0014_csv_import';
+
+-- Running upgrade 0015_diary_review -> 0016_pdf_import
+
+ALTER TABLE finance_csv_imports ADD COLUMN source_format VARCHAR(8) DEFAULT 'csv' NOT NULL;
+
+UPDATE alembic_version SET version_num='0016_pdf_import' WHERE alembic_version.version_num = '0015_diary_review';
+
+-- Running upgrade 0016_pdf_import -> 0017_finance_review
+
+CREATE TABLE finance_reviews (
+    id UUID NOT NULL,
+    user_id UUID NOT NULL,
+    month VARCHAR(7) NOT NULL,
+    currency VARCHAR(3) NOT NULL,
+    source_hash VARCHAR(64) NOT NULL,
+    status VARCHAR(16) NOT NULL,
+    output JSON,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    CONSTRAINT pk_finance_reviews PRIMARY KEY (id),
+    CONSTRAINT uq_finance_reviews_user_id UNIQUE (user_id, month, currency),
+    CONSTRAINT fk_finance_reviews_user_id_users FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+CREATE INDEX ix_finance_reviews_user_id ON finance_reviews (user_id);
+
+UPDATE alembic_version SET version_num='0017_finance_review' WHERE alembic_version.version_num = '0016_pdf_import';
+
+-- Running upgrade 0017_finance_review -> 0018_cross_reviews
+
+CREATE TABLE cross_module_reviews (
+    id UUID NOT NULL,
+    user_id UUID NOT NULL,
+    scope_hash VARCHAR(64) NOT NULL,
+    source_hash VARCHAR(64) NOT NULL,
+    status VARCHAR(16) NOT NULL,
+    output JSON,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    CONSTRAINT pk_cross_module_reviews PRIMARY KEY (id),
+    CONSTRAINT uq_cross_module_reviews_user_id UNIQUE (user_id, scope_hash),
+    CONSTRAINT fk_cross_module_reviews_user_id_users FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+CREATE INDEX ix_cross_module_reviews_user_id ON cross_module_reviews (user_id);
+
+UPDATE alembic_version SET version_num='0018_cross_reviews' WHERE alembic_version.version_num = '0017_finance_review';
+
+-- Running upgrade 0018_cross_reviews -> 0019_journal_workouts
+
+ALTER TABLE health_workouts ADD COLUMN efforts JSON DEFAULT '[]' NOT NULL;
+
+ALTER TABLE diary_entries ADD COLUMN mood INTEGER;
+
+ALTER TABLE diary_entries ADD COLUMN tags JSON DEFAULT '[]' NOT NULL;
+
+UPDATE alembic_version SET version_num='0019_journal_workouts' WHERE alembic_version.version_num = '0018_cross_reviews';
+
+-- Running upgrade 0019_journal_workouts -> 0020_dashboard_closed_days
+
+CREATE TABLE dashboard_closed_days (
+    user_id UUID NOT NULL,
+    day DATE NOT NULL,
+    CONSTRAINT pk_dashboard_closed_days PRIMARY KEY (user_id, day),
+    CONSTRAINT fk_dashboard_closed_days_user_id_users FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+UPDATE alembic_version SET version_num='0020_dashboard_closed_days' WHERE alembic_version.version_num = '0019_journal_workouts';
+
 COMMIT;

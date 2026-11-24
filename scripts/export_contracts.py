@@ -14,5 +14,6 @@ app = create_app(settings)
 (ROOT / 'docs/openapi.json').write_text(json.dumps(app.openapi(), ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
 result = subprocess.run([sys.executable, '-m', 'alembic', '-x', 'database_url=postgresql+psycopg2://localhost/lifehub', 'upgrade', 'head', '--sql'],
                         cwd=ROOT, capture_output=True, text=True, check=True)
-(ROOT / 'docs/schema-postgresql.sql').write_text(result.stdout, encoding='utf-8')
+ddl = '\n'.join(line.rstrip() for line in result.stdout.splitlines()).rstrip() + '\n'
+(ROOT / 'docs/schema-postgresql.sql').write_text(ddl, encoding='utf-8')
 print(f'Exported {len(app.openapi()["paths"])} API paths and PostgreSQL schema')

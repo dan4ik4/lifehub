@@ -215,7 +215,7 @@ pnpm build
 
 В файловой песочнице Windows pytest может требовать разрешения на временные каталоги; для обычного PowerShell это не требуется.
 
-Спецификации: [Back](docs/figjam-back.txt), [Разработка](docs/figjam-development.xml). Актуальный программный контракт: [docs/openapi.json](docs/openapi.json). Начальная миграция: `migrations/versions/0001_initial_authentication_and_planning_.py`; её PostgreSQL DDL — [docs/schema-postgresql.sql](docs/schema-postgresql.sql).
+Спецификации: [Back](docs/design/figjam-back.txt), [Разработка](docs/design/figjam-development.xml). Актуальный программный контракт: [docs/openapi.json](docs/openapi.json). Начальная миграция: `migrations/versions/0001_initial_authentication_and_planning_.py`; полный PostgreSQL DDL до текущей версии — [docs/schema-postgresql.sql](docs/schema-postgresql.sql).
 
 ## Уведомления и личные данные
 

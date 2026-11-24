@@ -145,6 +145,7 @@ class TaskResponse(OutputModel):
     priority: str
     recurrence: RecurrenceRuleResponse | None
     completed: bool
+    completed_at: datetime | None = None
     next_occurrence_at: datetime | None
     reminders: list[ReminderResponse]
     version: int

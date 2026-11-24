@@ -1,10 +1,11 @@
-import { t, locale } from '../lib/language';
+import { t } from '../lib/language';
+import { financeGroup } from '../product/financeNavigation';
 import { listDisplayName } from '../lib/workspace';
 import {useEffect, useRef, useState} from 'react';
 import {
   Activity, Apple, BookOpen, CalendarDays, ChartNoAxesColumnIncreasing, Clock3,
   Grid2X2, Heart, Home, Layers, Leaf, Link2, ListChecks, ListFilter, Moon, Pencil,
-  Pill, Plus, Scale, Search, Settings2, Sparkles, Sun, Target, TrendingUp, UserRound, Wallet, X,
+  Pill, Plus, Scale, Search, Settings2, Sparkles, Sun, Target, UserRound, Wallet, X,
 } from 'lucide-react';
 import type {LucideIcon} from 'lucide-react';
 import type {ReactNode} from 'react';
@@ -28,7 +29,7 @@ const moduleLinks:Record<string,[string,string,LucideIcon][]> = {
   plans:[[t("Мой день"),'',Sun],[t("Календарь"),'calendar',CalendarDays],[t("Свободное время"),'free-time',Clock3],[t("Списки"),'lists',ListChecks]],
   habits:[[t("Сегодня"),'',Sun],[t("Привычки"),'habits',Target],[t("Цели"),'goals',Layers],[t("Статистика"),'stats',ChartNoAxesColumnIncreasing]],
   health:[[t("Обзор"),'',Heart],[t("Сон"),'sleep',Moon],[t("Вес"),'weight',Scale],[t("Тренировки"),'workouts',Activity],[t("Программы"),'programs',ListChecks],[t("Питание"),'nutrition',Apple],[t("Лекарства"),'medications',Pill]],
-  finance:[[t("Обзор"),'',Wallet],[t("Операции"),'transactions',ListFilter],[t("Бюджеты"),'budgets',ChartNoAxesColumnIncreasing],[t("Подписки"),'subscriptions',Clock3],[t("Накопления"),'savings',Layers],[t("На мечту"),'saving-goals',Sparkles],[t("Долги"),'debts',Wallet],[t("Аналитика"),'analysis',TrendingUp]],
+  finance:[[t("Обзор"),'',Wallet],[t("Операции"),'transactions',ListFilter],[t("Бюджеты"),'budgets',ChartNoAxesColumnIncreasing],[t("Накопления"),'savings',Layers],[t("Долги"),'debts',Wallet]],
   books:[[t("Книжная полка"),'',BookOpen],[t("Дневник"),'diary',Pencil]],
   insights:[[t("Обзор"),'',Sparkles],[t("Все сравнения"),'comparisons',ChartNoAxesColumnIncreasing],[t("Разборы ИИ"),'review',Activity]],
 };
@@ -43,7 +44,6 @@ export function Navigation({user,path,navigate,onSettings,onConnections,onSearch
   const [reading,setReading]=useState<{id:string;title:string;current_page:number;total_pages:number|null}|null>(null);
   const sheet=useRef<HTMLDialogElement>(null);
   const active=modules.find(module => path===module.to || path.startsWith(module.to+'/'))??modules[0];
-  const date = new Intl.DateTimeFormat(locale,{weekday:'long',day:'numeric',month:'long',timeZone:user.timezone}).format(new Date());
   const go = (to:string) => {setOpen(false); navigate(to);};
   const chooseSearch = () => onSearch ? onSearch() : go('/planning?find=1');
   useEffect(()=>{
@@ -82,7 +82,8 @@ export function Navigation({user,path,navigate,onSettings,onConnections,onSearch
     {label:t("Итоги недели"),icon:ChartNoAxesColumnIncreasing,to:'/modules/insights'},
     {label:t("Настроить главную"),icon:Layers,action:()=>window.dispatchEvent(new Event('lifehub:customize-home'))},
   );
-  const alias=path.replace(/\/overview$/,'').replace(/\/modules\/books\/books$/,'/modules/books');
+  const financeSection=active.id==='finance'?financeGroup(path.split('/')[3])[0]:undefined;
+  const alias=financeSection?active.to+(financeSection==='overview'?'':'/'+financeSection):path.replace(/\/overview$/,'').replace(/\/modules\/books\/books$/,'/modules/books');
   return <>
     <aside className="life-rail" aria-label={t("Основная навигация")}>
       <button className="life-brand" onClick={()=>go('/home')} aria-label={t("LifeHub — главная")}><Leaf size={22}/></button>
@@ -99,7 +100,7 @@ export function Navigation({user,path,navigate,onSettings,onConnections,onSearch
       </div>
     </aside>
     <aside className={'life-context theme-'+active.id} aria-label={t("Навигация: ")+active.title}>
-      <header><strong>{active.title}</strong><small>{active.id==='home'?date:active.id==='plans'?t("Расписание, задачи и списки"):active.id==='health'?t("Показатели и записи"):active.id==='finance'?t("Операции и бюджеты"):active.id==='books'?t("Чтение и дневник"):active.id==='habits'?t("Прогресс и цели"):t("Наблюдения по записям")}</small></header>
+      <header><strong>{active.title}</strong>{active.id!=='home'&&<small>{active.id==='plans'?t("Расписание, задачи и списки"):active.id==='health'?t("Показатели и записи"):active.id==='finance'?t("Операции и бюджеты"):active.id==='books'?t("Чтение и дневник"):active.id==='habits'?t("Прогресс и цели"):t("Наблюдения по записям")}</small>}</header>
       <button className="life-context-search" onClick={chooseSearch}><Search size={15}/>{t("Поиск")}<kbd>⌘K</kbd></button>
       <nav className="life-context-links" aria-label={active.title}>
         {links.map(({label,icon:Icon,to,action})=>{
@@ -107,16 +108,16 @@ export function Navigation({user,path,navigate,onSettings,onConnections,onSearch
           return <button key={label} aria-current={selected?'page':undefined} onClick={to?()=>go(to):action}><Icon size={16}/>{label}</button>;
         })}
       </nav>
-      {active.id==='home'&&(homeLists.length>0||reading)&&<section className="life-context-pins"><h2>{t("Закреплено")}</h2>
+      {active.id==='home'&&(homeLists.length>0||reading)&&<details open className="life-context-pins"><summary>{t("Закреплено")}</summary>
         {homeLists.map(list=><button key={list.id} onClick={()=>go('/planning/lists?list='+encodeURIComponent(list.id))}><i/>{listDisplayName(list)}<small>{list.item_count}</small></button>)}
         {reading&&<button onClick={()=>go('/modules/books/books/'+reading.id)}><BookOpen size={15}/>{reading.title}
           {reading.total_pages&&<small>{Math.round(100*reading.current_page/reading.total_pages)}%</small>}</button>}
-      </section>}
-      {active.id==='home'&&upcoming.length>0&&<section className="life-context-pins"><h2>{t("Ближайшие дни")}</h2>
+      </details>}
+      {active.id==='home'&&upcoming.length>0&&<details open className="life-context-pins"><summary>{t("Ближайшие дни")}</summary>
         {upcoming.map(({day,title})=><button key={day} onClick={()=>go('/planning/calendar?day='+day)}>
           <strong>{dayLabel(day,{weekday:'short',day:'numeric'})}</strong><small>{title}</small>
         </button>)}
-      </section>}
+      </details>}
       {active.id==='plans' && lists.length>0 && <section className="life-context-pins"><h2>{t("Мои списки")}</h2>
         {lists.map(list=><button key={list.id} onClick={()=>go('/planning/lists?list='+encodeURIComponent(list.id))}>
           <i/>{listDisplayName(list)}<small>{list.item_count}</small>
@@ -129,6 +130,7 @@ export function Navigation({user,path,navigate,onSettings,onConnections,onSearch
       <button aria-current={active.id==='plans'?'page':undefined} onClick={()=>go('/planning')}><CalendarDays size={22}/><span>{t("Планы")}</span></button>
       <button className="hub-mobile-add" onClick={()=>openQuickAdd()} aria-label={t("Добавить")}><Plus size={24}/></button>
       <button aria-current={!['home','plans'].includes(active.id)?'page':undefined} aria-expanded={open} onClick={()=>setOpen(true)}><Grid2X2 size={22}/><span>{t("Модули")}</span></button>
+      <button aria-haspopup="dialog" aria-label={t("Открыть чат с помощником")} onClick={()=>openAssistant()}><Sparkles size={22}/><span>{t("ИИ")}</span></button>
       <button onClick={onSettings}><UserRound size={22}/><span>{t("Профиль")}</span></button>
     </nav>
     {open && <dialog className="life-module-sheet" ref={sheet} aria-labelledby="life-module-title" onCancel={e=>{e.preventDefault();setOpen(false);}}
@@ -137,7 +139,6 @@ export function Navigation({user,path,navigate,onSettings,onConnections,onSearch
         <nav aria-label={t("Модули")}>{modules.slice(1).map(({id,title,to,icon:Icon})=><button className={'theme-'+id} key={id} onClick={()=>go(to)}>
           <span><Icon size={23}/></span><strong>{title}</strong>
         </button>)}</nav>
-        <button className="life-sheet-assistant" onClick={()=>{setOpen(false);openAssistant();}}><Sparkles size={19}/>{t("Спросить помощника")}</button>
       </div>
     </dialog>}
   </>;

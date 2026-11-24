@@ -9,11 +9,12 @@ import {AssistantPreferences} from '../components/AssistantPreferences';
 import {ConfirmDialog} from '../components/ui';
 import type {User} from '../lib/types';
 import './cross-insights.css';
+import {currencyCodes} from './schema';
 
 const modules={planning:t("Планирование"),goals_habits:t("Привычки"),health:t("Здоровье"),finance:t("Финансы"),books:t("Дневник")};
 type Module=keyof typeof modules;
 type Metric={key:string;module:Module;label:string;unit:string;recorded_days:number;values:Record<string,string>};
-type Comparison={id:string;modules:Module[];x:string;y:string;text:string;paired_days:number;threshold:string;evidence:{day:string;x:string;y:string;group:'lower'|'upper'}[]};
+type Comparison={id:string;modules:Module[];x:string;y:string;text:string;paired_days:number;threshold:string;lower_average:string;upper_average:string;evidence:{day:string;x:string;y:string;group:'lower'|'upper'}[]};
 type Data={start_day:string;end_day:string;days:number;modules:Module[];currency:string;metrics:Metric[];comparisons:Comparison[];coverage:{x:string;y:string;paired_days:number;comparable:boolean}[];notes:string[];limitation:string;source_hash:string;review:{id:string;status:string;updated_at:string;output:{comparison_ids:string[]}|null}|null};
 
 export function CrossInsights({user,pro,navigate,view}:{user:User;pro:boolean;navigate:(path:string)=>void;view?:string}){
@@ -46,7 +47,12 @@ export function CrossInsights({user,pro,navigate,view}:{user:User;pro:boolean;na
   const output=data?.review?.output;
   const running=data?.review?.status==='processing'&&Date.now()-Date.parse(data.review.updated_at)<180000;
   const permitted=preferences.messages&&preferences.modules;
-  const comparison=(value:Comparison)=><article className="cross-comparison" key={value.id}><p>{value.text}</p><div className="cross-source-links">{value.modules.map(module=><button key={module} type="button" onClick={()=>navigate(module==='planning'?'/planning':'/modules/'+module)}>{modules[module]}<ArrowRight size={13}/></button>)}</div><details><summary>{t("Основания по дням ·")} {value.paired_days} {t("дней")}</summary><p className="cross-note">{t("Группы определены относительно личной медианы первого показателя:")} {value.threshold} {metric(value.x)?.unit}{t(". Ниже — только даты с записями обоих показателей.")}</p><div className="cross-evidence"><table><caption>{t("Дневные показатели из записей")}</caption><thead><tr><th>{t("Дата")}</th><th>{metric(value.x)?.label}, {metric(value.x)?.unit}</th><th>{metric(value.y)?.label}, {metric(value.y)?.unit}</th><th>{t("Группа")}</th></tr></thead><tbody>{value.evidence.map(row=><tr key={row.day}><td>{dayLabel(row.day,{day:'numeric',month:'short'})}</td><td>{row.x}</td><td>{row.y}</td><td>{row.group==='lower'?t("Ниже"):t("Не ниже")} {t("медианы")}</td></tr>)}</tbody></table></div></details></article>;
+  const comparison=(value:Comparison)=><article className="cross-comparison" key={value.id}><p>{value.text}</p><div className="comparison-measures">
+    {[[t("Ниже медианы"),value.lower_average],[t("Не ниже медианы"),value.upper_average]].map(([label,raw])=>{
+      const scale=Math.max(Math.abs(Number(value.lower_average)),Math.abs(Number(value.upper_average)),0.01);
+      return <div key={label}><span>{label}</span><i aria-hidden="true"><b style={{width:100*Math.abs(Number(raw))/scale+'%'}}/></i><strong>{raw} {metric(value.y)?.unit}</strong></div>;
+    })}
+  </div><div className="cross-source-links">{value.modules.map(module=><button key={module} type="button" onClick={()=>navigate(module==='planning'?'/planning':'/modules/'+module)}>{modules[module]}<ArrowRight size={13}/></button>)}</div><details><summary>{t("Основания по дням ·")} {value.paired_days} {t("дней")}</summary><p className="cross-note">{t("Группы определены относительно личной медианы первого показателя:")} {value.threshold} {metric(value.x)?.unit}{t(". Ниже — только даты с записями обоих показателей.")}</p><div className="cross-evidence"><table><caption>{t("Дневные показатели из записей")}</caption><thead><tr><th>{t("Дата")}</th><th>{metric(value.x)?.label}, {metric(value.x)?.unit}</th><th>{metric(value.y)?.label}, {metric(value.y)?.unit}</th><th>{t("Группа")}</th></tr></thead><tbody>{value.evidence.map(row=><tr key={row.day}><td>{dayLabel(row.day,{day:'numeric',month:'short'})}</td><td>{row.x}</td><td>{row.y}</td><td>{row.group==='lower'?t("Ниже"):t("Не ниже")} {t("медианы")}</td></tr>)}</tbody></table></div></details></article>;
   useEffect(()=>{
     if(view==='review'&&data)document.getElementById('life-ai-review')?.scrollIntoView({block:'start'});
     if(view==='comparisons'&&data)document.getElementById('life-comparisons')?.scrollIntoView({block:'start'});
@@ -62,7 +68,7 @@ export function CrossInsights({user,pro,navigate,view}:{user:User;pro:boolean;na
           {(Object.keys(modules) as Module[]).map(key=>{const Icon=icons[key];return <button type="button" key={key} disabled={busy} aria-pressed={selected.includes(key)} className={'theme-'+themes[key]} onClick={()=>moduleChange(key)}><Icon size={15}/>{modules[key]}</button>;})}
         </div><p>{t("Выберите минимум два модуля.")}</p></LifeCard>
         <LifeCard><h3><i>2</i>{t("Период")}</h3><div className="segmented">{[14,28].map(value=><button key={value} disabled={busy} aria-pressed={days===value} className={days===value?'selected':''} onClick={()=>setDays(value)}>{value} {t("дней")}</button>)}</div>
-          <div className="cross-controls"><label>{t("Последний день")}<input type="date" value={end} min="1900-01-28" max={yesterday} disabled={busy} onChange={e=>{if(e.target.value)setEnd(e.target.value);}}/></label>{selected.includes('finance')&&<label>{t("Валюта")}<select value={currency} disabled={busy} onChange={e=>setCurrency(e.target.value)}>{['PLN','EUR','USD','RUB','UAH','GBP'].map(code=><option key={code}>{code}</option>)}</select></label>}</div>
+          <div className="cross-controls"><label>{t("Последний день")}<input type="date" value={end} min="1900-01-28" max={yesterday} disabled={busy} onChange={e=>{if(e.target.value)setEnd(e.target.value);}}/></label>{selected.includes('finance')&&<label>{t("Валюта")}<select value={currency} disabled={busy} onChange={e=>setCurrency(e.target.value)}>{currencyCodes(currency).map(code=><option key={code}>{code}</option>)}</select></label>}</div>
           {data&&<p>{dayLabel(data.start_day)} — {dayLabel(data.end_day)} {t("· завершённые дни")}</p>}</LifeCard>
         <LifeCard><h3><i>3</i>{t("Данные")}</h3><div className="life-cross-days"><LifeRings size={70} label={best+t(" общих дней")} values={[{value:best/8,color:'#89600e',track:'#f3ead3'}]}/>
           <div><strong>{best>=8?best:best+t(" из 8")} {t("дней")}</strong><p>{t("Общих дней с записями")}</p></div></div><p>{best<8?t("Ещё ")+(8-best)+t(" дней с записями для первого сравнения."):t("Доступность зависит от записей и различий между группами.")}</p></LifeCard>
@@ -90,7 +96,7 @@ export function CrossInsights({user,pro,navigate,view}:{user:User;pro:boolean;na
             <label className="cross-consent"><input type="checkbox" checked={consent} disabled={busy||running} onChange={e=>setConsent(e.target.checked)}/>{t("Разрешаю отправить в OpenAI рассчитанные сравнения выбранных модулей: периоды, средние значения, медианы и число общих дней.")}{selected.includes('health')?t(" Включая выбранные показатели здоровья — длительность сна и тренировок."):''}{selected.includes('books')?t(" Включая средние оценки настроения, если вы их отмечали."):''} {t("Тексты дневника, названия задач и покупок, заметки, лекарства, вес, исходные файлы и другие модули не передаются.")}</label>
             <button type="button" className="button primary" disabled={busy||loading||running||preferencesLoading||!permitted||!consent||!data.comparisons.length} onClick={()=>void generate()}>{busy||running?<LoaderCircle size={16} className="spinner"/>:<Sparkles size={16}/>} {busy||running?t("Выбираю наблюдения…"):t("Подготовить обзор с ИИ")}</button>
           </>}
-          <p className="cross-note">{t("Расчёты бесплатны по лимиту ИИ; генерация использует один общий запрос, повторное открытие готового обзора — без нового запроса. При обновлении данных изменённые записи скрывают старый обзор. Кэш удаляется после 30 дней без генерации. Записи и расписание автоматически не меняются.")}</p>
+          <details className="review-help"><summary>{t("Как работает обзор")}</summary><p className="cross-note">{t("Расчёты бесплатны по лимиту ИИ; генерация использует один общий запрос, повторное открытие готового обзора — без нового запроса. При обновлении данных изменённые записи скрывают старый обзор. Кэш удаляется после 30 дней без генерации. Записи и расписание автоматически не меняются.")}</p></details>
         </div>
       </>}
       {deleting&&data?.review&&<ConfirmDialog title={t("Удалить обзор?")} description={t("Удалится только подборка наблюдений. Записи выбранных модулей останутся.")} confirmLabel={t("Удалить обзор")} onClose={()=>setDeleting(false)} onConfirm={async()=>{await api(`/dashboard/insights/${data.review!.id}`,{method:'DELETE'});await load();}}/>}

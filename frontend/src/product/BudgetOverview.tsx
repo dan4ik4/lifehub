@@ -1,3 +1,4 @@
+import {currencyCodes} from "./schema";
 import { t } from '../lib/language';
 import {useEffect,useState} from 'react';
 import {RefreshCw} from 'lucide-react';
@@ -33,7 +34,7 @@ export function BudgetOverview({month,currency,revision,notify,navigate,onRefres
       <button className="icon-button" aria-label={t("Предыдущий месяц")} onClick={()=>select(shiftMonth(month+'-01',-1).slice(0,7),currency)}>‹</button>
       <strong>{dayLabel(month+'-01',{month:'long',year:'numeric'})}</strong>
       <button className="icon-button" aria-label={t("Следующий месяц")} onClick={()=>select(shiftMonth(month+'-01',1).slice(0,7),currency)}>›</button>
-      <label>{t("Валюта")} <select value={currency} onChange={e=>select(month,e.target.value)}>{[...new Set(['PLN','EUR','USD','UAH',currency])].map(code=><option key={code}>{code}</option>)}</select></label>
+      <label>{t("Валюта")} <select value={currency} onChange={e=>select(month,e.target.value)}>{currencyCodes(currency).map(code=><option key={code}>{code}</option>)}</select></label>
       <button className="button secondary" disabled={busy||loading} onClick={()=>void copy()}><RefreshCw size={15}/>{t("Как в прошлом месяце")}</button>
     </header>
     {error&&<p className="field-error" role="alert">{error}</p>}

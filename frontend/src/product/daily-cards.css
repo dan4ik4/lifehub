@@ -1,0 +1,57 @@
+.life-home-widgets .life-home-widget {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: white;
+  border-radius: 24px;
+}
+
+.life-home-widget .life-metric { width: 100%; flex: 1; }
+.life-home-widget .life-widget-add { margin: 0 16px 6px; min-height: 44px; align-self: start; }
+.life-widget-options .life-widget-option { display: flex; gap: 6px; align-items: center; }
+.life-widget-option label { flex: 1; min-width: 0; }
+.life-widget-option .icon-button { min-width: 44px; min-height: 44px; }
+.life-home .life-habit-icons { grid-template-columns: repeat(auto-fit, minmax(min(78px, 100%), 1fr)); }
+.life-home .life-habit-icons strong { max-width: 100%; }
+
+.hub-health-overview .life-health-panels {
+  grid-template-columns: minmax(0, 1.57fr) minmax(0, 1fr);
+  align-items: start;
+}
+.hub-health-overview .life-health-panels > * { min-width: 0; }
+.life-health-panels .life-card-head { flex-wrap: wrap; }
+.life-health-panels .life-weight-inline { flex-wrap: wrap; }
+.life-health-panels .life-weight-inline label { min-width: 0; }
+.life-sleep-history { max-height: 25rem; overflow-y: auto; }
+.life-sleep-history:focus-visible { outline: 2px solid var(--life-primary); outline-offset: 2px; }
+.life-device-connect summary { min-height: 44px; align-content: center; cursor: pointer; }
+.life-device-connect summary svg { vertical-align: text-bottom; margin-right: .5rem; }
+.life-day-streak { display:flex; flex-wrap:wrap; gap:4px 12px; margin-top:12px; padding:12px; border-radius:14px; background:#e8f1e7; font-size:12px; }
+.life-day-streak strong, .life-day-streak small { flex-basis:100%; }
+.life-day-streak strong { display:flex; align-items:center; gap:5px; color:#245447; font-size:15px; }
+@media (prefers-reduced-motion:no-preference) {
+  .life-day-streak.celebrate strong svg { animation:life-day-check .65s ease-out both; }
+  .life-day-streak.celebrate strong { position:relative; }
+  .life-day-streak.celebrate strong::before {
+    content:""; position:absolute; pointer-events:none; left:-13px; top:-18px; width:48px; height:40px;
+    background:radial-gradient(circle at 8% 45%,#4f9370 2px,transparent 2.5px),
+               radial-gradient(circle at 20% 16%,#d89646 1.5px,transparent 2px),
+               radial-gradient(circle at 44% 7%,#8a79b5 2px,transparent 2.5px),
+               radial-gradient(circle at 73% 15%,#4f9370 1.5px,transparent 2px),
+               radial-gradient(circle at 91% 43%,#d89646 2px,transparent 2.5px),
+               radial-gradient(circle at 77% 75%,#8a79b5 1.5px,transparent 2px);
+    animation:life-day-confetti .85s ease-out both;
+  }
+  @keyframes life-day-confetti { 0% {transform:translateY(7px) scale(.32);opacity:0;} 25% {opacity:1;} 100% {transform:translateY(-4px) scale(1.15);opacity:0;} }
+  @keyframes life-day-check { 0% {transform:scale(.4);opacity:0;} 65% {transform:scale(1.25);} 100% {transform:scale(1);opacity:1;} }
+}
+@media (max-width: 760px) {
+  .life-home .life-day-progress { display: block; }
+  .life-home .life-progress-body { flex-wrap: wrap; }
+  .life-section-workouts .product-actions { flex-wrap: wrap; max-width: 100%; }
+  .hub-health-overview .life-health-panels { grid-template-columns: minmax(0, 1fr); }
+  .life-home .life-agenda-empty { min-height: 0; }
+  .life-home .life-agenda-empty .life-home-timeline { margin: 8px 0 12px; }
+  .life-agenda-empty .life-home-timeline p { margin: 0; }
+}

@@ -6,6 +6,7 @@ import { ArrowDown, ArrowUp, CheckCheck, Crown, Send, ListChecks, LoaderCircle, 
 import { api, errorMessage } from '../lib/api';
 import { allPages } from '../lib/usePlanning';
 import { plural } from '../lib/dates';
+import { groceryDepartment } from '../lib/groceries';
 import type { ListItem, Notify, PlanningList } from '../lib/types';
 import { CheckButton, ConfirmDialog, EmptyState, Modal } from './ui';
 
@@ -23,6 +24,29 @@ export function ListsView({ initialList, lists, pro, refresh, notify, onUpgrade 
   const requestId = useRef(0), activeId = useRef<string | undefined>(currentId);
   activeId.current = currentId;
   const items = loadedItems.filter(item => item.list_id === currentId);
+  useEffect(() => {
+    if (!shop || !navigator.wakeLock) return;
+    let active = true;
+    let requesting = false;
+    let screen: WakeLockSentinel | undefined;
+    async function keepScreenOn() {
+      if (document.visibilityState !== 'visible' || requesting || (screen && !screen.released)) return;
+      requesting = true;
+      try {
+        const sentinel = await navigator.wakeLock.request('screen');
+        if (active) screen = sentinel;
+        else await sentinel.release();
+      } catch { /* Shopping mode is also usable when the device declines the lock. */ }
+      finally { requesting = false; }
+    }
+    void keepScreenOn();
+    document.addEventListener('visibilitychange', keepScreenOn);
+    return () => {
+      active = false;
+      document.removeEventListener('visibilitychange', keepScreenOn);
+      if (screen) void screen.release().catch(() => {});
+    };
+  }, [shop]);
   async function load(id: string) {
     if (id !== activeId.current) return;
     const request = ++requestId.current;
@@ -32,7 +56,7 @@ export function ListsView({ initialList, lists, pro, refresh, notify, onUpgrade 
     finally { if (isCurrent()) setLoading(false); }
   }
   useEffect(() => {
-    activeId.current = currentId; setError(''); setTitle(''); setItems([]);
+    activeId.current = currentId; setError(''); setTitle(''); setItems([]); setShop(false); setFilter('all'); setMenu(false);
     if (!currentId) { setLoading(false); return; }
     setLoading(true); void load(currentId);
     return () => { requestId.current++; if (activeId.current === currentId) activeId.current = undefined; };
@@ -61,29 +85,28 @@ export function ListsView({ initialList, lists, pro, refresh, notify, onUpgrade 
   }
   const checked=items.filter(item=>item.checked).length;
   const visible=items.filter(item=>filter==='all'||item.checked===(filter==='done'));
-  const groupName=(text:string)=>{
-    if(/куриц|индей|говя|свини|лосос|тунец|мясо|рыб|\b(chicken|turkey|beef|pork|salmon|tuna|meat|fish)\b/i.test(text))return t("Мясо и рыба");
-    if(/молок|йогурт|яйц|творог|кефир|сыр|\b(milk|yoghur?t|eggs?|kefir|cheese)\b/i.test(text))return t("Молочное и яйца");
-    if(/овся|круп|рис|греч|хлеб|макарон|мука|\b(oats?|rice|buckwheat|bread|pasta|flour)\b/i.test(text))return t("Крупы и хлеб");
-    if(/яблок|банан|авокад|броккол|овощ|томат|огур|морков|фрукт|\b(apples?|bananas?|avocados?|broccoli|vegetables?|tomato(es)?|cucumbers?|carrots?|fruits?)\b/i.test(text))return t("Овощи и фрукты");
-    return t("Другие покупки");
-  };
-  const groups=new Map<string,ListItem[]>();
-  for(const item of visible){const key=grouped&&!shop&&current?.kind==='shopping'?groupName(item.title):t("Пункты");groups.set(key,[...(groups.get(key)??[]),item]);}
+  const groups = new Map<string, ListItem[]>();
+  if (shop) visible.sort((a, b) => Number(a.checked) - Number(b.checked));
+  for (const item of visible) {
+    const key = shop ? (item.checked ? t("Готово") : t("Осталось"))
+      : grouped && current?.kind === 'shopping' ? groceryDepartment(item.title) : t("Пункты");
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(item);
+  }
   function share(){
     setShared((current ? listDisplayName(current) : t("Список"))+'\n'+items.map(item=>(item.checked?'✓ ':'• ')+item.title+(item.quantity?' · '+item.quantity+' '+(item.unit??''):'')).join('\n'));
   }
   return <div className={'lists-layout life-lists'+(shop?' shopping-mode':'')}><aside className="list-collection"><div className="section-heading"><span className="eyebrow">{t("МОИ СПИСКИ")}</span><button className="icon-button small" aria-label={t("Создать список")} onClick={() => { if (!pro) { onUpgrade(); return; } setListName(''); setListDialog('new'); }}><Plus size={18} /></button></div>{lists.map(list => <button key={list.id} className={`collection-item ${currentId === list.id ? 'selected' : ''}`} onClick={() => { setSelected(list.id); setMenu(false); }}><span className={`collection-icon ${list.kind === 'shopping' ? 'peach' : 'green'}`}>{list.kind === 'shopping' ? <ShoppingBasket size={21} /> : <ListChecks size={21} />}</span><span><strong>{listDisplayName(list)}</strong><small>{list.completed_count} {t("из")} {list.item_count} {t("готово")}</small></span><span className="collection-count">{list.item_count - list.completed_count}</span></button>)}<button className="new-list-button" onClick={() => { if (!pro) { onUpgrade(); return; } setListName(''); setListDialog('new'); }}><Plus size={16} />{t("Новый список")} {!pro && <Crown size={13} />}</button><div className="list-tip"><span>{t("Чуть меньше в голове.")}</span><p>{t("Списки помогут освободить место для того, что действительно важно.")}</p></div></aside>
     <section className="panel list-detail"><header className="list-detail-header"><div className="list-title-icon">{current?.kind === 'shopping' ? <ShoppingBasket size={25} /> : <ListChecks size={25} />}</div><div><h2>{current ? listDisplayName(current) : t("Списки")}</h2><p>{checked} {t("из")} {items.length} {t("готово")}</p></div>{current&&<div className="life-list-actions">
         <button className="button secondary" onClick={share}><Send size={15}/>{t("Поделиться")}</button><button className="button secondary" onClick={()=>{if(!pro){onUpgrade();return;}setListName('');setListDialog('new');}}><Plus size={15}/>{t("Новый список")}</button>
-        {current.kind==='shopping'&&<button className="button primary" aria-pressed={shop} onClick={()=>setShop(value=>!value)}><ShoppingBasket size={15}/>{shop?t("Выйти из режима"):t("Режим магазина")}</button>}
-      </div>}{current && <div className="list-menu"><button className="icon-button" aria-label={t("Настройки списка")} aria-expanded={menu} onClick={() => setMenu(!menu)}><MoreHorizontal size={20} /></button>{menu && <div className="action-menu"><button onClick={() => { setListName(current.name); setListDialog('rename'); setMenu(false); }} disabled={current.is_system}><Pencil size={14} />{t("Переименовать")}</button><button className="danger-text" onClick={() => { setDeleting({ type: 'list', id: current.id, title: current.name }); setMenu(false); }}><Trash2 size={14} />{t("Удалить список")}</button></div>}</div>}{current && <button className="icon-button danger-text" aria-label={t("Удалить список")} title={t("Удалить список")} onClick={() => setDeleting({type:'list', id:current.id, title:current.name})}><Trash2 size={18}/></button>}</header>
+        {current.kind==='shopping'&&<button className="button primary" aria-pressed={shop} onClick={()=>{setShop(value=>!value);setFilter('all');setMenu(false);}}><ShoppingBasket size={15}/>{shop?t("Завершить покупки"):t("Режим магазина")}</button>}
+      </div>}{current && !shop && <div className="list-menu"><button className="icon-button" aria-label={t("Настройки списка")} aria-expanded={menu} onClick={() => setMenu(!menu)}><MoreHorizontal size={20} /></button>{menu && <div className="action-menu"><button onClick={() => { setListName(current.name); setListDialog('rename'); setMenu(false); }} disabled={current.is_system}><Pencil size={14} />{t("Переименовать")}</button><button className="danger-text" disabled={current.is_system} onClick={() => { setDeleting({ type: 'list', id: current.id, title: current.name }); setMenu(false); }}><Trash2 size={14} />{t("Удалить список")}</button></div>}</div>}</header>
       {current && <><div className="list-progress"><span>{plural(checked, [t("пункт выполнен"), t("пункта выполнены"), t("пунктов выполнено")])}</span><span>{checked} / {items.length}</span><div className="progress-track"><i style={{ width: `${items.length ? checked / items.length * 100 : 0}%` }} /></div></div>
       <form className="inline-add" onSubmit={add}><Plus size={19} /><input aria-label={t("Новый пункт списка")} placeholder={current.kind === 'shopping' ? t("Например, овсяное молоко") : t("Добавить новый пункт")} value={title} maxLength={300} onChange={e => setTitle(e.target.value)} disabled={!current.is_editable} /><button className="button primary small" disabled={!title.trim() || adding || !current.is_editable}>{adding ? <LoaderCircle className="spinner" size={15} /> : t("Добавить")}</button></form>
       <div className="list-tools life-list-filters"><div className="life-pills">{([['all',t("Все"),items.length],['remaining',t("Осталось"),items.length-checked],['done',t("Готово"),checked]] as const).map(([key,label,count])=><button key={key} aria-pressed={filter===key} onClick={()=>setFilter(key)}>{label} · {count}</button>)}</div>
         {current.kind==='shopping'&&!shop&&<label><input type="checkbox" checked={grouped} onChange={e=>setGrouped(e.target.checked)}/>{t("Группировать по отделам")}</label>}
         <button className="text-button" disabled={!current.is_editable} onClick={()=>setBulk(true)}><Plus size={15}/>{t("Добавить несколько")}</button></div></>}
-      {loading ? <div className="loading-area"><LoaderCircle className="spinner" size={24} /><span>{t("Загружаем список…")}</span></div> : error ? <div className="inline-error" role="alert"><p>{error}</p><button className="button secondary" onClick={() => currentId && load(currentId)}>{t("Попробовать снова")}</button></div> : !items.length ? <EmptyState title={t("Здесь начинается ваш список")} text={t("Добавьте первый пункт. Всё остальное можно дописать по ходу.")} icon={<ShoppingBasket size={27} />} /> : <div className="life-list-groups">{Array.from(groups).map(([name,entries])=><section className="life-list-group" key={name}><h3>{name}<small>{entries.length}</small></h3>{entries.map(item => <div className={`list-item-row ${item.checked ? 'completed' : ''}`} key={item.id}><CheckButton checked={item.checked} busy={busy.includes(item.id) || !current?.is_editable} onClick={() => void toggle(item)} label={`${item.checked ? t("Снять отметку") : t("Отметить")}: ${item.title}`} /><button className="list-item-title" disabled={!current?.is_editable} onClick={() => setEditItem(item)}>{item.title}</button>{item.quantity && <span className="quantity-badge">{Number(item.quantity)} {item.unit || t("шт.")}</span>}<div className="item-actions"><button className="icon-button small" aria-label={t("Поднять: {0}", item.title)} disabled={items[0]?.id === item.id || busy.includes(item.id) || !current?.is_editable} onClick={() => void move(item, -1)}><ArrowUp size={14} /></button><button className="icon-button small" aria-label={t("Опустить: {0}", item.title)} disabled={items.at(-1)?.id === item.id || busy.includes(item.id) || !current?.is_editable} onClick={() => void move(item, 1)}><ArrowDown size={14} /></button><button className="icon-button small" aria-label={t("Удалить: {0}", item.title)} disabled={!current?.is_editable} onClick={() => setDeleting({ type: 'item', id: item.id, title: item.title })}><Trash2 size={14} /></button></div></div>)}</section>)}</div>}
+      {loading ? <div className="loading-area"><LoaderCircle className="spinner" size={24} /><span>{t("Загружаем список…")}</span></div> : error ? <div className="inline-error" role="alert"><p>{error}</p><button className="button secondary" onClick={() => currentId && load(currentId)}>{t("Попробовать снова")}</button></div> : !items.length ? <EmptyState title={t("Здесь начинается ваш список")} text={t("Добавьте первый пункт. Всё остальное можно дописать по ходу.")} icon={<ShoppingBasket size={27} />} /> : !visible.length ? <p role="status">{filter === 'done' ? t("Здесь пока нет выполненных пунктов.") : t("Все пункты выполнены.")}</p> : <div className="life-list-groups">{Array.from(groups).map(([name,entries])=><section className="life-list-group" key={name}><h3>{name}<small>{entries.length}</small></h3>{entries.map(item => <div className={`list-item-row ${item.checked ? 'completed' : ''}`} key={item.id}><CheckButton checked={item.checked} busy={busy.includes(item.id) || !current?.is_editable} onClick={() => void toggle(item)} label={`${item.checked ? t("Снять отметку") : t("Отметить")}: ${item.title}`} /><button className="list-item-title" disabled={!current?.is_editable || busy.includes(item.id)} aria-pressed={shop ? item.checked : undefined} onClick={() => shop ? void toggle(item) : setEditItem(item)}>{item.title}</button>{item.quantity && <span className="quantity-badge">{Number(item.quantity)} {item.unit || t("шт.")}</span>}<div className="item-actions"><button className="icon-button small" aria-label={t("Поднять: {0}", item.title)} disabled={items[0]?.id === item.id || busy.includes(item.id) || !current?.is_editable} onClick={() => void move(item, -1)}><ArrowUp size={14} /></button><button className="icon-button small" aria-label={t("Опустить: {0}", item.title)} disabled={items.at(-1)?.id === item.id || busy.includes(item.id) || !current?.is_editable} onClick={() => void move(item, 1)}><ArrowDown size={14} /></button><button className="icon-button small" aria-label={t("Удалить: {0}", item.title)} disabled={!current?.is_editable} onClick={() => setDeleting({ type: 'item', id: item.id, title: item.title })}><Trash2 size={14} /></button></div></div>)}</section>)}</div>}
     </section>
     {shared!==null&&<Modal title={t("Поделиться списком")} onClose={()=>setShared(null)}><div className="modal-body product-form"><textarea readOnly rows={8} aria-label={t("Текст списка")} value={shared}/></div>
       <footer className="modal-footer"><button className="button primary" onClick={async()=>{try{await navigator.clipboard.writeText(shared);notify(t("Список скопирован"));setShared(null);}catch{notify(t("Не удалось скопировать список"),'error');}}}>{t("Скопировать")}</button></footer>

@@ -1,0 +1,70 @@
+.app-layout .view-day .planning-header {
+  flex-wrap: wrap;
+  height: auto;
+  align-items: center;
+}
+
+.view-day .planning-header .page-actions {
+  flex-wrap: wrap;
+  align-items: center;
+  padding-top: 0;
+}
+
+.tasks-panel .done-range { margin: 0 0 12px; }
+.today-week-strip .week-range { display: none; }
+.app-layout .life-lists.shopping-mode .life-list-groups { grid-template-columns: minmax(0, 1fr); }
+.life-lists.shopping-mode .item-actions { display: none; }
+.life-lists.shopping-mode .list-item-title { min-height: 48px; }
+
+@media (max-width: 720px) {
+  .app-layout .view-day .planning-header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .app-layout .view-day .planning-header .page-actions { width: 100%; }
+  .app-layout .view-day .split-trigger { min-width: 44px; }
+  .app-layout .view-day .today-week-strip {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 4px 0;
+    align-items: center;
+    padding: 6px 2px;
+  }
+  .view-day .today-week-strip > .icon-button {
+    grid-row: 1;
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+  }
+  .view-day .today-week-strip > .icon-button:last-child { grid-column: -2; justify-self: end; }
+  .view-day .today-week-strip .week-range {
+    display: block;
+    grid-area: 1 / 2 / 2 / -2;
+    text-align: center;
+    font-weight: 650;
+    font-size: 13px;
+  }
+  .view-day .today-week-strip .week-day { grid-row: 2; width: 100%; max-width: none; }
+  .app-layout .view-day .task-filters { flex-wrap: wrap; max-width: 100%; }
+  .view-day .task-filters button,
+  .app-layout .view-day .quick-add-submit,
+  .app-layout .view-day .completed-toggle,
+  .app-layout .life-lists .life-pills button,
+  .app-layout .life-lists .list-item-title { min-height: 44px; }
+  .app-layout .view-day .icon-button,
+  .app-layout .life-lists .icon-button,
+  .app-layout .life-lists .check-button,
+  .app-layout .view-day .task-row .check-button {
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    min-height: 44px;
+  }
+  .app-layout .life-lists .check-button::before,
+  .app-layout .view-day .task-row .check-button::before { inset: 0; }
+  .app-layout .life-lists .list-item-row { flex-wrap: wrap; }
+  .app-layout .life-lists .list-item-title { min-width: 0; overflow-wrap: anywhere; }
+  .app-layout .life-lists .item-actions { flex: 0 0 auto; width: auto; margin-left: auto; }
+}

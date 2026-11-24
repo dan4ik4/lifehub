@@ -153,6 +153,9 @@ class PlanningService:
         self.finish(commit)
 
     def complete_task(self, task_id, payload, reopen=False, commit=True):
+        if not reopen:
+            from app.core.owned import lock_user
+            lock_user(self.session, self.user)
         item = self.tasks.get(task_id, lock=True)
         check_version(item, payload.version)
         occurrence_at = payload.occurrence_at
@@ -183,6 +186,10 @@ class PlanningService:
             if reopen:
                 self._reminders("task", item)
         item.updated_at = now
+        if not reopen:
+            from app.modules.dashboard.day_progress import observe_day
+            self.finish(commit=False)
+            observe_day(self.session, self.user)
         self.finish(commit)
         return self.occurrence_response(item, occurrence_at, record)
 
@@ -349,7 +356,7 @@ class PlanningService:
 
     def task_response(self, item):
         recurrence = self.recurrence_response(item, anchor(item))
-        return TaskResponse(**{key: getattr(item, key) for key in ("id", "title", "notes", "start_at", "due_at", "timezone", "all_day", "priority", "version", "created_at", "updated_at")}, recurrence=recurrence, completed=item.completed_at is not None, next_occurrence_at=recurrence.next_occurrence_at if recurrence else None, reminders=[ReminderResponse.model_validate(r) for r in ReminderCrud(self.session, self.user.id).for_entity("task", item.id)])
+        return TaskResponse(**{key: getattr(item, key) for key in ("id", "title", "notes", "start_at", "due_at", "timezone", "all_day", "priority", "version", "created_at", "updated_at")}, recurrence=recurrence, completed=item.completed_at is not None, completed_at=item.completed_at, next_occurrence_at=recurrence.next_occurrence_at if recurrence else None, reminders=[ReminderResponse.model_validate(r) for r in ReminderCrud(self.session, self.user.id).for_entity("task", item.id)])
 
     def event_response(self, item, occurrence_at=None):
         data = {key: getattr(item, key) for key in ("id", "title", "notes", "start_at", "end_at", "timezone", "all_day", "source", "connection_id", "external_read_only", "version", "created_at", "updated_at")}
@@ -370,34 +377,53 @@ class PlanningService:
     def occurrence_response(item, occurrence_at=None, record=None):
         return TaskOccurrenceResponse(task_id=item.id, occurrence_at=occurrence_at, status=record.status if record else ("completed" if item.completed_at else "pending"), completed_at=record.completed_at if record else item.completed_at, effective_start_at=effective_time(item.start_at, anchor(item), occurrence_at, item.timezone), effective_due_at=effective_time(item.due_at, anchor(item), occurrence_at, item.timezone))
 
-    def calendar_range(self, lower, upper, timezone):
+    def day_agenda(self, day, *, include_events=True):
+        start = datetime.combine(day, datetime.min.time(), zone(self.user.timezone))
+        return self.calendar_range(start, start + timedelta(days=1), self.user.timezone,
+                                   task_day=day, include_events=include_events)
+
+    def calendar_range(self, lower, upper, timezone, *, task_day=None, include_events=True):
         tz = zone(timezone)
         if lower.tzinfo is None or upper.tzinfo is None or upper <= lower or upper - lower > timedelta(days=93):
             raise AppError(422, "invalid_or_large_range", "Use an increasing range of at most 93 days")
         task_results = []
         event_results = []
-        tasks = self.session.scalars(self.tasks.query().where(or_(Task.rrule.is_not(None), Task.start_at < upper, Task.due_at < upper)))
+        spanning_tasks = []
+        # Midnight at the end of this date can be later in an all-day task's own zone.
+        task_limit = datetime.combine(task_day + timedelta(days=2), datetime.min.time(), UTC) if task_day else upper
+        tasks = self.session.scalars(self.tasks.query().where(or_(Task.rrule.is_not(None), Task.start_at < task_limit, Task.due_at < task_limit)))
         for item in tasks:
             base = anchor(item)
             if base is None:
                 continue
+            task_lower, task_upper = lower, upper
+            if task_day and item.all_day:
+                task_lower = datetime.combine(task_day, datetime.min.time(), zone(item.timezone))
+                task_upper = task_lower + timedelta(days=1)
             if item.rrule:
                 duration = abs((item.due_at or base) - base) + timedelta(days=1)
-                occurrences = RecurrenceService.between(item.rrule, base, item.timezone, lower - duration, upper)
-                records = {record.occurrence_at: record for record in self.session.scalars(select(TaskOccurrence).where(TaskOccurrence.task_id == item.id, TaskOccurrence.user_id == self.user.id, TaskOccurrence.occurrence_at >= lower - duration, TaskOccurrence.occurrence_at < upper))}
+                occurrences = RecurrenceService.between(item.rrule, base, item.timezone, task_lower - duration, task_upper)
+                records = {record.occurrence_at: record for record in self.session.scalars(select(TaskOccurrence).where(TaskOccurrence.task_id == item.id, TaskOccurrence.user_id == self.user.id, TaskOccurrence.occurrence_at >= task_lower - duration, TaskOccurrence.occurrence_at < task_upper))}
             else:
                 occurrences, records = [None], {}
             for occurrence in occurrences:
                 result = self.occurrence_response(item, occurrence, records.get(occurrence))
                 start = result.effective_start_at or result.effective_due_at
                 end = result.effective_due_at or start
-                if start < upper and (end > lower or start == end and end >= lower):
+                # Daily tasks belong to their due date (or start date without a deadline).
+                # The calendar grid also shows time intervals that overlap its range.
+                included = task_lower <= end < task_upper if task_day else (
+                    start < upper and (end > lower or start == end and end >= lower))
+                if included:
                     result.effective_start_at = result.effective_start_at.astimezone(tz) if result.effective_start_at else None
                     result.effective_due_at = result.effective_due_at.astimezone(tz) if result.effective_due_at else None
                     task_results.append(result)
-                if len(task_results) + len(event_results) > MAX_OCCURRENCES:
+                elif task_day and include_events and not item.all_day and result.status == "pending" and start < upper and end > lower:
+                    # This task occupies time today even though its deadline belongs to a later day.
+                    spanning_tasks.append({"start_at": start, "end_at": end, "title": item.title})
+                if len(task_results) + len(spanning_tasks) > MAX_OCCURRENCES:
                     raise AppError(422, "invalid_or_large_range", "Too many entries in this range")
-        events = self.session.scalars(self.events.query().where(CalendarEvent.start_at < upper, or_(CalendarEvent.rrule.is_not(None), CalendarEvent.end_at > lower)))
+        events = self.session.scalars(self.events.query().where(CalendarEvent.start_at < upper, or_(CalendarEvent.rrule.is_not(None), CalendarEvent.end_at > lower))) if include_events else ()
         for item in events:
             if item.rrule:
                 occurrences = RecurrenceService.between(item.rrule, item.start_at, item.timezone, lower - (item.end_at - item.start_at) - timedelta(days=1), upper)
@@ -412,11 +438,14 @@ class PlanningService:
                     result.start_at = result.start_at.astimezone(tz)
                     result.end_at = result.end_at.astimezone(tz)
                     event_results.append(result)
-                if len(task_results) + len(event_results) > MAX_OCCURRENCES:
+                if len(task_results) + len(event_results) + len(spanning_tasks) > MAX_OCCURRENCES:
                     raise AppError(422, "invalid_or_large_range", "Too many entries in this range")
         task_results.sort(key=lambda item: item.effective_start_at or item.effective_due_at)
         event_results.sort(key=lambda item: (item.start_at, str(item.id)))
-        return {"from": lower, "to": upper, "timezone": timezone, "tasks": task_results, "events": event_results}
+        calendar = {"from": lower, "to": upper, "timezone": timezone, "tasks": task_results, "events": event_results}
+        if task_day and include_events:
+            calendar["spanning_tasks"] = spanning_tasks
+        return calendar
 
 
 TaskService = PlanningService

@@ -58,7 +58,7 @@ class SocialLoginRequest(RequestModel):
 
 
 class RefreshTokenRequest(RequestModel):
-    refresh_token: str = Field(min_length=1, max_length=8192)
+    refresh_token: str | None = Field(default=None, min_length=1, max_length=8192)
 
 
 class LogoutRequest(RefreshTokenRequest):
@@ -123,6 +123,19 @@ class UserAuthResponse(BaseModel):
 class AuthSessionResponse(BaseModel):
     user: UserAuthResponse
     tokens: TokenPairResponse
+    is_new_user: bool
+
+
+class BrowserSessionTokens(BaseModel):
+    token_type: Literal["cookie"] = "cookie"
+    session_id: UUID
+    rotation_id: UUID
+    expires_at: int
+
+
+class BrowserAuthSession(BaseModel):
+    user: UserAuthResponse
+    tokens: BrowserSessionTokens
     is_new_user: bool
 
 

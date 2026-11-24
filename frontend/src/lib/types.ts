@@ -7,7 +7,11 @@ export interface User {
 export interface TokenPair {
   access_token: string; refresh_token: string; token_type: 'bearer'; expires_in: number; refresh_expires_in: number;
 }
-export interface AuthSession { user: User; tokens: TokenPair; is_new_user: boolean; demo?: boolean }
+export interface CookieSession {
+  token_type: 'cookie'; session_id: string; rotation_id: string; expires_at: number;
+  access_token?: never; refresh_token?: never;
+}
+export interface AuthSession { user: User; tokens: TokenPair | CookieSession; is_new_user: boolean; demo?: boolean }
 export interface OtpChallenge {
   challenge_id: string; otp_expires_at: string; registration_expires_at: string;
   resend_available_at: string; attempts_left: number;
@@ -19,7 +23,7 @@ export type Priority = 'none' | 'low' | 'medium' | 'high';
 export interface Task {
   id: string; title: string; notes: string | null; start_at: string | null; due_at: string | null;
   timezone: string; all_day: boolean; priority: Priority; recurrence: Recurrence | null;
-  completed: boolean; next_occurrence_at: string | null; reminders: Reminder[];
+  completed: boolean; completed_at?: string | null; next_occurrence_at: string | null; reminders: Reminder[];
   version: number; created_at: string; updated_at: string;
 }
 export interface TaskOccurrence {

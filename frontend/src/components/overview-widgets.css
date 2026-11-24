@@ -1,0 +1,17 @@
+.overview-widget-toolbar {display: flex; justify-content: flex-end;}
+.overview-widget-toolbar button {min-height: 44px;}
+.overview-widget-order section + section {margin-top: 18px;}
+.overview-widget-order ol {list-style: none; padding: 0; margin: 6px 0;}
+.overview-widget-order li {display: flex; align-items: center; gap: 8px; border-bottom: 1px solid var(--life-line); cursor: grab;}
+.overview-widget-order li > span {flex: 1; min-width: 0;}
+.overview-widget-order .icon-button {width: 44px; height: 44px;}
+.overview-widget-order .icon-button[aria-disabled=true] {opacity: .38; cursor: default;}
+.life-finance-panels.overview-widget-panels > :first-child {grid-row: span 2;}
+.life-finance-panels.overview-widget-panels > :only-child {grid-column: 1 / -1; grid-row: auto;}
+.life-reading-grid > .life-reading-current:only-child {grid-column: 1 / -1;}
+@media (min-width: 761px) {
+  .app-layout .life-reading-grid:has(> .life-reading-goal:first-child) {grid-template-columns: minmax(0, 1fr) minmax(0, 2.6fr);}
+}
+@media (max-width: 760px) {
+  .life-finance-panels.overview-widget-panels > :first-child {grid-row: auto;}
+}

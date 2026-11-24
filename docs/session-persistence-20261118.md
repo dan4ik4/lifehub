@@ -33,3 +33,5 @@ Backend: 207 tests passed; 6 PostgreSQL/Redis integration tests skipped without 
 10. Diagnose Google sign-in in the Android APK. After this is resolved, return to the deferred real-device health integration checks from item 2.
 
 Do not implement the later items simultaneously.
+
+Архивная копия сценария этого релиза находится в [deploy/archive](../deploy/archive/deploy-session-20261118.sh).

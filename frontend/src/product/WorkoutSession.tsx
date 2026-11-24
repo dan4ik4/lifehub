@@ -1,6 +1,6 @@
 import { t } from '../lib/language';
 import {useEffect,useState} from 'react';
-import {Activity,Check,Clock3,Plus,Trash2} from 'lucide-react';
+import {Activity,Check,Clock3,Trash2} from 'lucide-react';
 import {api,errorMessage} from '../lib/api';
 import {todayKey} from '../lib/dates';
 import type {Notify,User} from '../lib/types';
@@ -50,6 +50,8 @@ export function WorkoutSession({user,notify}:{user:User;notify:Notify}){
     window.dispatchEvent(new Event('lifehub:workout-change'));
   }
   const current=session?.program[session.index];
+  const completedHere=session&&current?Math.min(current.sets-1,Math.max(0,session.efforts.length-
+    session.program.slice(0,session.index).reduce((sum,exercise)=>sum+exercise.sets,0))):0;
   const rest=session?Math.max(0,Math.ceil((session.restUntil-now)/1000)):0;
   useEffect(()=>{
     const show=(event:Event)=>{
@@ -99,8 +101,7 @@ export function WorkoutSession({user,notify}:{user:User;notify:Notify}){
     if(!session||session.efforts.length>=500||!name.trim())return;
     const effort={name:name.trim(),reps:Number(reps),kg:kg===''?null:Number(kg)};
     const efforts=[...session.efforts,effort];
-    const done=current?efforts.filter(item=>item.name===current.name).length:0;
-    record({...session,efforts,index:current&&done>=current.sets?session.index+1:session.index,restUntil:Date.now()+90_000});
+    record({...session,efforts,index:current&&completedHere+1>=current.sets?session.index+1:session.index,restUntil:Date.now()+90_000});
     setNow(Date.now());
   }
   async function finish(){
@@ -123,8 +124,8 @@ export function WorkoutSession({user,notify}:{user:User;notify:Notify}){
       <div className="modal-body life-workout-session">
         <header><span><i/>{t("Идёт тренировка")}</span><time>{clock(Math.max(0,Math.floor((now-session.started)/1000)))}</time></header>
         <h3>{session.title}</h3>
-        {current&&<p>{current.name} {t("· подход")} {Math.min(current.sets,session.efforts.filter(e=>e.name===current.name).length+1)} {t("из")} {current.sets}</p>}
-        {current&&<div className="life-session-steps">{Array.from({length:current.sets},(_,i)=><i key={i} data-done={i<session.efforts.filter(e=>e.name===current.name).length||undefined}/>)}</div>}
+        {current&&<p>{current.name} {t("· подход")} {completedHere+1} {t("из")} {current.sets}</p>}
+        {current&&<div className="life-session-steps">{Array.from({length:current.sets},(_,i)=><i key={i} data-done={i<completedHere||undefined}/>)}</div>}
         <form className="life-workout-effort" onSubmit={e=>{e.preventDefault();add();}}>
           <label>{t("Упражнение")}<input value={name} maxLength={200} required onChange={e=>setName(e.target.value)}/></label>
           <label>{t("Вес, кг")}<input value={kg} type="number" step=".01" min="0" max="1000" onChange={e=>setKg(e.target.value)}/></label>

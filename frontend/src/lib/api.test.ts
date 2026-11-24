@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AuthSession, TokenPair } from './types';
+import { Capacitor } from '@capacitor/core';
+
+vi.mock('@capacitor/core', () => ({ Capacitor: { isNativePlatform: vi.fn() } }));
 
 class MemoryStorage {
   values = new Map<string, string>();
@@ -20,12 +23,102 @@ let tabStorage: MemoryStorage;
 let persistentStorage: MemoryStorage;
 
 beforeEach(async () => {
+  // These existing tests cover the bearer transport used by installed apps.
+  vi.mocked(Capacitor.isNativePlatform).mockReturnValue(true);
   vi.resetModules();
   tabStorage = new MemoryStorage();
   persistentStorage = new MemoryStorage();
   vi.stubGlobal('sessionStorage', tabStorage);
   vi.stubGlobal('localStorage', persistentStorage);
   client = await import('./api');
+});
+
+describe('browser cookie sessions', () => {
+  const webTokens = (expires = Date.now() / 1000 + 900, rotation = 'first') =>
+    ({ token_type: 'cookie' as const, session_id: 'family', rotation_id: rotation, expires_at: expires });
+  beforeEach(() => vi.mocked(Capacitor.isNativePlatform).mockReturnValue(false));
+
+  it('restores the public session selector after restarting without storing bearer credentials', async () => {
+    client.setSession({ ...auth(), tokens: webTokens() });
+    const saved = persistentStorage.getItem('lifehub.session.v1')!;
+    expect(saved).not.toMatch(/refresh_token|access_token/);
+    vi.resetModules();
+    const reopened = await import('./api');
+    const fetcher = vi.fn().mockResolvedValue(response({ ok: true }));
+    vi.stubGlobal('fetch', fetcher);
+    await reopened.api('/users/me');
+    const headers = new Headers(fetcher.mock.calls[0][1].headers);
+    expect(headers.get('Authorization')).toBeNull();
+    expect(headers.get('X-LifeHub-Session')).toBe('family');
+    expect(headers.get('X-LifeHub-Client')).toBe('web');
+    expect(fetcher.mock.calls).toHaveLength(1);
+  });
+
+  it('exchanges a stored legacy login before sending private requests', async () => {
+    persistentStorage.setItem('lifehub.session.v1', JSON.stringify(auth()));
+    const fetcher = vi.fn().mockResolvedValueOnce(response(webTokens())).mockResolvedValueOnce(response({ ok: true }));
+    vi.stubGlobal('fetch', fetcher);
+    await client.api('/users/me');
+    expect(fetcher.mock.calls[0][0]).toContain('/auth/refresh');
+    expect(JSON.parse(fetcher.mock.calls[0][1].body)).toEqual({refresh_token: 'refresh-old'});
+    expect(persistentStorage.getItem('lifehub.session.v1')).not.toContain('refresh-old');
+    expect(new Headers(fetcher.mock.calls[1][1].headers).get('X-LifeHub-Session')).toBe('family');
+  });
+
+  it('rotates an expired cookie once before concurrent reads and logs out with the selector', async () => {
+    client.setSession({ ...auth(), tokens: webTokens(1) });
+    const fetcher = vi.fn(async (path: string, _options: RequestInit) =>
+      path.endsWith('/refresh') ? response(webTokens(undefined, 'second')) : response({ ok: true }));
+    vi.stubGlobal('fetch', fetcher);
+    await Promise.all([client.api('/planning/tasks'), client.api('/planning/lists')]);
+    expect(fetcher.mock.calls[0][0]).toContain('/auth/refresh');
+    expect(fetcher.mock.calls.filter(([url]) => url.endsWith('/refresh'))).toHaveLength(1);
+    await client.logoutSession();
+    const [url, options] = fetcher.mock.calls.at(-1)!;
+    expect(url).toContain('/auth/logout');
+    expect(options.body).toBe('{}');
+    expect(new Headers(options.headers).get('X-LifeHub-Session')).toBe('family');
+  });
+
+  it('shares reads, supports independent cancellation and invalidates cached data on writes', async () => {
+    client.setSession({ ...auth(), tokens: webTokens() });
+    const read = deferred<Response>();
+    const fetcher = vi.fn().mockReturnValueOnce(read.promise).mockImplementation(() => Promise.resolve(response({ data: 'new' })));
+    vi.stubGlobal('fetch', fetcher);
+    const controller = new AbortController();
+    const one = client.api('/users/me/avatar', { signal: controller.signal });
+    const two = client.api('/users/me/avatar');
+    controller.abort();
+    await expect(one).rejects.toMatchObject({name:'AbortError'});
+    read.resolve(response({ data: 'old' }));
+    await expect(two).resolves.toEqual({data:'old'});
+    await client.api('/users/me/avatar');
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    await client.api('/users/me/avatar', { method: 'DELETE' });
+    await expect(client.api('/users/me/avatar')).resolves.toEqual({ data:'new' });
+    expect(fetcher).toHaveBeenCalledTimes(3);
+  });
+
+  it('distinguishes a fresh login to the same account from token rotation in another tab', () => {
+    client.setSession({ ...auth(), tokens: webTokens() });
+    const generation = client.getSessionGeneration();
+    persistentStorage.setItem('lifehub.session.v1', JSON.stringify({...auth(), tokens: webTokens(undefined, 'second')}));
+    expect(client.getSessionGeneration()).toBe(generation);
+    persistentStorage.setItem('lifehub.session.v1', JSON.stringify({...auth(), tokens: {...webTokens(), session_id:'new-login'}}));
+    expect(client.getSessionGeneration()).not.toBe(generation);
+  });
+
+  it('reuses equivalent summary requests across widgets and lets manual refresh bypass the cache', async () => {
+    client.setSession({ ...auth(), tokens: webTokens() });
+    const fetcher = vi.fn().mockImplementation(() => Promise.resolve(response({ sleep: [] })));
+    vi.stubGlobal('fetch', fetcher);
+    await client.api('/health/summary?from=2026-11-01&to=2026-11-24');
+    await client.api('/health/summary?to=2026-11-24&from=2026-11-01');
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    client.invalidateSharedReads();
+    await client.api('/health/summary?from=2026-11-01&to=2026-11-24');
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
 });
 afterEach(() => vi.unstubAllGlobals());
 
@@ -168,7 +261,7 @@ describe('API session lifecycle', () => {
     client.setSession(auth());
     const refresh = deferred<Response>();
     const fetcher = vi.fn(async (url: string, options: RequestInit) => {
-      if (url === '/api/v1/auth/refresh') return refresh.promise;
+      if (url.endsWith('/api/v1/auth/refresh')) return refresh.promise;
       return new Headers(options.headers).get('Authorization') === 'Bearer access-old' ? unauthorized() : response({ items: ['updated'] });
     });
     vi.stubGlobal('fetch', fetcher);

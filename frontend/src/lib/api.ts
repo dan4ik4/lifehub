@@ -26,6 +26,7 @@ export class ApiError extends Error {
 }
 
 const SESSION_KEY = 'lifehub.session.v1';
+const sharedReads = new Map<string, { promise: Promise<unknown>; expires: number }>();
 const listeners = new Set<() => void>();
 let loaded = false;
 let session: AuthSession | null = null;
@@ -34,13 +35,22 @@ let refreshFlight: { epoch: number; promise: Promise<void> } | null = null;
 let persistent = true;
 let storageSnapshot: string | null = null;
 
-function validTokens(value: unknown): value is TokenPair {
+function validTokens(value: unknown): value is AuthSession['tokens'] {
   if (!value || typeof value !== 'object') return false;
+  if ('token_type' in value && value.token_type === 'cookie') {
+    return 'session_id' in value && typeof value.session_id === 'string' && !!value.session_id &&
+      'rotation_id' in value && typeof value.rotation_id === 'string' && !!value.rotation_id &&
+      'expires_at' in value && typeof value.expires_at === 'number' && Number.isFinite(value.expires_at) &&
+      !('access_token' in value) && !('refresh_token' in value);
+  }
   const tokens = value as Partial<TokenPair>;
   return typeof tokens.access_token === 'string' && !!tokens.access_token &&
     typeof tokens.refresh_token === 'string' && !!tokens.refresh_token &&
     tokens.token_type === 'bearer' && typeof tokens.expires_in === 'number';
 }
+
+const rotation = (tokens: AuthSession['tokens']) =>
+  tokens.token_type === 'cookie' ? tokens.rotation_id : tokens.refresh_token;
 
 function readSession(raw: string | null): AuthSession | null {
   try {
@@ -58,7 +68,12 @@ function syncSession(): void {
     storageSnapshot = raw;
     const saved = readSession(raw);
     const next = saved?.demo ? null : saved;
-    if (session?.user.id !== next?.user.id) epoch += 1;
+    if (session?.user.id !== next?.user.id ||
+      (session?.tokens.token_type === 'cookie' && next?.tokens.token_type === 'cookie' &&
+       session.tokens.session_id !== next.tokens.session_id)) {
+      epoch += 1;
+      sharedReads.clear();
+    }
     session = next;
   } catch { /* Keep the in-memory session when storage is unavailable. */ }
 }
@@ -103,12 +118,16 @@ function onStorage(event: StorageEvent): void {
 }
 
 export function setSession(value: AuthSession): void {
-  if (!value?.user?.id || !validTokens(value.tokens)) {
+  if (!value?.user?.id || !validTokens(value.tokens) ||
+      (!value.demo && !Capacitor.isNativePlatform() && value.tokens.token_type !== 'cookie')) {
     throw new ApiError(502, 'invalid_response', t("Сервер вернул неполные данные входа. Попробуйте ещё раз."));
   }
   const previous = getSession();
   if (!previous || previous.user.id !== value.user.id || Boolean(previous.demo) !== Boolean(value.demo) ||
-    previous.tokens.access_token !== value.tokens.access_token || previous.tokens.refresh_token !== value.tokens.refresh_token) epoch += 1;
+    rotation(previous.tokens) !== rotation(value.tokens)) {
+    epoch += 1;
+    sharedReads.clear();
+  }
   loaded = true;
   session = value;
   publish();
@@ -116,6 +135,7 @@ export function setSession(value: AuthSession): void {
 
 export function clearSession(): void {
   epoch += 1;
+  sharedReads.clear();
   loaded = true;
   session = null;
   publish();
@@ -138,7 +158,80 @@ export function startDemo(): AuthSession {
 
 export function isDemo(): boolean { return getSession()?.demo === true; }
 
+export function getSessionGeneration(): number {
+  getSession();
+  return epoch;
+}
+
+export async function logoutSession(): Promise<void> {
+  const current = getSession();
+  if (!current || current.demo) return;
+  const expectedEpoch = epoch;
+  const revoke = async () => {
+    const latest = getSession();
+    if (!latest || epoch !== expectedEpoch) throw changedSession();
+    await api('/auth/logout', { method: 'POST', body: { refresh_token: latest.tokens.refresh_token } });
+  };
+  if (typeof navigator !== 'undefined' && navigator.locks) {
+    await navigator.locks.request('lifehub.auth.refresh', revoke);
+  } else await revoke();
+}
+
+// Each subscriber can stop waiting without aborting another mounted component's read.
+function forSubscriber<T>(result: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return result;
+  return new Promise<T>((resolve, reject) => {
+    const abort = () => reject(signal.reason);
+    signal.addEventListener('abort', abort, { once: true });
+    if (signal.aborted) abort();
+    result.then(resolve, reject).finally(() => signal.removeEventListener('abort', abort));
+  });
+}
+
+export function invalidateSharedReads(): void {
+  sharedReads.clear();
+}
+
+export async function api<T>(rawPath: string, options: ApiOptions = {}): Promise<T> {
+  options.signal?.throwIfAborted();
+  const path = rawPath.replace(/^\/api\/v1(?=\/)/, '');
+  const endpoint = path.split('?')[0];
+  const current = getSession(), expectedEpoch = epoch;
+  if (options.method && options.method !== 'GET') {
+    sharedReads.clear();
+    const result = await perform<T>(path, options);
+    sharedReads.clear();
+    return result;
+  }
+  // Several widgets can mount in succession as their parent loads. Keep their
+  // reads briefly, then let a fresh visit or an explicit refresh fetch again.
+  const retain = endpoint === '/users/me/avatar' || endpoint === '/users/me/assistant-preferences';
+  const summary = ['/finance/overview', '/health/summary', '/books/stats'].includes(endpoint);
+  if (!current || current.demo || options.headers || (!retain && !summary)) return perform<T>(path, options);
+  const query = new URLSearchParams(path.split('?')[1]);
+  query.sort();
+  const key = expectedEpoch + ':' + endpoint + '?' + query;
+  const now = Date.now();
+  for (const [cachedKey, previous] of sharedReads) {
+    if (previous.expires <= now) sharedReads.delete(cachedKey);
+  }
+  let entry = sharedReads.get(key);
+  if (!entry) {
+    const next = { promise: perform<T>(path, { ...options, signal: undefined }), expires: Infinity };
+    entry = next;
+    sharedReads.set(key, next);
+    next.promise.then(() => {
+      next.expires = Date.now() + (retain ? 30_000 : 5_000);
+    }, () => { if (sharedReads.get(key) === next) sharedReads.delete(key); });
+  }
+  const result = await forSubscriber(entry.promise, options.signal);
+  getSession();
+  if (expectedEpoch !== epoch) throw changedSession();
+  return result as T;
+}
+
 const messages: Record<string, string> = {
+  book_already_on_shelf: t("Эта книга уже на вашей полке."),
   voice_not_configured: t("Распознавание голоса не подключено на этом сервере. Требуется ключ OpenAI."),
   transcription_failed: t("Не удалось распознать запись. Попробуйте ещё раз."),
   invalid_audio: t("Запись повреждена или слишком большая. Запишите голос заново."),
@@ -249,11 +342,15 @@ async function decode(response: Response): Promise<unknown> {
   return body;
 }
 
-async function request(path: string, options: ApiOptions, token?: string): Promise<unknown> {
+async function request(path: string, options: ApiOptions, tokens?: AuthSession['tokens']): Promise<unknown> {
   const headers = new Headers(options.headers);
   headers.set('Accept', 'application/json');
   if (options.body !== undefined) headers.set('Content-Type', 'application/json');
-  if (token) headers.set('Authorization', `Bearer ${token}`);
+  if (!Capacitor.isNativePlatform()) {
+    headers.set('X-LifeHub-Client', 'web');
+    if (tokens?.token_type === 'cookie') headers.set('X-LifeHub-Session', tokens.session_id);
+  }
+  if (tokens?.access_token && path !== '/auth/refresh') headers.set('Authorization', `Bearer ${tokens.access_token}`);
   let response: Response;
   try {
     response = await fetch(`${Capacitor.isNativePlatform()?'https://lifehapp.online':''}/api/v1${path}`, {
@@ -273,18 +370,20 @@ const changedSession = () => new ApiError(409, 'session_changed', t("Аккау�
 async function refresh(expectedEpoch: number): Promise<void> {
   if (epoch !== expectedEpoch || !session || session.demo) throw changedSession();
   if (refreshFlight?.epoch === expectedEpoch) return refreshFlight.promise;
-  const refreshToken = session.tokens.refresh_token;
+  const original = session.tokens;
   const rotate = async () => {
     getSession();
     if (epoch !== expectedEpoch || !session || session.demo) throw changedSession();
     // Another tab may have rotated the token while we waited for its lock.
-    if (session.tokens.refresh_token !== refreshToken) return;
+    if (rotation(session.tokens) !== rotation(original)) return;
     try {
-      const tokens = await request('/auth/refresh', { method: 'POST', body: { refresh_token: refreshToken } });
+      const tokens = await request('/auth/refresh', { method: 'POST', body: { refresh_token: original.refresh_token } }, original);
       getSession();
       if (epoch !== expectedEpoch || !session) throw changedSession();
-      if (session.tokens.refresh_token !== refreshToken) return;
-      if (!validTokens(tokens)) throw new ApiError(502, 'invalid_response', t("Не удалось обновить сессию. Попробуйте ещё раз."));
+      if (rotation(session.tokens) !== rotation(original)) return;
+      if (!validTokens(tokens) || (!Capacitor.isNativePlatform() && tokens.token_type !== 'cookie')) {
+        throw new ApiError(502, 'invalid_response', t("Не удалось обновить сессию. Попробуйте ещё раз."));
+      }
       session = { ...session, tokens };
       publish();
     } catch (error) {
@@ -308,7 +407,7 @@ async function refresh(expectedEpoch: number): Promise<void> {
   try { await promise; } finally { if (refreshFlight === flight) refreshFlight = null; }
 }
 
-export async function api<T>(rawPath: string, options: ApiOptions = {}): Promise<T> {
+async function perform<T>(rawPath: string, options: ApiOptions): Promise<T> {
   const path = rawPath.replace(/^\/api\/v1(?=\/)/, '');
   if (!path.startsWith('/') || path.startsWith('//')) throw new ApiError(400, 'invalid_path', t("Неверный адрес запроса."));
   options.signal?.throwIfAborted();
@@ -334,9 +433,17 @@ export async function api<T>(rawPath: string, options: ApiOptions = {}): Promise
   const protectedAuthEndpoint = ['/auth/change-email', '/auth/confirm-email-change', '/auth/change-password'].includes(pathname);
   const accessFailure = (error: unknown): error is ApiError => error instanceof ApiError && error.status === 401 &&
     (!authEndpoint || protectedAuthEndpoint) && ['unauthorized', 'invalid_access'].includes(error.code);
-  const token = current?.tokens.access_token;
+  const usesAccess = !authEndpoint || protectedAuthEndpoint;
+  if (current && usesAccess && !Capacitor.isNativePlatform() &&
+    (current.tokens.token_type === 'bearer' || current.tokens.expires_at * 1000 <= Date.now() + 30_000)) {
+    // This also exchanges pre-cookie browser credentials on their first use.
+    await refresh(expectedEpoch);
+    options.signal?.throwIfAborted();
+    if (!getSession() || epoch !== expectedEpoch) throw changedSession();
+  }
+  const original = session?.tokens;
   try {
-    const result = await request(path, options, token);
+    const result = await request(path, options, original);
     getSession();
     if (epoch !== expectedEpoch) throw changedSession();
     return result as T;
@@ -345,20 +452,20 @@ export async function api<T>(rawPath: string, options: ApiOptions = {}): Promise
     if (epoch !== expectedEpoch) throw changedSession();
     if (!accessFailure(error) || !current) throw error;
     // A late 401 can arrive after another request has already rotated tokens.
-    if (session?.tokens.access_token === token) await refresh(expectedEpoch);
+    if (original && session && rotation(session.tokens) === rotation(original)) await refresh(expectedEpoch);
     options.signal?.throwIfAborted();
     getSession();
     if (epoch !== expectedEpoch || !session) throw changedSession();
-    const retryToken = session.tokens.access_token;
+    const retryTokens = session.tokens;
     try {
-      const result = await request(path, options, retryToken);
+      const result = await request(path, options, retryTokens);
       getSession();
       if (epoch !== expectedEpoch) throw changedSession();
       return result as T;
     } catch (retryError) {
       getSession();
       if (epoch !== expectedEpoch) throw changedSession();
-      if (accessFailure(retryError) && session?.tokens.access_token === retryToken) clearSession();
+      if (accessFailure(retryError) && session && rotation(session.tokens) === rotation(retryTokens)) clearSession();
       throw retryError;
     }
   }

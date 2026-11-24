@@ -114,9 +114,6 @@ export function AssistantChat({user, path, navigate}: {user:User; path:string;na
     });
   };
   return <>
-    {!open&&<button className="life-assistant" onClick={()=>setOpen(true)} aria-label={t("Спросить помощника")} aria-haspopup="dialog">
-      <Sparkles size={21}/><span>{t("Спросить помощника")}</span><kbd>⌘J</kbd>
-    </button>}
     {open&&<Modal title={t("Помощник")} description={t("Один чат на все экраны")} onClose={close} className="assistant-modal">
       <div className="chat-context"><span className="live-dot"/>{t("Контекст:")} {screenLabel[currentScreen(path)]} · {dayLabel(contextDay,{day:'numeric',month:'short'})}<span>{t("История сохранена")}</span></div>
       <div hidden={preferencesOpen} ref={log} className="chat-log" role="log" aria-label={t("История переписки")} aria-live="polite" aria-relevant="additions text">

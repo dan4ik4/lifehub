@@ -7,7 +7,7 @@ import { todayKey, shiftDay } from "../lib/dates";
 import type { User } from "../lib/types";
 import type { Row } from "./schema";
 import { Modal } from "../components/ui";
-import { amount, dateLabel, text, isPro } from "./Product";
+import { amount, dateLabel, text, isPro } from "./recordPresentation";
 export function HealthChart({
   section,
   user,
@@ -20,19 +20,21 @@ export function HealthChart({
   const [days, setDays] = useState(7),
     [rows, setRows] = useState<Row[]>([]),
     [target, setTarget] = useState<number | null>(null),
+    [loading, setLoading] = useState(true),
     [error, setError] = useState("");
   useEffect(() => {
     const c = new AbortController(),
       day = todayKey(user.timezone);
     setError("");
+    setLoading(true);
     api<Record<string, Row[]>>(
       `/health/summary?from=${shiftDay(day, -days + 1)}&to=${day}`,
       { signal: c.signal },
     )
-      .then((r) => setRows(r[section] || []))
+      .then((r) => { if (!c.signal.aborted) setRows(r[section] || []); })
       .catch((e) => {
         if (!c.signal.aborted) setError(errorMessage(e));
-      });
+      }).finally(() => { if (!c.signal.aborted) setLoading(false); });
     if (section === "weight" && isPro(user))
       api<{ items: Row[] }>("/health/weight-targets", { signal: c.signal })
         .then((r) =>
@@ -43,6 +45,8 @@ export function HealthChart({
         .catch(() => {});
     return () => c.abort();
   }, [section, user.timezone, user.weight_unit, days, revision]);
+  const latestDay = section === "weight" ? revision.reduce((last, row) =>
+    typeof row.day === "string" && row.day > last ? row.day : last, "") : "";
   const value = (r: Row) =>
       Number(
         section === "sleep"
@@ -86,8 +90,12 @@ export function HealthChart({
       </header>
       {error ? (
         <p role="alert">{error}</p>
+      ) : loading ? (
+        <p role="status">{t("Загружаем показатели…")}</p>
       ) : !shown.length ? (
-        <p className="muted">{t("Добавьте записи — здесь появится ваша история.")}</p>
+        <p className="muted">{latestDay
+          ? t("За выбранный период измерений нет. Последняя запись — {0}.", dateLabel(latestDay))
+          : t("За выбранный период записей нет.")}</p>
       ) : (
         <>
           {section === "weight" ? (

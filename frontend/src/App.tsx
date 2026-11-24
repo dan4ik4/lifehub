@@ -10,14 +10,15 @@ import {AssistantChat} from './components/AssistantChat';
 import {Avatar} from './components/Avatar';
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { ArrowRight, Bell, BookOpen, CalendarDays, Check, CheckCircle2, ChevronDown, ChevronRight, CircleAlert, Crown, Heart, HelpCircle, LayoutGrid, Link2, ListChecks, LoaderCircle, LogOut, Menu, Plus, RefreshCw, Search, Settings2, Sparkles, Sun, Target, Wallet, X } from 'lucide-react';
-import { api, clearSession, errorMessage, getSession, isDemo, setSession, startDemo, subscribeSession } from './lib/api';
+import { api, clearSession, errorMessage, getSession, getSessionGeneration, isDemo, logoutSession, setSession, startDemo, subscribeSession } from './lib/api';
 import { dateKey, dayLabel, monthDays, shiftDay, todayKey, zonedISO } from './lib/dates';
 import { allPages, usePlanning } from './lib/usePlanning';
 import type { AuthSession, CalendarEvent, Notify, Task, TaskOccurrence, User } from './lib/types';
 import { AuthScreen, Onboarding } from './components/Auth';
 import { disablePush } from './lib/push';
 import { Settings } from './components/Settings';
-import { Product, isPro } from './product/Product';
+import { Product } from './product/Product';
+import { isPro } from './product/recordPresentation';
 import { Logo, Modal, ConfirmDialog, EmptyState } from './components/ui';
 import { TodayView } from './components/TodayView';
 import { CalendarView } from './components/CalendarView';
@@ -30,6 +31,9 @@ interface Toast { id: number; message: string; kind: 'success' | 'error' | 'info
 const viewPaths = { day: '/planning', calendar: '/planning/calendar', free: '/planning/free-time', lists: '/planning/lists' };
 const viewFromPath = (path: string): View => path === viewPaths.calendar ? 'calendar' : path === viewPaths.free ? 'free' : path === viewPaths.lists ? 'lists' : 'day';
 
+function routeScroller() {
+  return (window.matchMedia('(max-width: 760px)').matches && document.querySelector<HTMLElement>('.app-main')) || document.scrollingElement || document.documentElement;
+}
 export default function App() {
   const session = useSyncExternalStore(subscribeSession, getSession);
   const [location, setLocation] = useState(window.location.pathname + window.location.search);
@@ -44,7 +48,7 @@ export default function App() {
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
   const navigate = useCallback((value: string, replace = false) => {
     if (value === currentLocation.current) return;
-    routePositions.current.set(currentLocation.current, window.scrollY);
+    routePositions.current.set(currentLocation.current, routeScroller().scrollTop);
     restorePosition.current = false;
     if (replace) window.history.replaceState({}, '', value);
     else window.history.pushState({}, '', value);
@@ -53,7 +57,7 @@ export default function App() {
   }, []);
   useEffect(() => {
     const pop = () => {
-      routePositions.current.set(currentLocation.current, window.scrollY);
+      routePositions.current.set(currentLocation.current, routeScroller().scrollTop);
       restorePosition.current = true;
       currentLocation.current = window.location.pathname + window.location.search;
       setLocation(currentLocation.current);
@@ -62,7 +66,7 @@ export default function App() {
     return () => window.removeEventListener('popstate', pop);
   }, []);
   useEffect(() => {
-    window.scrollTo({top:restorePosition.current ? routePositions.current.get(location) ?? 0 : 0, behavior:'instant'});
+    routeScroller().scrollTo({top:restorePosition.current ? routePositions.current.get(location) ?? 0 : 0, behavior:'instant'});
   }, [location]);
   const updateUser = useCallback((user: User) => { const current = getSession(); if (current) setSession({ ...current, user }); }, []);
   useEffect(() => {
@@ -76,9 +80,15 @@ export default function App() {
   };
   const logout = useCallback(async () => {
     const current = getSession();
-    try { if (current && !current.demo) await disablePush().catch(() => {}); if (current && !current.demo) await api('/auth/logout', { method: 'POST', body: { refresh_token: current.tokens.refresh_token } }); }
+    const generation = getSessionGeneration();
+    try {
+      if (current && !current.demo) {
+        await disablePush().catch(() => {});
+        if (getSessionGeneration() === generation) await logoutSession();
+      }
+    }
     catch { notify(t("Вход на этом устройстве закрыт. Сервер не ответил на запрос завершения сессии."), 'info'); }
-    finally { clearSession(); navigate('/', true); }
+    finally { if (getSessionGeneration() === generation) { clearSession(); navigate('/', true); } }
   }, [navigate, notify]);
   const user = session?.user;
   const planning = path in {'/planning':1,'/planning/calendar':1,'/planning/free-time':1,'/planning/lists':1};
@@ -87,11 +97,11 @@ export default function App() {
   const onboarded = user?.onboarding_completed;
   return <>
     {!user ? <AuthScreen onAuthenticated={onAuthenticated} onDemo={() => { startDemo(); navigate('/planning', true); }}/>
-      : !onboarded ? <Onboarding user={user} onComplete={updated => { updateUser(updated); if (path === '/') navigate('/home', true); }} onLogout={() => void logout()}/>
+      : !onboarded ? <Onboarding key={user.id} user={user} onComplete={updated => { updateUser(updated); if (path === '/') navigate('/home', true); }} onLogout={() => void logout()}/>
       : path === '/calendar/callback' ? <CalendarCallback onComplete={() => navigate('/planning/calendar', true)} notify={notify}/>
       : planning && (isPro(user) || user.free_modules.includes('planning'))
-        ? <Workspace navigateProduct={navigate} user={user} view={viewFromPath(path)} search={search} onUserChange={updateUser} onLogout={logout} notify={notify}/>
-        : <Product user={user} module={module} path={path} search={query.toString()} navigate={navigate} onUserChange={updateUser} onLogout={logout} notify={notify}/>}
+        ? <Workspace key={user.id} navigateProduct={navigate} user={user} view={viewFromPath(path)} search={search} onUserChange={updateUser} onLogout={logout} notify={notify}/>
+        : <Product key={user.id} user={user} module={module} path={path} search={query.toString()} navigate={navigate} onUserChange={updateUser} onLogout={logout} notify={notify}/>}
     {user && onboarded && <NativeHealthSync key={user.id} user={user}/>}
     {user && onboarded && path !== '/calendar/callback' && <>
       <AssistantChat key={user.id} user={user} path={path} navigate={navigate}/>
@@ -157,7 +167,7 @@ function Workspace({ navigateProduct, user, view, search, onUserChange, onLogout
   const createEvent = (day = selected, time?: string, endTime?:string) => { setEditor({ kind: 'event', day, time, endTime }); setCreateMenu(false); };
   const editTask = (task: Task) => setEditor({ kind: 'task', item: task, day: selected });
   const navigate = (view: View) => navigateProduct(viewPaths[view]+'?day='+encodeURIComponent(selected));
-  useEffect(() => { document.title = `${title} · Life Hub`; }, [title]);
+  useEffect(() => { document.title = `${title} · LifeHub`; }, [title]);
   useEffect(() => { const keydown = (e: KeyboardEvent) => { const input = e.target instanceof HTMLElement && (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName) || e.target.isContentEditable); if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setSearchOpen(true); } else if (e.key === 'Escape') { setCreateMenu(false); } else if (!input && !document.querySelector('dialog[open]') && e.key.toLowerCase() === 'n') { e.preventDefault(); setEditor({ kind: 'task', day: selected }); } }; window.addEventListener('keydown', keydown); return () => window.removeEventListener('keydown', keydown); }, [selected]);
   useEffect(() => { if (!createMenu) return; const outside = (e: PointerEvent) => { if (!menuRef.current?.contains(e.target as Node)) setCreateMenu(false); }; document.addEventListener('pointerdown', outside); return () => document.removeEventListener('pointerdown', outside); }, [createMenu]);
   async function toggleTask(task: Task, occurrence?: TaskOccurrence) {

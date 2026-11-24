@@ -317,6 +317,9 @@ def checkin(habit_id: UUID, body: CheckinInput, user=Depends(member), db=Depends
     else:
         db.add(HabitCheckin(user_id=user.id, habit_id=habit.id, day=body.day, value=body.value))
     habit.updated_at = utcnow()
+    if body.day == today(user):
+        from app.modules.dashboard.day_progress import observe_day
+        observe_day(db, user)
     db.commit()
     return habit_data(db, user, habit)
 

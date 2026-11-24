@@ -1,15 +1,18 @@
+import './daily-cards.css';
 import { t, locale } from '../lib/language';
 import {LifeBars,LifeCard,LifeLink,LifeRings} from '../components/LifeCard';
 import {HealthChart} from './Extras';
 import {openWorkout} from './WorkoutSession';
+import {sleepRhythm} from './sleepRhythm';
 import {storeWeight} from './weight';
 import {refreshWorkspace} from '../lib/workspace';
-import {useEffect, useState} from 'react';
+import {useEffect, useMemo, useState} from 'react';
 import {ArrowRight, Dumbbell, Footprints, Moon, Plus, Scale} from 'lucide-react';
 import {api, errorMessage} from '../lib/api';
-import {dateKey,dayLabel,shiftDay,timeText,todayKey,zonedISO} from '../lib/dates';
+import {dateKey,dayLabel,plural,shiftDay,timeText,todayKey} from '../lib/dates';
 import type {User} from '../lib/types';
 import {openQuickAdd} from '../lib/workspace';
+import {OverviewWidgets,WidgetGroup} from '../components/OverviewWidgets';
 import {HealthConnection} from './HealthConnection';
 import {formatAmount} from './format';
 import {displayWeight, weightLabel} from './weight';
@@ -64,7 +67,11 @@ export function HealthOverview({user,navigate}: {user:User; navigate:(path:strin
   return <section className="hub-health-overview" aria-label={t("Обзор здоровья")}>
     {error && <p role="alert" className="product-error">{error}<button className="text-button" onClick={() => reload(n=>n+1)}>{t("Повторить")}</button></p>}
     {!data&&!error && <p className="product-loading" role="status">{t("Загружаем показатели…")}</p>}
-    <div className="hub-health-grid">{[cards[1],cards[2],cards[0],cards[3]].map(({key,icon:Icon,title,value,footer}) => <button key={key}
+    <OverviewWidgets account={user.id} page="health" groups={[
+      {id:'metrics',title:t("Показатели"),widgets:Object.fromEntries([cards[1],cards[2],cards[0],cards[3]].map(card=>[card.key,card.title]))},
+      ...(data?[{id:'panels',title:t("Подробный обзор"),widgets:{weight:t("Вес"),workouts:t("Тренировки"),sleep:t("Ритм сна"),medications:t("Сегодня принять")}}]:[]),
+    ]}>
+    <div className="hub-health-grid"><WidgetGroup name="metrics">{cards.map(({key,icon:Icon,title,value,footer}) => <button key={key}
       className={'hub-health-metric life-metric theme-'+(key==='sleep'?'plans':key.includes('#')?'habits':'health')} onClick={() => {
         if (key.includes('#')) {
           const details = document.getElementById('device-steps');
@@ -78,9 +85,14 @@ export function HealthOverview({user,navigate}: {user:User; navigate:(path:strin
       {key==='sleep'&&values?.sleep_week&&<LifeBars values={values.sleep_week.map(row=>row.hours)} format={v=>formatAmount(v)+t(" ч")}/>}
       {key==='weight'&&values?.weight&&<LifeBars values={values.weight.map(row=>displayWeight(row.kg,user.weight_unit))} format={v=>formatAmount(v)+' '+weightLabel(user.weight_unit)}/>}
       <strong>{value}</strong><small>{footer}</small>
-    </button>)}</div>
-    <div className="life-health-panels">
-      <div className="life-health-weight"><HealthChart section="weight" user={user} revision={historyVersion}/>
+    </button>)}</WidgetGroup></div>
+    <details className="hub-disclosure life-device-connect" id="device-steps">
+      <summary><Footprints size={17}/>{t("Apple Health и Health Connect")}</summary>
+      {steps.length>0 && <div className="hub-steps-history">{steps.map(row => <div key={row.day}><time>{dayLabel(row.day)}</time><strong>{formatAmount(row.steps)}</strong><small>{row.provider==='apple_health'?'Apple Health':'Health Connect'}</small></div>)}</div>}
+      <HealthConnection user={user}/>
+    </details>
+    {data&&<div className="life-health-panels"><WidgetGroup name="panels">
+      <div key="weight" className="life-health-weight"><HealthChart section="weight" user={user} revision={historyVersion}/>
         <form className="life-weight-inline" onSubmit={async e=>{e.preventDefault();if(weightBusy||!weightInput)return;setWeightBusy(true);setWeightStatus('');
           try{await api('/health/weight',{method:'POST',body:{day:todayKey(user.timezone),kg:storeWeight(weightInput,user.weight_unit)}});setWeightInput('');setWeightStatus(t("Вес сохранён"));refreshWorkspace();}
           catch(cause){setWeightStatus(errorMessage(cause));}finally{setWeightBusy(false);}}}>
@@ -88,55 +100,45 @@ export function HealthOverview({user,navigate}: {user:User; navigate:(path:strin
           <button className="button primary life-brown-button" disabled={weightBusy||!weightInput}>{t("Сохранить")}</button>
           {weightStatus&&<small role="status">{weightStatus}</small>}</form>
       </div>
-      <LifeCard className="life-health-workout"><header className="life-card-head"><div><h3>{t("Тренировки")}</h3><p>{values?.workouts?.minutes??0} {t("мин за последние 7 дней")}</p></div>
+      <LifeCard key="workouts" className="life-health-workout"><header className="life-card-head"><div><h3>{t("Тренировки")}</h3><p>{values?.workouts?.minutes??0} {t("мин за последние 7 дней")}</p></div>
         <LifeLink action={()=>navigate('/modules/health/workouts')}>{t("Все")}</LifeLink></header>
         <WorkoutActivity user={user} revision={historyVersion} compact onSelect={row=>navigate('/modules/health/workouts/'+row.id)}/>
         <button className="button primary life-brown-button" onClick={()=>openWorkout()}>{t("Начать тренировку")}</button>
       </LifeCard>
-      <SleepRhythm user={user} revision={historyVersion}/>
-      <LifeCard className="life-health-meds"><header className="life-card-head"><div><h3>{t("Сегодня принять")}</h3><p>{t("Запланированные приёмы и отметки")}</p></div><LifeLink action={()=>navigate('/modules/health/medications')}>{t("Лекарства")}</LifeLink></header>
+      <SleepRhythm key="sleep" user={user} revision={historyVersion}/>
+      <LifeCard key="medications" className="life-health-meds"><header className="life-card-head"><div><h3>{t("Сегодня принять")}</h3><p>{t("Запланированные приёмы и отметки")}</p></div><LifeLink action={()=>navigate('/modules/health/medications')}>{t("Лекарства")}</LifeLink></header>
         <MedicationToday user={user} revision={historyVersion}/></LifeCard>
-    </div>
-    <details className="hub-disclosure" id="device-steps" open={Boolean(steps.length)}>
-      <summary>{t("Шаги и синхронизация")}</summary>
-      {steps.length>0 && <div className="hub-steps-history">{steps.map(row => <div key={row.day}><time>{dayLabel(row.day)}</time><strong>{formatAmount(row.steps)}</strong><small>{row.provider==='apple_health'?'Apple Health':'Health Connect'}</small></div>)}</div>}
-      <HealthConnection user={user}/>
-    </details>
+    </WidgetGroup></div>}
+    </OverviewWidgets>
   </section>;
 }
 
 function SleepRhythm({user,revision}:{user:User;revision:unknown}){
-  const [days,setDays]=useState(7),[rows,setRows]=useState<Row[]>([]),[error,setError]=useState(''),[loading,setLoading]=useState(true);
+  type SleepRecord = {id:string;start_at:string;end_at:string;hours:number};
+  const [days,setDays]=useState(7),[rows,setRows]=useState<SleepRecord[]>([]),[error,setError]=useState(''),[loading,setLoading]=useState(true);
   const today=todayKey(user.timezone),start=shiftDay(today,1-days),zone=user.timezone;
   const pro=user.plan==='pro'||(user.plan==='trial'&&Date.parse(user.trial_ends??'')>Date.now());
   useEffect(()=>{
     const controller=new AbortController(),signal=controller.signal;
     setError('');setLoading(true);
-    api<{sleep:Row[]}>('/health/summary?'+new URLSearchParams({from:start,to:today}),{signal})
+    api<{sleep:SleepRecord[]}>('/health/summary?'+new URLSearchParams({from:start,to:today}),{signal})
       .then(result=>{if(!signal.aborted)setRows(result.sleep);})
       .catch(cause=>{if(!signal.aborted)setError(errorMessage(cause));})
       .finally(()=>{if(!signal.aborted)setLoading(false);});
     return ()=>controller.abort();
   },[start,today,revision]);
-  const chart=Array.from({length:days},(_,index)=>shiftDay(start,index)).slice(-Math.min(14,days));
-  function bars(key:string){
-    const axisStart=Date.parse(zonedISO(shiftDay(key,-1),'20:00',zone)),axisEnd=Date.parse(zonedISO(key,'12:00',zone));
-    const localRows=rows.filter(row=>dateKey(String(row.end_at),zone)===key);
-    const total=localRows.reduce((sum,row)=>sum+Number(row.hours),0);
-    return {total,slots:localRows.flatMap(row=>{
-      const start=Date.parse(String(row.start_at)),end=Date.parse(String(row.end_at));
-      const left=Math.max(0,100*(start-axisStart)/(axisEnd-axisStart)),right=Math.min(100,100*(end-axisStart)/(axisEnd-axisStart));
-      return right>left?[{left,width:right-left,label:timeText(String(row.start_at),zone)+'–'+timeText(String(row.end_at),zone)}]:[];
-    })};
-  }
+  const chart=Array.from({length:days},(_,index)=>shiftDay(start,index));
+  const {byDay,start:axisStart,end:axisEnd,ticks}=useMemo(()=>sleepRhythm(rows,zone),[rows,zone]);
   return <LifeCard className="life-sleep-rhythm"><header className="life-card-head"><div><h3>{t("Ритм сна")}</h3><p>{t("Время сна по ручным записям")}</p></div>
     <div className="segmented">{[7,30,...(pro?[90]:[])].map(value=><button key={value} aria-pressed={days===value} className={days===value?'selected':''} onClick={()=>setDays(value)}>{value}{t(" д")}</button>)}</div></header>
     {error?<p role="alert">{error}</p>:loading?<p role="status">{t("Загружаю ритм сна…")}</p>:<>
-      {rows.length>0&&<div className="life-sleep-axis"><span>20:00</span><span>00:00</span><span>04:00</span><span>08:00</span><span>12:00</span></div>}
-      {chart.map(key=>{const value=bars(key);return <div className="life-sleep-row" key={key}><time>{dayLabel(key,{day:'numeric',month:'short'})}</time>
-        <span className="life-sleep-lane" aria-label={value.slots.map(slot=>slot.label).join(', ')||t("Нет записи")}>{value.slots.map((slot,index)=><i key={index} style={{left:slot.left+'%',width:slot.width+'%'}} title={slot.label}/>)}</span>
-        <strong>{value.total?formatAmount(value.total)+t(" ч"):'—'}</strong></div>;})}
-      {days>14&&<details className="hub-disclosure"><summary>{t("Весь период ·")} {rows.length} {t("записей")}</summary>
+      {rows.length>0&&<div className="life-sleep-axis">{ticks.map((tick,index)=><span key={index}>{tick}</span>)}</div>}
+      {rows.length===0?<p>{t("За выбранный период записей нет.")}</p>:<div className="life-sleep-history" tabIndex={days>7?0:undefined} role="region" aria-label={t("Ритм сна")}>
+      {chart.map(key=>{const value=byDay.get(key);return <div className="life-sleep-row" key={key}><time>{dayLabel(key,{day:'numeric',month:'short'})}</time>
+        <span className="life-sleep-lane" role="img" aria-label={value?.slots.map(slot=>slot.label).join(', ')||t("Нет записи")}>{value?.slots.map((slot,index)=><i key={index} style={{left:100*(slot.start-axisStart)/(axisEnd-axisStart)+'%',width:100*(slot.end-slot.start)/(axisEnd-axisStart)+'%'}} title={slot.label}/>)}</span>
+        <strong>{value?formatAmount(value.total)+t(" ч"):'—'}</strong></div>;})}
+      </div>}
+      {rows.length>0&&<details className="hub-disclosure"><summary>{t("Весь период ·")} {plural(rows.length,[t("запись"),t("записи"),t("записей")])}</summary>
         <ul>{rows.map(row=><li key={row.id}>{dayLabel(dateKey(String(row.end_at),zone))} · {timeText(String(row.start_at),zone)}–{timeText(String(row.end_at),zone)}</li>)}</ul></details>}
     </>}
   </LifeCard>;
@@ -190,7 +192,7 @@ export function WorkoutActivity({user,revision,onSelect,compact=false}: {user:Us
           <div><small>{t("Длительность")}</small><strong>{duration} {t("мин")}</strong></div><div><small>{t("Тоннаж")}</small><strong>{tonnage?formatAmount(tonnage)+t(" кг"):'—'}</strong></div><div><small>{t("Средняя длительность")}</small><strong>{Math.round(duration/rows.length)} {t("мин")}</strong></div>
         </div>}
         {!compact&&<div className="workout-summary">
-          <strong>{rows.length} <small>{t("записей")}</small></strong>
+          <strong>{plural(rows.length,[t("запись"),t("записи"),t("записей")])}</strong>
           <strong>{rows.reduce((sum,row) => sum+Number(row.minutes),0)} <small>{t("мин")}</small></strong>
           <div className="segmented" aria-label={t("Показатель тренировок")} role="group">
             <button aria-pressed={metric==='minutes'} className={metric==='minutes'?'selected':''} onClick={() => setMetric('minutes')}>{t("Минуты")}</button>
@@ -199,7 +201,7 @@ export function WorkoutActivity({user,revision,onSelect,compact=false}: {user:Us
         </div>}
         <div className="workout-plot" aria-label={t("Тренировки по периодам")}>
           {groups.map(group => <button key={group.from} aria-pressed={active===group.from}
-            aria-label={`${dayLabel(group.from)}${size>1?' — '+dayLabel(group.to):''} · ${group[metric]} ${metric==='minutes'?t("мин"):t("записей")}`}
+            aria-label={`${dayLabel(group.from)}${size>1?' — '+dayLabel(group.to):''} · ${metric==='minutes'?group.minutes+' '+t("мин"):plural(group.count,[t("запись"),t("записи"),t("записей")])}`}
             onClick={() => setActive(current => current===group.from?null:group.from)}>
             <span className="workout-column"><i style={{height:group[metric]/max*100+'%'}}/></span>
             <small>{group.from.slice(-2)}</small>
@@ -214,32 +216,28 @@ export function WorkoutActivity({user,revision,onSelect,compact=false}: {user:Us
 }
 
 function MedicationToday({user,revision}:{user:User;revision:unknown}){
-  const [items,setItems]=useState<{row:Row;time:string;taken:boolean}[]>([]),[error,setError]=useState(''),[pending,setPending]=useState(false),[update,refresh]=useState(0);
+  type Slot={row:{id:string;title:string;version:number};time:string;taken:boolean};
+  const [items,setItems]=useState<Slot[]>([]),[error,setError]=useState(''),[pending,setPending]=useState(false);
+  const [expanded,setExpanded]=useState(false),[loading,setLoading]=useState(true),[revisionLocal,refresh]=useState(0);
   const pro=user.plan==='pro'||(user.plan==='trial'&&Date.parse(user.trial_ends??'')>Date.now());
   const day=todayKey(user.timezone);
   useEffect(()=>{
     if(!pro)return;
     const c=new AbortController(),signal=c.signal;
-    setError('');
-    (async()=>{
-      try{
-        const result=await api<{items:Row[]}>('/health/medications?limit=20',{signal});
-        const rows=await Promise.all(result.items.map(async row=>{
-          const response=await api<{items:Row[]}>(`/health/medications/${row.id}/intakes?day=${day}`,{signal});
-          const marked=new Set(response.items.map(item=>String(item.time)));
-          return (Array.isArray(row.times)?row.times as string[]:[]).map(time=>({row,time,taken:marked.has(time)}));
-        }));
-        if(!signal.aborted)setItems(rows.flat().sort((a,b)=>a.time.localeCompare(b.time)));
-      }catch(cause){if(!signal.aborted)setError(errorMessage(cause));}
-    })();
+    setError('');setLoading(true);
+    api<{items:Slot[]}>('/health/medication-schedule?day='+day,{signal})
+      .then(result=>{if(!signal.aborted)setItems(result.items);})
+      .catch(cause=>{if(!signal.aborted)setError(errorMessage(cause));})
+      .finally(()=>{if(!signal.aborted)setLoading(false);});
     return ()=>c.abort();
-  },[day,pro,revision,update]);
+  },[day,pro,revision,revisionLocal]);
   if(!pro)return <p>{t("Отметки приёмов доступны в Pro.")}</p>;
-  return <>{error&&<p role="alert">{error}</p>}{!items.length&&!error&&<p>{t("Приёмы пока не запланированы.")}</p>}
-    {items.slice(0,5).map(({row,time,taken})=><button className="life-medication-item" key={row.id+time} disabled={pending} aria-pressed={taken}
-      onClick={async()=>{setPending(true);try{await api('/health/medications/'+row.id+'/intakes',{method:'POST',body:{day,time,taken:!taken,version:row.version}});
-        setItems(old=>old.map(item=>item.row.id===row.id&&item.time===time?{...item,taken:!taken}:item));refresh(value=>value+1);
+  return <>{error&&<p role="alert">{error} <button className="text-button" onClick={()=>refresh(n=>n+1)}>{t("Повторить")}</button></p>}{loading?<p role="status">{t("Загрузка…")}</p>:!items.length&&!error&&<p>{t("Приёмы пока не запланированы.")}</p>}
+    {(expanded?items:items.slice(0,5)).map(({row,time,taken})=><button className="life-medication-item" key={row.id+time} disabled={pending||loading} aria-pressed={taken}
+      onClick={async()=>{setPending(true);setError('');try{const updated=await api<Slot['row']>('/health/medications/'+row.id+'/intakes',{method:'POST',body:{day,time,taken:!taken,version:row.version}});
+        setItems(old=>old.map(item=>item.row.id===row.id?{...item,row:updated,taken:item.time===time?!taken:item.taken}:item));
       }catch(cause){setError(errorMessage(cause));}finally{setPending(false);}}}>
-      <span className="life-task-check" aria-checked={taken}>{taken?'✓':''}</span><span><strong>{String(row.title)}</strong><small>{time}</small></span>
-    </button>)}</>;
+      <span className="life-task-check" aria-hidden="true">{taken?'✓':''}</span><span><strong>{String(row.title)}</strong><small>{time}</small></span>
+    </button>)}
+    {items.length>5&&<button className="text-button" aria-expanded={expanded} onClick={()=>setExpanded(value=>!value)}>{expanded?t("Скрыть"):t("Показать все")} ({items.length})</button>}</>;
 }

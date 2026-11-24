@@ -1,0 +1,53 @@
+.life-free {display:grid;gap:20px}
+.life-free-header {display:flex;justify-content:space-between;align-items:end;gap:16px}
+.life-free-header h1 {font-size:42px;font-weight:800;letter-spacing:-.055em;line-height:1.19;margin:0}
+.life-free-header p {font-size:14px;margin:7px 0 0;color:var(--life-muted)}
+.life-free-header>div:last-child {display:flex;gap:10px;flex-wrap:wrap}
+.life-free-controls,.life-pills {display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.life-free-controls {gap:12px}
+.life-pills span {font-size:13px;color:var(--life-muted)}
+.life-pills button {min-height:32px;padding:5px 12px;background:white;border:1px solid var(--life-line);border-radius:30px;font-size:13px;font-weight:750;color:var(--life-text)}
+.life-pills button[aria-pressed=true] {background:var(--life-dark);border-color:var(--life-dark);color:white}
+.life-free-buffer {margin-left:auto;display:flex;gap:6px;align-items:center;font-size:13px}
+.life-free-buffer input {accent-color:var(--life-primary)}
+.life-free-summary {display:grid;grid-template-columns:2.4fr 1fr 1fr;gap:16px}
+.life-free-summary .life-card {padding:22px 24px}
+.life-free-summary p {margin:4px 0;font-size:13px}
+.life-free-summary h2 {font-size:23px}
+.life-free-summary .life-nearest {background:var(--life-primary);color:white;display:flex;align-items:center;gap:14px}
+.life-nearest h2,.life-nearest p {color:white}
+.life-nearest svg {flex:none;color:#cce8d7}
+.life-nearest small {text-transform:uppercase;letter-spacing:.06em;color:#cde6d6;font-weight:800;font-size:11px}
+.life-nearest .button {margin-left:auto}
+.life-timeline-scroll {min-width:0;overflow:auto;margin-top:20px}
+.life-free-axis,.life-free-row {width:100%;min-width:600px;display:grid;grid-template-columns:85px minmax(0,1fr) 75px;align-items:center;gap:10px}
+.life-free-axis>div {display:flex;justify-content:space-between;color:var(--life-muted)}
+.life-free-row {margin:8px 0}
+.life-free-axis small,.life-free-row>small {font-size:12px}
+.life-free-row>strong {font-size:14px;font-weight:800}
+.life-free-row>strong.today {color:var(--life-primary)}
+.life-free-lane {position:relative;min-height:44px;background:var(--life-bg);border-radius:10px}
+.life-free-slot {position:absolute;inset:0 auto 0;border:1px solid white;border-radius:9px;min-width:0;text-overflow:ellipsis;overflow:hidden;white-space:nowrap;align-content:center;text-align:left;padding:0 7px;font-size:12px}
+.life-free-slot.free {background:#d5eadb;color:var(--life-primary);font-weight:800}
+.life-free-slot.nearest {background:var(--life-primary);color:#fff;font-weight:800}
+.life-free-slot.busy {background:#e3e8e3;color:#52645a}
+.life-free-slot.past {background:#edf0eb;color:#839087}
+.life-free-slot.short {background:#edf1ed;color:#617167;border:1px dashed #cedbd1}
+.life-free-bottom {display:grid;grid-template-columns:1.57fr 1fr;gap:16px}
+.life-slot-list {display:grid;grid-template-columns:1fr 1.8fr auto;gap:14px;align-items:center;text-align:left;width:100%;min-height:46px;border:0;border-bottom:1px solid var(--life-subtle);background:none;color:var(--life-text);font-size:14px}
+.life-slot-list small {background:var(--life-tint);border-radius:999px;padding:3px 8px;color:var(--life-primary);font-weight:800}
+.life-share textarea {width:100%;resize:vertical;min-height:130px;border-radius:16px;border:0;background:var(--life-bg);padding:14px;margin:0 0 12px}
+.life-slot-actions {display:flex;gap:12px;flex-wrap:wrap}
+.life-today-progress {display:flex;align-items:center;gap:15px}
+.life-today-progress p {margin:4px 0 0;font-size:12px}
+@media(min-width:1200px){.app-layout .view-calendar .planning-header {display:none}}
+@media(max-width:1000px){.life-free-summary {grid-template-columns:1fr 1fr}.life-free-summary>section:first-child{grid-column:1/-1}}
+@media(max-width:760px){
+  .life-free-header {align-items:start;flex-direction:column;gap:10px}
+  .life-free-header h1 {font-size:30px}
+  .life-free-bottom {grid-template-columns:1fr}
+  .life-nearest .button {font-size:12px;padding:6px}
+  .life-free-summary .life-card {padding:15px}
+  .life-free-summary h2 {font-size:17px}
+  .life-free-buffer {margin-left:0}
+}

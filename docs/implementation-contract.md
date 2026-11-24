@@ -1,6 +1,6 @@
 # Implementation contract
 
-Source: figjam-back.txt; figjam-development.xml wins on conflicts. User decisions 2026-09-05: password reset is a six-digit email OTP; add occurrence_at to event deletion; calendar sync pushes first, then pulls at least one second after push; design Apple device delta protocol ourselves. No Git/GitHub operations.
+Source: [Back](design/figjam-back.txt). [Development](design/figjam-development.xml) wins on conflicts. User decisions 2026-09-05: password reset is a six-digit email OTP; add occurrence_at to event deletion; calendar sync pushes first, then pulls at least one second after push; design Apple device delta protocol ourselves. No Git/GitHub operations.
 
 Уточнённый объём по последующему запросу пользователя: добавлен веб-фронтенд на React и TypeScript для авторизации и планирования. Остальные модули — недоступные серые пункты «coming soon». Новый onboarding выбирает только `['planning']`, имя, часовой пояс и явно Free либо пробные 72 часа. API сохраняет совместимость с прежним выбором трёх разных модулей и не заменяет его у существующих аккаунтов. Сохранённый выбор неизменяемый. Пустой выбор, один модуль кроме planning, два, четыре модуля и дубли не позволяют завершить onboarding. Подробности запуска и внешних подключений: [frontend.md](frontend.md).
 

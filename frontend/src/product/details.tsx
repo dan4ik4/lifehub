@@ -1,4 +1,6 @@
+import {currencyCodes} from "./schema";
 import { t } from '../lib/language';
+import {OverviewWidgets,WidgetGroup} from '../components/OverviewWidgets';
 import {LifeCard,LifeLink} from '../components/LifeCard';
 import { useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
@@ -9,7 +11,7 @@ import type { User, Notify } from "../lib/types";
 import type { Row, Section } from "./schema";
 import { Modal } from "../components/ui";
 import { GoalLinks, MilestoneEditor } from "./Extras";
-import { isPro, text, amount, dateLabel, Progress } from "./Product";
+import { isPro, text, amount, dateLabel, Progress } from "./recordPresentation";
 import { FinanceAnalysis } from "./FinanceAnalysis";
 import {displayWeight, weightLabel} from './weight';
 const categoryLabels:Record<string,string>={food:t("Еда"),transport:t("Транспорт"),home:t("Дом"),health:t("Здоровье"),leisure:t("Досуг"),other:t("Другое"),income:t("Доход")};
@@ -30,9 +32,11 @@ export function FinanceOverview({user,revision,preferences,onSelect,onCategory,a
   const month = /^[1-8]\d{3}-(0[1-9]|1[0-2])$/.test(preferences.get('month')??'') ? preferences.get('month')! : todayKey(user.timezone).slice(0,7);
   const [data,setData] = useState<FinanceSnapshot|null>(null);
   const [error,setError] = useState('');
-  const [upcoming,setUpcoming]=useState<Row[]>([]);
+  const [upcoming,setUpcoming]=useState<Row[]|null>(null);
+  const [paymentError,setPaymentError]=useState("");
   const [reload,setReload] = useState(0);
   useEffect(() => {
+    if (analysis) return;
     const controller = new AbortController();
     setData(null);
     setError('');
@@ -42,17 +46,26 @@ export function FinanceOverview({user,revision,preferences,onSelect,onCategory,a
       if (!controller.signal.aborted) setError(errorMessage(cause));
     });
     return () => controller.abort();
-  }, [month,currency,revision,reload,user.id]);
+  }, [month,currency,revision,reload,user.id,analysis]);
   const pro=isPro(user), today=todayKey(user.timezone);
   useEffect(()=>{
     if(!home||!pro)return;
     const controller=new AbortController();
-    api<{items:Row[]}>('/finance/subscriptions?limit=100',{signal:controller.signal}).then(result=>{
-      if(!controller.signal.aborted)setUpcoming(result.items.filter(row=>row.currency===currency&&row.active!==false&&String(row.next_due??row.next_payment)>=today)
+    setPaymentError('');
+    setUpcoming(null);
+    async function loadPayments() {
+      const subscriptions: Row[] = [];
+      for (let offset=0; ; offset+=100) {
+        const page = await api<{items:Row[];has_more:boolean}>('/finance/subscriptions?limit=100&offset='+offset,{signal:controller.signal});
+        subscriptions.push(...page.items);
+        if (!page.has_more) break;
+      }
+      if(!controller.signal.aborted)setUpcoming(subscriptions.filter(row=>row.currency===currency&&row.active!==false&&String(row.next_due??row.next_payment)>=today)
         .sort((a,b)=>String(a.next_due??a.next_payment).localeCompare(String(b.next_due??b.next_payment))).slice(0,4));
-    }).catch(()=>{if(!controller.signal.aborted)setUpcoming([]);});
+    }
+    void loadPayments().catch(cause=>{if(!controller.signal.aborted)setPaymentError(errorMessage(cause));});
     return ()=>controller.abort();
-  },[home,pro,today,currency,revision]);
+  },[home,pro,today,currency,revision,reload]);
   const select = (name:string,value:string) => {
     const next = new URLSearchParams({month,currency});
     next.set(name,value);
@@ -63,25 +76,28 @@ export function FinanceOverview({user,revision,preferences,onSelect,onCategory,a
   const displayCurrency=currency==='PLN'?'zł':currency;
   return <section className={'finance-overview'+(home?' life-finance-overview':'')} aria-label={t("Сводка финансов")}>
     <div className="overview-controls">
-      <label>{t("Месяц")} <input type="month" value={month} max={analysis?todayKey(user.timezone).slice(0,7):undefined}
-        onChange={event => {if (event.target.value) select('month',event.target.value);}}/></label>
+      {!home && <label>{t("Месяц")} <input type="month" value={month} max={analysis?todayKey(user.timezone).slice(0,7):undefined}
+        onChange={event => {if (event.target.value) select('month',event.target.value);}}/></label>}
       <label>{t("Валюта")} <select value={currency} onChange={event => select('currency',event.target.value)}>
-        {[...new Set(['PLN','EUR','USD','RUB','UAH','GBP',currency])].map(code => <option key={code}>{code}</option>)}
+        {currencyCodes(currency).map(code => <option key={code}>{code}</option>)}
       </select></label>
     </div>
-    {error ? <p className="product-error" role="alert">{error}<button className="text-button" onClick={() => setReload(value=>value+1)}>{t("Повторить")}</button></p>
+    {analysis ? <FinanceAnalysis key={month+':'+currency} user={user} month={month} currency={currency} pro={pro} revision={revision}/>
+      : error ? <p className="product-error" role="alert">{error}<button className="text-button" onClick={() => setReload(value=>value+1)}>{t("Повторить")}</button></p>
       : !data ? <p className="product-loading" role="status">{t("Загружаем сводку…")}</p>
       : <>
-        {home?<><div className="life-finance-totals">
-          <LifeCard className="life-finance-balance"><small>{t("Осталось в этом месяце")}</small><strong>{Number(data.balance)>0?'+':''}{amount(data.balance)} <span>{displayCurrency}</span></strong>
-            <div><span>{t("Доходы")} <b>{amount(data.income)} {displayCurrency}</b></span><span>{t("Расходы")} <b>{amount(data.expense)} {displayCurrency}</b></span></div>
+        {home?<OverviewWidgets account={user.id} page="finance" groups={[
+          {id:'totals',title:t("Показатели"),widgets:{balance:t("Разница доходов и расходов"),income:t("Доходы"),expense:t("Расходы")}},
+          {id:'panels',title:t("Подробный обзор"),widgets:pro?
+            {categories:t("Куда ушли деньги"),upcoming:t("Ближайшие платежи"),forecast:t("Прогноз до конца месяца")}:
+            {categories:t("Куда ушли деньги")}},
+        ]}><div className="life-finance-totals"><WidgetGroup name="totals">
+          <LifeCard key="balance" className="life-finance-balance"><small>{t("Разница доходов и расходов")}</small><strong>{Number(data.balance)>0?'+':''}{amount(data.balance)} <span>{displayCurrency}</span></strong>
           </LifeCard>
-          <LifeCard className="life-finance-number"><h3><Wallet size={18}/>{t("Расходы")}</h3><strong>{amount(data.expense)} <small>{displayCurrency}</small></strong>
-            <p>{categories.length} {t("категорий")}</p></LifeCard>
-          {pro&&<LifeCard className="life-finance-number"><h3><Clock3 size={18}/>{t("Подписки")}</h3><strong>{upcoming.length||'—'}</strong><p>{upcoming.length?t("Ближайшие платежи"):t("Нет предстоящих платежей")}</p>
-            <LifeLink action={()=>goto?.('/modules/finance/subscriptions')}>{t("Подписки")}</LifeLink></LifeCard>}
-        </div><div className="life-finance-panels">
-          <LifeCard className="life-finance-categories"><header className="life-card-head"><div><h3>{t("Куда ушли деньги")}</h3><p>{amount(data.expense)} {displayCurrency} · {categories.length} {t("категорий")}</p></div>
+          <LifeCard key="income" className="life-finance-number"><h3>{t("Доходы")}</h3><strong>{amount(data.income)} <small>{displayCurrency}</small></strong></LifeCard>
+          <LifeCard key="expense" className="life-finance-number"><h3>{t("Расходы")}</h3><strong>{amount(data.expense)} <small>{displayCurrency}</small></strong></LifeCard>
+        </WidgetGroup></div><div className="life-finance-panels overview-widget-panels"><WidgetGroup name="panels">
+          <LifeCard key="categories" className="life-finance-categories"><header className="life-card-head"><div><h3>{t("Куда ушли деньги")}</h3></div>
             {pro&&<LifeLink action={()=>goto?.('/modules/finance/budgets?'+new URLSearchParams({month,currency}))}>{t("Бюджеты")}</LifeLink>}</header>
             {categories.length>0?<><div className="life-spend-stack" aria-hidden="true">{categories.map(({category,amount},index)=><i key={category} style={{flex:Number(amount),background:['#89600e','#484f94','#895934','#245447','#b59347'][index%5]}}/>)}</div>
               <div className="hub-categories">{categories.map(({category,amount:total},index)=>{
@@ -93,10 +109,10 @@ export function FinanceOverview({user,revision,preferences,onSelect,onCategory,a
                 </button>;
               })}</div></>:<p>{t("Расходы за этот месяц пока не записаны.")}</p>}
           </LifeCard>
-          {pro&&<aside className="life-finance-side"><LifeCard><header className="life-card-head"><h3>{t("Ближайшие платежи")}</h3><LifeLink action={()=>goto?.('/modules/finance/subscriptions')}>{t("Подписки")}</LifeLink></header>
-            {upcoming.length?upcoming.map(row=><button className="life-payment" key={row.id} onClick={()=>goto?.('/modules/finance/subscriptions/'+row.id)}><i>{String(row.title).slice(0,1)}</i><span>{String(row.title)}<small>{dateLabel(row.next_due??row.next_payment)}</small></span><strong>{amount(row.amount)} {displayCurrency}</strong></button>):<p>{t("Ближайших платежей пока нет.")}</p>}</LifeCard>
-            <LifeCard><h3>{t("Прогноз до конца месяца")}</h3><p>{t("Откройте аналитику и укажите период полного учёта.")}</p><LifeLink action={()=>goto?.('/modules/finance/analysis?'+new URLSearchParams({month,currency}))}>{t("Открыть аналитику")}</LifeLink></LifeCard></aside>}
-        </div></>:<>        <div className="finance-totals">
+          {pro&&<LifeCard key="upcoming"><header className="life-card-head"><h3>{t("Ближайшие платежи")}</h3><LifeLink action={()=>goto?.('/modules/finance/subscriptions')}>{t("Подписки")}</LifeLink></header>
+            {paymentError?<p role="alert">{paymentError} <button className="text-button" onClick={()=>setReload(value=>value+1)}>{t("Повторить")}</button></p>:upcoming===null?<p role="status">{t("Загрузка…")}</p>:upcoming.length?upcoming.map(row=><button className="life-payment" key={row.id} onClick={()=>goto?.('/modules/finance/subscriptions/'+row.id)}><i>{String(row.title).slice(0,1)}</i><span>{String(row.title)}<small>{dateLabel(row.next_due??row.next_payment)}</small></span><strong>{amount(row.amount)} {displayCurrency}</strong></button>):<p>{t("Ближайших платежей пока нет.")}</p>}</LifeCard>}
+          {pro&&<LifeCard key="forecast"><h3>{t("Прогноз до конца месяца")}</h3><p>{t("Откройте аналитику и укажите период полного учёта.")}</p><LifeLink action={()=>goto?.('/modules/finance/analysis?'+new URLSearchParams({month,currency}))}>{t("Открыть аналитику")}</LifeLink></LifeCard>}
+        </WidgetGroup></div></OverviewWidgets>:<>        <div className="finance-totals">
           {([['expense',t("Расходы")],['income',t("Доходы")],['balance',t("Разница")]] as const).map(([key,label]) => <div key={key}>
             <small>{label}</small><strong>{amount(data[key])} <span>{currency}</span></strong>
           </div>)}
@@ -120,7 +136,6 @@ export function FinanceOverview({user,revision,preferences,onSelect,onCategory,a
         </details>}
 </>}
       </>}
-    {analysis && <FinanceAnalysis key={month+':'+currency} user={user} month={month} currency={currency} pro={isPro(user)} revision={revision}/>}
   </section>;
 }
 export function RecordDetail({

@@ -36,22 +36,29 @@ export function availableWindows(start:number,end:number,busy:BusyInterval[],min
   return slots;
 }
 
-export function busyIntervals(calendar:CalendarRange|null,tasks:Task[]):BusyInterval[] {
+export type SpanningTask = {start_at:string;end_at:string;title:string};
+
+function occupiedByTask(startAt:string,endAt:string|null|undefined,title:string):BusyInterval {
+  const start=Date.parse(startAt);
+  return {start,end:Math.max(endAt?Date.parse(endAt):start,start+minute),title};
+}
+
+export function busyIntervals(calendar:Pick<CalendarRange,'tasks'|'events'>|null,tasks:Task[],spanningTasks:SpanningTask[]=[]):BusyInterval[] {
   const indexed=new Map(tasks.map(task=>[task.id,task]));
   return [
     ...(calendar?.events??[]).map(event=>({start:Date.parse(event.start_at),end:Date.parse(event.end_at),title:event.title})),
+    ...spanningTasks.map(task=>occupiedByTask(task.start_at,task.end_at,task.title)),
     ...(calendar?.tasks??[]).flatMap(occ=>{
       const task=indexed.get(occ.task_id);
       const start=occ.effective_start_at??occ.effective_due_at;
       if(!task||task.all_day||occ.status!=='pending'||!start)return [];
-      const end=occ.effective_start_at&&occ.effective_due_at?Date.parse(occ.effective_due_at):Date.parse(start)+minute;
-      return [{start:Date.parse(start),end:Math.max(end,Date.parse(start)+minute),title:task.title}];
+      return [occupiedByTask(start,occ.effective_due_at,task.title)];
     }),
   ];
 }
 const hm=(minutes:number)=>[Math.floor(minutes/60)?Math.floor(minutes/60)+t(" ч"):'',minutes%60?minutes%60+t(" мин"):''].filter(Boolean).join(' ')||t("0 мин");
 const length=(slot:BusyInterval)=>Math.floor((slot.end-slot.start)/minute);
-const readHours=(id:string)=>{
+export const readHours=(id:string)=>{
   const defaults={start:'08:00',end:'22:00',buffer:15};
   try{
     const value=JSON.parse(localStorage.getItem('lifehub.free-time.'+id)??'null');
@@ -68,6 +75,13 @@ const boundary=(day:string,time:string,zone:string)=>{
   }
   return NaN;
 };
+export function windowsForDay(day:string, timezone:string, busy:BusyInterval[], settings:ReturnType<typeof readHours>, minimum:number, now:number) {
+  const start=boundary(day,settings.start,timezone),end=boundary(day,settings.end,timezone);
+  const slots=availableWindows(start,end,busy,minimum,settings.buffer,now);
+  const free=slots.filter(slot=>slot.kind==='free'),total=free.reduce((sum,slot)=>sum+length(slot),0);
+  return {day,start,end,slots,free,total};
+}
+
 export function FreeTime({user,calendar,tasks,notify,onCreate}:{user:User;calendar:CalendarRange|null;tasks:Task[];notify:Notify;onCreate:(day:string,time:string,endTime:string)=>void}) {
   const [period,setPeriod]=useState(7);
   const [minimum,setMinimum]=useState(60);
@@ -85,12 +99,8 @@ export function FreeTime({user,calendar,tasks,notify,onCreate}:{user:User;calend
   const format=(time:number)=>timeText(new Date(time).toISOString(),timezone);
   const range=(slot:BusyInterval)=>format(slot.start)+'–'+format(slot.end);
   const label=(stamp:number)=>dayLabel(dateKey(new Date(stamp),timezone),{weekday:'short',day:'numeric',month:'short'});
-  const rows=Array.from({length:period},(_,i)=>{
-    const day=shiftDay(today,i),start=boundary(day,settings.start,timezone),end=boundary(day,settings.end,timezone);
-    const slots=availableWindows(start,end,busy,minimum,useBuffer?settings.buffer:0,now);
-    const free=slots.filter(slot=>slot.kind==='free'),total=free.reduce((sum,slot)=>sum+length(slot),0);
-    return {day,start,end,slots,free,total};
-  });
+  const rows=Array.from({length:period},(_,i)=>windowsForDay(shiftDay(today,i),timezone,busy,
+    {...settings,buffer:useBuffer?settings.buffer:0},minimum,now));
   const slots=rows.flatMap(row=>row.free);
   const nearest=slots[0],best=rows.reduce((a,b)=>b.total>a.total?b:a);
   const share=slots.length?t("Я свободен:\n")+rows.filter(r=>r.free.length).map(row=>'• '+dayLabel(row.day,{weekday:'short',day:'numeric',month:'short'})+' — '+row.free.map(range).join(', ')).join('\n'):t("Нет свободных окон по выбранным условиям.");

@@ -1,17 +1,17 @@
 from datetime import datetime, time, timedelta
 from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Depends
-from sqlalchemy import select, func
+from sqlalchemy import case, select, func
 from app.core.database import utcnow
 from app.core.dependencies import get_db
-from app.core.owned import record
+from app.core.owned import lock_user, record
 from app.modules.auth.dependencies import get_current_user
 from app.modules.planning.dependencies import EntitlementService
 from app.modules.planning.service import PlanningService
 from app.modules.planning.models import Task
-from app.modules.goals_habits.models import Habit, Goal
+from app.modules.goals_habits.models import Goal
 from app.modules.goals_habits.routes import goal_data
-from app.modules.goals_habits.routes import habit_data
+from app.modules.dashboard.day_progress import day_streaks, observe_day, todays_habits
 from app.modules.health.models import SleepEntry, WeightEntry, Workout
 from app.modules.books.models import Book
 from app.modules.finance.models import Transaction, Budget
@@ -26,11 +26,11 @@ def dashboard(user=Depends(get_current_user), db=Depends(get_db)):
     day = utcnow().astimezone(ZoneInfo(user.timezone)).date()
     start = datetime.combine(day, time.min, ZoneInfo(user.timezone))
     end = start + timedelta(days=1)
-    result = {"day": day, "modules": modules, "widgets": {}}
+    result = {"day": day, "modules": modules, "widgets": {}, "day_progress": day_streaks(db, user, day)}
     widgets = result["widgets"]
     if "planning" in modules:
         service = PlanningService(db, user)
-        calendar = service.calendar_range(start, end, user.timezone)
+        calendar = service.day_agenda(day)
         ids = [x.task_id for x in calendar["tasks"]]
         tasks = (
             {t.id: t for t in db.scalars(select(Task).where(Task.user_id == user.id, Task.id.in_(ids)))} if ids else {}
@@ -42,15 +42,11 @@ def dashboard(user=Depends(get_current_user), db=Depends(get_db)):
                 if o.task_id in tasks
             ],
             "events": calendar["events"],
+            "spanning_tasks": calendar["spanning_tasks"],
         }
     if "goals_habits" in modules:
-        habits = db.scalars(
-            select(Habit)
-            .where(Habit.user_id == user.id, Habit.deleted_at.is_(None), Habit.archived.is_(False))
-            .order_by(Habit.created_at)
-            .limit(100)
-        ).all()
-        widgets["habits"] = [habit_data(db, user, h) for h in habits if day.weekday() in h.weekdays]
+        widgets["habits"] = [{**record(h), "today_value": value, "today_complete": value >= h.target}
+                             for h, value in todays_habits(db, user, day)]
         goals = db.scalars(
             select(Goal)
             .where(Goal.user_id == user.id, Goal.deleted_at.is_(None), Goal.status == "active")
@@ -106,14 +102,15 @@ def dashboard(user=Depends(get_current_user), db=Depends(get_db)):
         ).all()
         widgets["weight"] = [{"day": w.day, "kg": str(w.kg)} for w in reversed(weights)]
         workout_rows = db.execute(
-            select(func.count(), func.coalesce(func.sum(Workout.minutes), 0)).where(
+            select(func.count(), func.coalesce(func.sum(Workout.minutes), 0),
+                   func.coalesce(func.sum(case((Workout.day == day, Workout.minutes), else_=0)), 0)).where(
                 Workout.user_id == user.id,
                 Workout.deleted_at.is_(None),
                 Workout.day >= day - timedelta(days=6),
                 Workout.day <= day,
             )
         ).one()
-        widgets["workouts"] = {"count": workout_rows[0], "minutes": workout_rows[1]}
+        widgets["workouts"] = {"count": workout_rows[0], "minutes": workout_rows[1], "today_minutes": workout_rows[2]}
     if "books" in modules:
         books = db.scalars(
             select(Book)
@@ -177,3 +174,11 @@ def dashboard(user=Depends(get_current_user), db=Depends(get_db)):
                 for b in budgets
             ]
     return result
+
+
+@router.post("/close-day")
+def close_day(user=Depends(get_current_user), db=Depends(get_db)):
+    lock_user(db, user)
+    observe_day(db, user)
+    db.commit()
+    return day_streaks(db, user, utcnow().astimezone(ZoneInfo(user.timezone)).date())

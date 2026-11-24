@@ -41,19 +41,25 @@ const money: Field = {
   min: 0.01,
   step: ".01",
 };
-const currency: Field = {
-  key: "currency",
-  label: t("Валюта"),
-  type: "select",
-  initial: "PLN",
-  options: [
+export const currencyOptions: [string, string][] = [
     ["PLN", t("PLN · злотый")],
     ["EUR", t("EUR · евро")],
     ["USD", t("USD · доллар")],
     ["RUB", t("RUB · рубль")],
     ["UAH", t("UAH · гривна")],
     ["GBP", t("GBP · фунт")],
-  ],
+  ];
+
+export function currencyCodes(current: string) {
+  return Array.from(new Set([...currencyOptions.map(([code]) => code), current]));
+}
+
+const currency: Field = {
+  key: "currency",
+  label: t("Валюта"),
+  type: "select",
+  initial: "PLN",
+  options: currencyOptions,
 };
 const notes: Field = {
   key: "notes",
