@@ -130,7 +130,8 @@ class WebPushReminderDelivery:
                         data=json.dumps(
                             {
                                 "title": "Life Hub",
-                                "body": "Пришло время запланированного дела. Откройте ваши планы.",
+                                "body": "Итоги недели готовы" if idempotency_key.startswith("results:") else
+                                        "Пришло время запланированного дела. Откройте ваши планы.",
                                 "tag": idempotency_key,
                                 "url": getattr(entity, "notification_url", "/planning"),
                             }

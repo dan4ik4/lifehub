@@ -3,8 +3,6 @@ import {useCallback,useEffect,useRef,useState} from 'react';
 import {LoaderCircle,RefreshCw,Sparkles,Trash2,TrendingUp} from 'lucide-react';
 import {api,errorMessage} from '../lib/api';
 import {dayLabel,todayKey} from '../lib/dates';
-import {useAssistantPreferences} from '../lib/assistantPreferences';
-import {AssistantPreferences} from '../components/AssistantPreferences';
 import {ConfirmDialog} from '../components/ui';
 import type {User} from '../lib/types';
 import './finance-analysis.css';
@@ -21,12 +19,11 @@ export function financeMoney(value:string){
   return (negative?'-':'')+BigInt(whole).toLocaleString(locale)+decimalSeparator+fraction.padEnd(2,'0');
 }
 
-export function FinanceAnalysis({user,month,currency,pro,revision}:{user:User;month:string;currency:string;pro:boolean;revision:unknown}){
+export function FinanceAnalysis({user,month,currency,pro,revision,includeReview=false,resultsConsent=false,onConsent}:{user:User;month:string;currency:string;pro:boolean;revision:unknown;includeReview?:boolean;resultsConsent?:boolean;onConsent?:()=>void}){
   const today=todayKey(user.timezone),current=month===today.slice(0,7);
-  const [start,setStart]=useState(month+'-01'),[complete,setComplete]=useState(false),[consent,setConsent]=useState(false);
+  const [start,setStart]=useState(month+'-01'),[complete,setComplete]=useState(false);
   const [data,setData]=useState<Data|null>(null),[error,setError]=useState(''),[busy,setBusy]=useState(false),[loading,setLoading]=useState(false);
-  const [settings,setSettings]=useState(false),[deleting,setDeleting]=useState(false);
-  const {preferences,loading:preferencesLoading}=useAssistantPreferences(user.id);
+  const [deleting,setDeleting]=useState(false);
   const serial=useRef(0),alive=useRef(true),generating=useRef(false);
   const coverage=complete&&current?start:null;
   useEffect(()=>{alive.current=true;return()=>{alive.current=false;serial.current++;};},[]);
@@ -37,16 +34,15 @@ export function FinanceAnalysis({user,month,currency,pro,revision}:{user:User;mo
     catch(e){if(alive.current&&number===serial.current){setData(null);setError(errorMessage(e));}}
     finally{if(alive.current&&number===serial.current)setLoading(false);}
   },[month,currency,coverage,pro]);
-  useEffect(()=>{setData(null);setError('');setConsent(false);void load();},[load,revision]);
-  useEffect(()=>{const changed=()=>{setData(null);setConsent(false);void load();};window.addEventListener('lifehub:data-changed',changed);return()=>window.removeEventListener('lifehub:data-changed',changed);},[load]);
+  useEffect(()=>{setData(null);setError('');void load();},[load,revision]);
+  useEffect(()=>{const changed=()=>{setData(null);void load();};window.addEventListener('lifehub:data-changed',changed);return()=>window.removeEventListener('lifehub:data-changed',changed);},[load]);
   useEffect(()=>{if(data?.review?.status!=='processing'||busy)return;const timer=window.setTimeout(()=>void load(),3000);return()=>window.clearTimeout(timer);},[data,busy,load]);
   async function generate(){
-    if(!data||generating.current||!consent)return;generating.current=true;setBusy(true);setError('');const number=++serial.current;
-    try{const result=await api<Data>('/finance/analysis',{method:'POST',body:{month,currency,coverage_start:coverage,source_hash:data.source_hash,consent:true}});if(alive.current&&number===serial.current){setData(result);setConsent(false);}}
+    if(!data||generating.current||!resultsConsent)return;generating.current=true;setBusy(true);setError('');const number=++serial.current;
+    try{const result=await api<Data>('/finance/analysis',{method:'POST',body:{month,currency,coverage_start:coverage,source_hash:data.source_hash,consent:true,from_results:true}});if(alive.current&&number===serial.current){setData(result);}}
     catch(e){if(alive.current&&number===serial.current)setError(errorMessage(e));}
     finally{generating.current=false;if(alive.current)setBusy(false);}
   }
-  const permitted=preferences.messages&&preferences.modules;
   const output=data?.review?.output;
   const running=data?.review?.status==='processing'&&Date.now()-Date.parse(data.review.updated_at)<180000;
   return <section className="finance-analysis" aria-label={t("Аналитика финансов")}>
@@ -65,17 +61,15 @@ export function FinanceAnalysis({user,month,currency,pro,revision}:{user:User;mo
       {data?.forecast_reason==='too_few_days'&&<p className="analysis-note">{t("Для прогноза пока меньше 7 завершённых дней с подтверждённым полным учётом.")}</p>}
       {data?.forecast_reason==='no_expenses'&&<p className="analysis-note">{t("В подтверждённом периоде нет расходов. Прогноз нулевых расходов не строится.")}</p>}
       {data&&<details className="analysis-details"><summary>{t("Все расчёты и основания")}</summary><ul>{data.facts.map(f=><li key={f.id}>{f.text}</li>)}</ul></details>}
-      <div className="analysis-ai"><h3><Sparkles size={17}/>{t("Главное с ИИ")}</h3><p className="analysis-note">{t("ИИ выбирает важные пункты из проверенных расчётов. Все цифры и формулировки пунктов сформированы Life Hub.")}</p>
+      {includeReview&&<><div className="analysis-ai"><h3><Sparkles size={17}/>{t("Главное с ИИ")}</h3><p className="analysis-note">{t("ИИ выбирает важные пункты из проверенных расчётов. Все цифры и формулировки пунктов сформированы Life Hub.")}</p>
         {output?<><ol>{output.fact_ids.map(id=><li key={id}>{data?.facts.find(f=>f.id===id)?.text}</li>)}</ol>{questions[output.question]&&<p className="analysis-question">{questions[output.question]}</p>}<button type="button" className="button ghost" disabled={busy} onClick={()=>setDeleting(true)}><Trash2 size={15}/>{t("Удалить разбор")}</button></>:<>
-          {!permitted&&!preferencesLoading&&<p className="analysis-note">{t("Включите сообщения и доступ к модулям.")} <button type="button" className="text-button" onClick={()=>setSettings(!settings)}>{t("Настройки доступа")}</button></p>}
-          {settings&&<AssistantPreferences userId={user.id}/>}
+          {!resultsConsent&&<button type="button" className="button secondary" onClick={onConsent}>{t("Что передаётся")}</button>}
           {data?.review?.status==='failed'&&<p className="analysis-note">{t("Предыдущая попытка не завершилась. Можно повторить разбор.")}</p>}
-          <label className="analysis-consent"><input type="checkbox" checked={consent} disabled={busy||running} onChange={e=>setConsent(e.target.checked)}/>{t("Разрешаю отправить в OpenAI итоги выбранного месяца: суммы, категории, бюджеты, число и сумму предстоящих подписок, условия прогноза. Названия операций, заметки, счета, исходные файлы и другие модули не передаются.")}</label>
-          <button type="button" className="button primary" disabled={busy||loading||running||preferencesLoading||!permitted||!consent||!data?.transaction_count} onClick={()=>void generate()}>{busy||running?<LoaderCircle size={16} className="spinner"/>:<Sparkles size={16}/>} {busy||running?t("Выделяю главное…"):t("Разобрать месяц с ИИ")}</button>
+          <button type="button" className="button primary" disabled={busy||loading||running||!resultsConsent||!data?.transaction_count} onClick={()=>void generate()}>{busy||running?<LoaderCircle size={16} className="spinner"/>:<Sparkles size={16}/>} {busy||running?t("Выделяю главное…"):t("Разобрать месяц с ИИ")}</button>
           <details className="review-help"><summary>{t("Как работает обзор")}</summary><p className="analysis-note">{t("Расчёты не расходуют лимит ИИ. Одна генерация — один запрос; готовый разбор открывается повторно без нового запроса. Изменение операций, бюджетов или подписок сбрасывает разбор. Ничего не оплачивается и не меняется автоматически.")}</p></details>
         </>}
       </div>
-      {deleting&&data?.review&&<ConfirmDialog title={t("Удалить разбор?")} description={t("Удалится только подборка ИИ. Операции, бюджеты и подписки останутся.")} confirmLabel={t("Удалить разбор")} onClose={()=>setDeleting(false)} onConfirm={async()=>{await api(`/finance/analysis/${data.review!.id}`,{method:'DELETE'});await load();}}/>}
+      {deleting&&data?.review&&<ConfirmDialog title={t("Удалить разбор?")} description={t("Удалится только подборка ИИ. Операции, бюджеты и подписки останутся.")} confirmLabel={t("Удалить разбор")} onClose={()=>setDeleting(false)} onConfirm={async()=>{await api(`/finance/analysis/${data.review!.id}`,{method:'DELETE'});await load();}}/>}</>}
     </>}
   </section>;
 }

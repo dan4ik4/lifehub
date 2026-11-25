@@ -1179,4 +1179,42 @@ CREATE TABLE dashboard_closed_days (
 
 UPDATE alembic_version SET version_num='0020_dashboard_closed_days' WHERE alembic_version.version_num = '0019_journal_workouts';
 
+-- Running upgrade 0020_dashboard_closed_days -> 0021_results
+
+CREATE TABLE results_snapshots (
+    user_id UUID NOT NULL,
+    kind VARCHAR(8) NOT NULL,
+    start DATE NOT NULL,
+    payload JSON NOT NULL,
+    built_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    ai_attempted BOOLEAN NOT NULL,
+    ai_selection JSON,
+    CONSTRAINT pk_results_snapshots PRIMARY KEY (user_id, kind, start),
+    CONSTRAINT fk_results_snapshots_user_id_users FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+CREATE TABLE results_preferences (
+    user_id UUID NOT NULL,
+    ai_enabled BOOLEAN NOT NULL,
+    decided BOOLEAN NOT NULL,
+    hidden_pairs JSON NOT NULL,
+    CONSTRAINT pk_results_preferences PRIMARY KEY (user_id),
+    CONSTRAINT fk_results_preferences_user_id_users FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+CREATE TABLE reading_deltas (
+    id UUID NOT NULL,
+    user_id UUID NOT NULL,
+    book_id UUID NOT NULL,
+    day DATE NOT NULL,
+    pages INTEGER NOT NULL,
+    CONSTRAINT pk_reading_deltas PRIMARY KEY (id),
+    CONSTRAINT fk_reading_deltas_user_id_users FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE,
+    CONSTRAINT fk_reading_deltas_book_id_books FOREIGN KEY(book_id) REFERENCES books (id) ON DELETE CASCADE
+);
+
+CREATE INDEX ix_reading_deltas_user_day ON reading_deltas (user_id, day);
+
+UPDATE alembic_version SET version_num='0021_results' WHERE alembic_version.version_num = '0020_dashboard_closed_days';
+
 COMMIT;

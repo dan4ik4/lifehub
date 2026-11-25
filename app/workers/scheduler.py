@@ -28,9 +28,12 @@ def run_once(
     if maintenance:
         from app.modules.users.privacy import run_privacy_jobs
         from app.workers.jobs.product_notifications import run_product_notifications
+        from app.workers.jobs.results import run_results
 
         with session_factory() as session:
             result["privacy"] = run_privacy_jobs(session, settings)
+        with session_factory() as session:
+            run_results(session, settings)
         with session_factory() as session:
             result["product_notifications"] = run_product_notifications(session, settings)
     if cleanup_auth:

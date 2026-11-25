@@ -5,6 +5,7 @@ import { api, ApiError, errorMessage, isDemo } from '../lib/api';
 import type { CalendarConnection, Notify, OtpChallenge, SyncJob, User } from '../lib/types';
 import { Modal } from './ui';
 import './settings.css';
+import { ResultsSettings } from '../product/results/ResultsConsent';
 import { LanguageSelect } from './LanguageSelect';
 import { PushSettings } from './PushSettings';
 import { PrivacySettings } from './PrivacySettings';
@@ -332,6 +333,7 @@ export function Settings({ user, onUserChange, onClose, onLogout, notify, initia
           </form>
 
           <LanguageSelect disabled={!!busy} />
+          <ResultsSettings pro={hasPro} enabled={!demo}/>
           <PushSettings /><PrivacySettings user={user} onLogout={onLogout} notify={notify} /><div className="settings-section-divider" />
           <div className="settings-row"><span className="settings-row-icon"><Mail size={19} /></span><div className="settings-row-copy"><strong>Email</strong><span className="settings-email-address">{user.email}{user.email_verified && <CheckCircle2 size={14} aria-label={t("Подтверждён")} />}</span></div>{passwordAccount && <button className="button ghost settings-small-button" type="button" disabled={!!busy} aria-expanded={emailExpanded} aria-controls="settings-email-form" onClick={() => { setEmailExpanded(!emailExpanded); setError('email'); }}>{t("Изменить")}</button>}</div>
           {!passwordAccount && !demo && <p className="settings-social-note"><ShieldCheck size={15} />{t("Вы входите через")} {user.auth_providers.includes('google') ? 'Google' : 'Apple'}{t(". Email управляется этим аккаунтом.")}</p>}

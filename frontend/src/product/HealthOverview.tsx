@@ -6,7 +6,7 @@ import {openWorkout} from './WorkoutSession';
 import {sleepRhythm} from './sleepRhythm';
 import {storeWeight} from './weight';
 import {refreshWorkspace} from '../lib/workspace';
-import {useEffect, useMemo, useState} from 'react';
+import {useEffect, useMemo, useRef, useState} from 'react';
 import {ArrowRight, Dumbbell, Footprints, Moon, Plus, Scale} from 'lucide-react';
 import {api, errorMessage} from '../lib/api';
 import {dateKey,dayLabel,plural,shiftDay,timeText,todayKey} from '../lib/dates';
@@ -27,7 +27,15 @@ type Snapshot = {day:string;widgets:{
 }};
 
 const emptyHistory:Row[]=[];
-export function HealthOverview({user,navigate}: {user:User; navigate:(path:string)=>void}) {
+export function HealthOverview({user,navigate,showConnection=false}: {user:User; navigate:(path:string)=>void;showConnection?:boolean}) {
+  const connection = useRef<HTMLDetailsElement>(null);
+  useEffect(()=>{
+    const details = connection.current;
+    if (!showConnection || !details) return;
+    details.open = true;
+    const frame=requestAnimationFrame(()=>details.scrollIntoView({block:'start'}));
+    return ()=>cancelAnimationFrame(frame);
+  },[showConnection]);
   const [data,setData]=useState<Snapshot|null>(null);
   const [error,setError]=useState('');
   const [revision,reload]=useState(0);
@@ -86,7 +94,7 @@ export function HealthOverview({user,navigate}: {user:User; navigate:(path:strin
       {key==='weight'&&values?.weight&&<LifeBars values={values.weight.map(row=>displayWeight(row.kg,user.weight_unit))} format={v=>formatAmount(v)+' '+weightLabel(user.weight_unit)}/>}
       <strong>{value}</strong><small>{footer}</small>
     </button>)}</WidgetGroup></div>
-    <details className="hub-disclosure life-device-connect" id="device-steps">
+    <details className="hub-disclosure life-device-connect" id="device-steps" ref={connection}>
       <summary><Footprints size={17}/>{t("Apple Health и Health Connect")}</summary>
       {steps.length>0 && <div className="hub-steps-history">{steps.map(row => <div key={row.day}><time>{dayLabel(row.day)}</time><strong>{formatAmount(row.steps)}</strong><small>{row.provider==='apple_health'?'Apple Health':'Health Connect'}</small></div>)}</div>}
       <HealthConnection user={user}/>

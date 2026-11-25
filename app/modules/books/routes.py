@@ -177,7 +177,9 @@ def search(
     return {"items": [record(i) for i in items[:limit]], "has_more": len(items) > limit}
 
 
-add_resource(router, "/books", Book, BookInput, "books", validate=book_valid, serialize=book_output,
+from app.modules.dashboard.results import record_reading
+
+add_resource(router, "/books", Book, BookInput, "books", validate=book_valid, serialize=book_output, after_write=record_reading,
              preserve_omitted=("open_library_key", "cover_id"))
 def invalidate_reviews(db, user, item, previous):
     days = {item.day}

@@ -165,6 +165,10 @@ def still_relevant(db, item, user, now):
     """Cancel queued reminders when their source changed during a delivery retry."""
     parts = item.key.split(":")
     kind, identifier = parts[:2]
+    if kind == "results":
+        from app.modules.dashboard.results_models import ResultsSnapshot
+        report = db.get(ResultsSnapshot, (user.id, "week", date.fromisoformat(parts[2])))
+        return bool(report and report.payload["has_data"])
     model = {"habit": Habit, "medicine": Medication, "payment": Subscription, "debt": Debt, "budget": Budget}.get(kind)
     if model is None:
         return False
@@ -239,7 +243,7 @@ def run_product_notifications(db, settings, delivery=None, now=None):
             not user
             or user.deleted_at
             or (item.pro_only and not pro)
-            or (not pro and item.module not in (user.free_modules or []))
+            or (not pro and item.module != "insights" and item.module not in (user.free_modules or []))
             or not still_relevant(db, item, user, now)
         ):
             item.expires_at = now

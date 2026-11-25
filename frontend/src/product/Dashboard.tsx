@@ -1,3 +1,4 @@
+import { ResultsOnHome } from './results/Results';
 import './daily-cards.css';
 import { t, locale } from '../lib/language';
 import {useCallback,useEffect,useRef,useState} from 'react';
@@ -264,6 +265,7 @@ export function Dashboard({user,navigate,notify,onProfile}: {user:User;navigate:
           </LifeCard>}
         </div>
       </div>}
+      <ResultsOnHome navigate={navigate}/>
       <div className="life-home-widgets">{selectedWidgets.map(key=>{
         const item=metrics.get(key);
         if(!item)return null;

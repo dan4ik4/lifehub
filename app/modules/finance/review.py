@@ -28,6 +28,7 @@ class ReviewRequest(InputModel):
     coverage_start: date | None = None
     source_hash: str = Field(pattern=r'^[a-f0-9]{64}$')
     consent: bool = False
+    from_results: bool = False
 
 
 class FactSelection(InputModel):
@@ -41,7 +42,12 @@ def member(user=Depends(get_current_user)):
     return user
 
 
-def consent_check(user):
+def consent_check(user, db, from_results):
+    if from_results:
+        from app.modules.dashboard.results import results_ai
+        if results_ai(db, user):
+            return
+        raise AppError(403, 'module_consent_required', 'Включите ИИ-итоги в настройках.')
     preferences = user.chat_preferences or {}
     if not preferences.get('messages') or not preferences.get('modules'):
         raise AppError(403, 'module_consent_required', 'Разрешите сообщения и доступ к модулям в настройках помощника.')
@@ -105,7 +111,7 @@ def prepare(body: ReviewRequest, request: Request, user=Depends(member), db=Depe
     uid = user.id
     user = db.scalar(select(User).where(User.id == uid).with_for_update().execution_options(populate_existing=True))
     member(user)
-    consent_check(user)
+    consent_check(user, db, body.from_results)
     if not body.consent:
         raise AppError(422, 'review_consent_required', 'Подтвердите отправку рассчитанных итогов в OpenAI.')
     data, digest = build(db, user, body.month, body.currency, body.coverage_start)
@@ -142,7 +148,7 @@ def prepare(body: ReviewRequest, request: Request, user=Depends(member), db=Depe
         if not user or user.deleted_at is not None:
             raise AppError(403, 'account_unavailable', 'Аккаунт недоступен.')
         member(user)
-        consent_check(user)
+        consent_check(user, db, body.from_results)
         fresh, current_digest = build(db, user, body.month, body.currency, body.coverage_start)
         item = db.get(FinanceReview, item_id, populate_existing=True)
         if digest != current_digest or not item or item.updated_at != attempt:

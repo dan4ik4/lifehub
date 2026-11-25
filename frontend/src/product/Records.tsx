@@ -5,7 +5,6 @@ import { openWorkout, useActiveWorkout } from './WorkoutSession';
 import { WorkoutActivity } from './HealthOverview';
 import { useAssistantPreferences } from '../lib/assistantPreferences';
 import { CsvImportDialog } from '../components/CsvImport';
-import { DiaryReview } from './DiaryReview';
 import { displayWeight, weightLabel } from './weight';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowRight, Check, ChevronRight, LoaderCircle, Pencil, Plus, RefreshCw, Search, Trash2 } from 'lucide-react';
@@ -98,7 +97,10 @@ export function Records({
     [catalog, setCatalog] = useState(false),
     [busyId, setBusyId] = useState(""),
     [smart, setSmart] = useState(false),
-    [filterDay, setFilterDay] = useState(""),
+    [filterDay, setFilterDay] = useState(()=> {
+      const initial = new URLSearchParams(search).get('day')??'';
+      return s.key==='diary' && /^\d{4}-\d{2}-\d{2}$/.test(initial) ? initial : '';
+    }),
     [bookStatus, setBookStatus] = useState(s.key==="books"?"want":"");
   const activeWorkout=useActiveWorkout(user.id);
   const params = new URLSearchParams(search);
@@ -226,7 +228,7 @@ export function Records({
       {s.key==="diary"&&<DiaryComposer user={user} day={filterDay||day} notify={notify} onSaved={()=>void data.load()}/>}
       {s.key==="diary"&&<aside className="life-diary-aside">
         <DiaryCalendar selected={filterDay} onSelect={setFilterDay} user={user} revision={data.rows}/>
-        <details className="hub-disclosure life-diary-review"><summary>{t("Недельный обзор с ИИ")}</summary><DiaryReview user={user} pro={pro} revision={data.rows} onSource={setFilterDay}/></details>
+        <button className="life-text-link" type="button" onClick={()=>navigate('/modules/insights')}>{t("Недельный обзор в итогах")}<ArrowRight size={14}/></button>
         {filterDay&&<button className="button secondary" onClick={()=>setFilterDay('')}>{t("Показать все дни")}</button>}
       </aside>}
       {s.key==='transactions' && <>

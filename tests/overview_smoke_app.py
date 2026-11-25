@@ -1,7 +1,7 @@
 """Synthetic local UI fixture, never imported by production."""
 
 from contextlib import asynccontextmanager
-from datetime import timedelta
+from datetime import datetime, time, timedelta
 from decimal import Decimal
 from tests.frontend_smoke_app import app
 from app.core.database import utcnow
@@ -11,8 +11,11 @@ from app.modules.planning.models import Task, CalendarEvent
 from app.modules.planning.commands import ActionEnvelope
 from app.modules.health.models import SleepEntry, WeightEntry, Workout
 from app.modules.finance.models import Transaction, Budget
-from app.modules.goals_habits.models import Habit, Goal
-from app.modules.books.models import Book
+from app.modules.goals_habits.models import Habit, Goal, HabitCheckin
+from app.modules.books.models import Book, DiaryEntry
+from app.modules.dashboard.results import account_day, latest_week
+from app.modules.dashboard.results_models import ReadingDelta
+from app.workers.jobs.results import run_results
 
 
 class LocalModel:
@@ -44,6 +47,42 @@ class LocalModel:
 
 app.state.planning_command_provider = LocalModel()
 original = app.router.lifespan_context
+
+
+def seed_results_account(db, now):
+    user = User(name="Александр", email="results-qa@example.com", password_hash=password_hasher.hash("Local-QA-Only-9182!"),
+                email_verified=True, onboarding_completed=True, plan="pro", timezone="Europe/Warsaw",
+                free_modules=["planning", "health", "finance"])
+    db.add(user)
+    db.flush()
+    local = account_day(user, now)
+    week = latest_week(local)
+    habits = [Habit(user_id=user.id, title=title, weekdays=list(range(7)), target=1,
+                    created_at=now-timedelta(days=60)) for title in ("Прогулка", "Вода", "Чтение")]
+    book = Book(user_id=user.id, title="Книга для проверки итогов", status="reading", current_page=128, total_pages=400)
+    db.add_all([*habits, book])
+    db.flush()
+    first = week - timedelta(days=42)
+    for index in range((local.date() - first).days + 1):
+        day = first + timedelta(days=index)
+        wake = datetime.combine(day, time(8), local.tzinfo)
+        long_sleep = index % 4 >= 2
+        db.add(SleepEntry(user_id=user.id, start_at=wake-timedelta(hours=8 if long_sleep else 6.5), end_at=wake, quality=4))
+        for rank, habit in enumerate(habits):
+            db.add(HabitCheckin(user_id=user.id, habit_id=habit.id, day=day, value=int(rank < (3 if long_sleep else 1))))
+        db.add(DiaryEntry(user_id=user.id, day=day, mood=2 if index % 5 >= 3 else 5,
+                          title="Проверка дневника", text="Синтетическая запись для проверки недельного обзора."))
+        db.add(Transaction(user_id=user.id, day=day, currency="PLN", kind="expense", category="food",
+                           title="Пример траты", amount=Decimal((120 if index % 5 >= 3 else 35) + index % 3)))
+        db.add(Task(user_id=user.id, title="Проверка планов на день", timezone=user.timezone,
+                    due_at=wake, completed_at=wake if index % 6 else None))
+        if index % 6 == 0:
+            db.add(Workout(user_id=user.id, day=day, title="Тренировка", minutes=30+index%5*5, notes=""))
+        if index % 3 == 0:
+            db.add(ReadingDelta(user_id=user.id, book_id=book.id, day=day, pages=15+index%5))
+    end = week + timedelta(days=6)
+    db.add(Budget(user_id=user.id, month=end.strftime("%Y-%m"), category="food", amount=Decimal("300"), currency="PLN"))
+    db.commit()
 
 
 @asynccontextmanager
@@ -126,6 +165,8 @@ async def lifespan(application):
                 )
             )
             db.commit()
+            seed_results_account(db, now)
+            run_results(db, app.state.settings, now)
         yield
 
 

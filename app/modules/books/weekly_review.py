@@ -37,6 +37,7 @@ class ReviewOutput(InputModel):
 class ReviewRequest(InputModel):
     end_day: date
     consent: bool = False
+    from_results: bool = False
 
 
 def member(user=Depends(get_current_user)):
@@ -45,7 +46,12 @@ def member(user=Depends(get_current_user)):
     return user
 
 
-def consent_check(user):
+def consent_check(user, db, from_results):
+    if from_results:
+        from app.modules.dashboard.results import results_ai
+        if results_ai(db, user):
+            return
+        raise AppError(403, 'module_consent_required', 'Включите ИИ-итоги в настройках.')
     preferences = user.chat_preferences or {}
     if not preferences.get('messages') or not preferences.get('modules'):
         raise AppError(403, 'module_consent_required', 'Разрешите сообщения и доступ к модулям в настройках помощника.')
@@ -112,7 +118,7 @@ def prepare(body: ReviewRequest, request: Request, user=Depends(member), db=Depe
     uid = user.id
     user = db.scalar(select(User).where(User.id == uid).with_for_update().execution_options(populate_existing=True))
     member(user)
-    consent_check(user)
+    consent_check(user, db, body.from_results)
     if not body.consent:
         raise AppError(422, 'review_consent_required', 'Подтвердите отправку записей за выбранные семь дней в OpenAI.')
     start, entries, digest = snapshot(db, user, body.end_day)
@@ -152,7 +158,7 @@ def prepare(body: ReviewRequest, request: Request, user=Depends(member), db=Depe
         if not user or user.deleted_at is not None:
             raise AppError(403, 'account_unavailable', 'Аккаунт недоступен.')
         member(user)
-        consent_check(user)
+        consent_check(user, db, body.from_results)
         current_start, current_entries, current_digest = snapshot(db, user, body.end_day)
         item = db.scalar(select(DiaryReview).where(DiaryReview.id == item_id).execution_options(populate_existing=True))
         if current_digest != digest or not item or item.updated_at != attempt:

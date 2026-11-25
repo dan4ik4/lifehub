@@ -12,12 +12,12 @@ import {RecordDetail} from './details';
 import {sections} from './schema';
 import type {Row} from './schema';
 type Goal={id:string;title:string;description:string;due_date:string|null;status:string;progress:number;version:number;target_value:string|null;current_value:string;total_value?:string;linked_value?:string;unit:string};
-type Editor={kind:'habit';item?:Habit;goal?:string}|{kind:'goal';item?:Goal;preset?:string};
+type Editor={kind:'habit';item?:Habit;goal?:string;preset?:string;weekdays?:number[]}|{kind:'goal';item?:Goal;preset?:string};
 const weekdays=[t("Пн"),t("Вт"),t("Ср"),t("Чт"),t("Пт"),t("Сб"),t("Вс")];
 const fmt=(n:unknown)=>Number(n||0).toLocaleString(locale,{maximumFractionDigits:2});
 const label=(day:string)=>new Date(day+'T12:00:00').toLocaleDateString(locale,{day:'numeric',month:'long'});
 async function all<T>(path:string,signal:AbortSignal){let items:T[]=[];for(let offset=0;;offset+=100){const r=await api<{items:T[];has_more:boolean}>(`${path}?limit=100&offset=${offset}`,{signal});items=[...items,...r.items];if(!r.has_more)return items;}}
-export function GoalsHabits({user,notify,view,create,onDaySelected}:{user:User;notify:Notify;view?:string;create?:string|null;onDaySelected:()=>void}){
+export function GoalsHabits({user,notify,view,create,preset,onDaySelected}:{user:User;notify:Notify;view?:string;create?:string|null;preset?:string|null;onDaySelected:()=>void}){
  const today=todayKey(user.timezone),pro=user.plan==='pro'||(user.plan==='trial'&&!!user.trial_ends&&Date.parse(user.trial_ends)>Date.now());
  const [day,setDay]=useState(today),[month,setMonth]=useState(today.slice(0,7)),[goals,setGoals]=useState<Goal[]>([]),[habits,setHabits]=useState<Habit[]>([]),[history,setHistory]=useState<Record<string,Checkin[]>>({});
  const [loading,setLoading]=useState(true),[error,setError]=useState(''),[busy,setBusy]=useState(false),[revision,setRevision]=useState(0),[add,setAdd]=useState(false),[archive,setArchive]=useState(false);
@@ -25,8 +25,10 @@ export function GoalsHabits({user,notify,view,create,onDaySelected}:{user:User;n
  const [editor,setEditor]=useState<Editor|null>(null),[entry,setEntry]=useState<Habit|null>(null),[value,setValue]=useState(''),[remove,setRemove]=useState<Editor|null>(null);
  useEffect(()=>{
 
-   if(create==='habit')setEditor({kind:'habit'});
- },[create]);
+   if(create==='habit')setEditor(preset==='bedtime'
+     ? {kind:'habit',preset:t('Сон до 23:30'),weekdays:[0,1,2,3,4]}
+     : {kind:'habit'});
+ },[create,preset]);
  const stats=view==='stats';
  const sequence=useRef(0),refresh=useCallback(()=>setRevision(n=>n+1),[]);
  useEffect(()=>{window.addEventListener('lifehub:data-changed',refresh);return()=>window.removeEventListener('lifehub:data-changed',refresh);},[refresh]);
@@ -80,7 +82,7 @@ export function GoalsHabits({user,notify,view,create,onDaySelected}:{user:User;n
 }
 function EditorForm({editor,goals,pro,busy,error,onClose,onSave,onDelete,onDetails}:{editor:Editor;goals:Goal[];pro:boolean;busy:boolean;error:string;onClose:()=>void;onSave:(body:unknown)=>Promise<void>;onDelete:()=>void;onDetails:()=>void}){
  const h=editor.kind==='habit'?editor.item:undefined,g=editor.kind==='goal'?editor.item:undefined;
- const [title,setTitle]=useState(editor.item?.title||(editor.kind==='goal'?editor.preset:'')||''),[kind,setKind]=useState(h?.kind||'boolean'),[target,setTarget]=useState(String(h?.target||g?.target_value||'')),[unit,setUnit]=useState(h?.unit||g?.unit||''),[days,setDays]=useState(h?.weekdays||[0,1,2,3,4,5,6]),[goal,setGoal]=useState(h?.goal_id||(editor.kind==='habit'?editor.goal:'')||''),[contributes,setContributes]=useState(h?.contributes||false),[numeric,setNumeric]=useState(!!g?.target_value),[current,setCurrent]=useState(g?.current_value||'0'),[description,setDescription]=useState(g?.description||''),[due,setDue]=useState(g?.due_date||''),[progress,setProgress]=useState(g?.progress||0),[status,setStatus]=useState(g?.status||'active'),[archived,setArchived]=useState(h?.archived||false),[reminder,setReminder]=useState(h?.reminder_time||'');
+ const [title,setTitle]=useState(editor.item?.title||editor.preset||''),[kind,setKind]=useState(h?.kind||'boolean'),[target,setTarget]=useState(String(h?.target||g?.target_value||'')),[unit,setUnit]=useState(h?.unit||g?.unit||''),[days,setDays]=useState(h?.weekdays ?? (editor.kind === 'habit' ? editor.weekdays : undefined) ?? [0,1,2,3,4,5,6]),[goal,setGoal]=useState(h?.goal_id||(editor.kind==='habit'?editor.goal:'')||''),[contributes,setContributes]=useState(h?.contributes||false),[numeric,setNumeric]=useState(!!g?.target_value),[current,setCurrent]=useState(g?.current_value||'0'),[description,setDescription]=useState(g?.description||''),[due,setDue]=useState(g?.due_date||''),[progress,setProgress]=useState(g?.progress||0),[status,setStatus]=useState(g?.status||'active'),[archived,setArchived]=useState(h?.archived||false),[reminder,setReminder]=useState(h?.reminder_time||'');
  const selected=goals.find(g=>g.id===goal),canContribute=kind!=='boolean'&&!!selected?.target_value&&unit===selected.unit;
  return <Modal title={editor.item?(editor.kind==='habit'?t("Ваша привычка"):t("Ваша цель")):(editor.kind==='habit'?t("Новая привычка"):t("Новая цель"))} onClose={onClose}><form className="gh-form" onSubmit={e=>{e.preventDefault();void onSave(editor.kind==='habit'?{title,kind,target:kind==='boolean'?1:Number(target),unit,weekdays:days,goal_id:goal||null,contributes:contributes&&canContribute,archived,reminder_time:reminder||null,...(h?{version:h.version}:{})}:{title,description,due_date:due||null,status,progress,target_value:numeric?Number(target):null,current_value:numeric?Number(current):0,unit:numeric?unit:'',...(g?{version:g.version}:{})});}}>
  <label>{editor.kind==='habit'?t("Что будете делать?"):t("Чего хотите достичь?")}<input required maxLength={300} placeholder={editor.kind==='habit'?t("Например, читать перед сном"):t("Например, накопить на поездку")} value={title} onChange={e=>setTitle(e.target.value)}/></label>

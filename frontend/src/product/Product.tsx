@@ -1,7 +1,7 @@
 import { t } from '../lib/language';
 import { openQuickAdd } from '../lib/workspace';
 import { WorkspaceBar } from '../components/WorkspaceBar';
-import { CrossInsights } from './CrossInsights';
+import { Results } from './results/Results';
 import { HealthOverview } from './HealthOverview';
 import { GoalsHabits } from './GoalsHabits';
 import { Navigation } from '../components/Navigation';
@@ -65,7 +65,7 @@ export function Product({
   const group = module === 'finance' ? financeGroup(activeTab) : [];
   const primaryTabs = module === 'finance' ? tabs.filter(item => financeGroup(item.key)[0] === item.key) : tabs;
   const gotoTab = (key:string) => navigate(modulePath+'/'+key+(module==='finance'&&search?'?'+search:''));
-  const title = names[module] ?? (module === 'insights' ? t("Что видно вместе") : t("Страница недоступна"));
+  const title = names[module] ?? (module === 'insights' ? t("Итоги") : t("Страница недоступна"));
   useEffect(() => { document.title = title+' · LifeHub'; }, [title]);
   useEffect(()=>{
     const keydown=(event:KeyboardEvent)=>{
@@ -86,6 +86,11 @@ export function Product({
     window.addEventListener('lifehub:show-plan',showPlan);
     return () => window.removeEventListener('lifehub:show-plan',showPlan);
   }, []);
+  if (module==='insights'&&!isDemo()) return <>
+    <Results user={user} path={path} search={search} navigate={navigate} notify={notify} onSettings={()=>setSettings('profile')}/>
+    {settings&&<Settings user={user} initialTab={settings} onClose={()=>setSettings(null)}
+      onUserChange={onUserChange} onLogout={onLogout} notify={notify}/>}
+  </>;
   return (
     <div className="app-layout">
       <Navigation user={user} path={path} navigate={navigate} onSettings={() => setSettings('profile')}/>
@@ -96,19 +101,17 @@ export function Product({
         <main data-module={module} data-tab={activeTab} id="product-main" className={'product-main'+(module==='dashboard'?' hub-main-home':'')}>
           {module!=='dashboard' && (!section||!allowed||healthOverview||financeOverview||module==='goals_habits') && <header className="product-title"><div>
             <span className="life-page-eyebrow">{title}</span>
-            <h1>{healthOverview?t("Обзор"):financeOverview?t("Аналитика"):module==='goals_habits'?(tab==='goals'?t("Цели"):tab==='habits'?t("Привычки"):tab==='stats'?t("Статистика"):t("Сегодня")):module==='insights'?t("Связи между модулями"):title}</h1>
+            <h1>{healthOverview?t("Обзор"):financeOverview?t("Аналитика"):module==='goals_habits'?(tab==='goals'?t("Цели"):tab==='habits'?t("Привычки"):tab==='stats'?t("Статистика"):t("Сегодня")):title}</h1>
             {healthOverview&&<p className="life-page-subtitle">{t("Сон, вес и движение за неделю")}</p>}
-            {module==='insights'&&<p className="life-page-subtitle">{t("Наблюдения по вашим записям")}</p>}
           </div>{healthOverview&&<button className="button primary" onClick={()=>openQuickAdd()}><Plus size={16}/>{t("Записать")}</button>}</header>}
           {isDemo() ? <EmptyState title={t("Откройте свой аккаунт")} text={t("Войдите, чтобы сохранять записи в модулях.")} action={t("Перейти ко входу")} onAction={onLogout}/>
             : module === 'dashboard' ? <Dashboard key={user.id} user={user} navigate={navigate} notify={notify} onProfile={()=>setSettings('profile')}/>
-            : module === 'insights' ? <CrossInsights user={user} pro={pro} navigate={navigate} view={tab}/>
             : !names[module] || (tab && !tabs.some(item => item.key === tab) && module !== 'goals_habits') ?
               <EmptyState title={t("Такой страницы нет")} text={t("Вернитесь на главную или выберите модуль в меню.")} action={t("На главную")} onAction={() => navigate('/home')}/>
             : !allowed ? <Locked onPlan={() => setSettings('plan')} module/>
             : module === 'goals_habits' ? <>
               <nav className="product-tabs life-goals-tabs" aria-label={t("Разделы целей и привычек")}>{[['',t("Сегодня")],['habits',t("Привычки")],['goals',t("Цели")],['stats',t("Статистика")]].map(([key,label])=><button key={key} className={(tab??'')===key?'active':''} onClick={()=>navigate(modulePath+(key?'/'+key:''))}>{label}</button>)}</nav>
-              <GoalsHabits user={user} notify={notify} view={tab} onDaySelected={()=>navigate(modulePath)} create={new URLSearchParams(search).get('new')}/>
+              <GoalsHabits user={user} notify={notify} view={tab} onDaySelected={()=>navigate(modulePath)} create={new URLSearchParams(search).get('new')} preset={new URLSearchParams(search).get('preset')}/>
             </>
             : <>
               <nav className="product-tabs" aria-label={t("Подразделы")}>
@@ -122,10 +125,13 @@ export function Product({
                   {tabs.find(item=>item.key===key)?.label}
                 </button>)}
               </nav>}
-              {healthOverview ? <HealthOverview user={user} navigate={navigate}/>
-                : financeOverview ? pro ? <FinanceOverview user={user} revision={search} analysis
+              {healthOverview ? <HealthOverview user={user} navigate={navigate} showConnection={new URLSearchParams(search).has('connect')}/>
+                : financeOverview ? pro ? <><FinanceOverview user={user} revision={search} analysis
                     preferences={new URLSearchParams(search)} onSelect={params => navigate(modulePath+'/analysis?'+params)}
-                    onCategory={params => navigate(modulePath+'/transactions?'+params)}/> : <Locked onPlan={() => setSettings('plan')}/>
+                    onCategory={params => navigate(modulePath+'/transactions?'+params)}/>
+                  <button className="text-button" type="button" onClick={()=>navigate('/modules/insights/archive?kind=month')}>
+                    {t('Разобрать месяц с ИИ')}
+                  </button></> : <Locked onPlan={() => setSettings('plan')}/>
                 : section && (section.pro&&!pro ? <Locked onPlan={() => setSettings('plan')}/> :
                   <Records key={section.path} section={section} user={user} notify={notify} route={modulePath+'/'+section.key}
                     search={search} navigate={navigate} recordId={recordId} financeHome={financeHome}/>)}

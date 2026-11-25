@@ -153,6 +153,9 @@ def delete_account(body: DeleteInput, request: Request, user=Depends(get_current
 # Explicit allowlist prevents future auth/token tables from silently entering an export.
 EXPORT_TABLES = {
     "dashboard_closed_days",
+    "results_snapshots",
+    "results_preferences",
+    "reading_deltas",
     "health_connections",
     "health_device_days",
     "tasks",

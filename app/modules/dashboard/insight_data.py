@@ -36,11 +36,11 @@ def scope(user, end_day, days, modules, currency):
     return selected, hashlib.sha256(json.dumps(value, sort_keys=True).encode()).hexdigest()
 
 
-def compare(left, right):
+def compare(left, right, *, reverse=True):
     common = sorted(set(left['values']) & set(right['values']))
     if len(common) < 8:
         return None
-    for x, y in ((left, right), (right, left)):
+    for x, y in ((left, right), (right, left)) if reverse else ((left, right),):
         threshold = median([x['values'][day] for day in common])
         lower = [day for day in common if x['values'][day] < threshold]
         upper = [day for day in common if x['values'][day] >= threshold]
