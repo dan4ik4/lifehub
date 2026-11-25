@@ -19,9 +19,11 @@ from app.core.database import utcnow
 from app.core.dependencies import get_db
 from app.core.errors import AppError
 from app.core.owned import require_module
+from app.core.security import encrypt_secret
 from app.modules.auth.models import User
 from app.modules.finance.import_models import CsvImport, CsvImportRow
 from app.modules.finance.models import Transaction
+from app.modules.finance.pdf_extract import MAX_OPERATIONS
 from app.modules.finance.routes import BASE_CATEGORIES, transaction_valid
 from app.modules.finance.schemas import TransactionInput
 from app.modules.planning.command_models import PlanningAiUsage
@@ -222,11 +224,12 @@ def duplicate(db, user, account, row):
         ~select(CsvImportRow.transaction_id).where(CsvImportRow.transaction_id == Transaction.id).exists()).limit(1)) is not None
 
 
-def preview(db, user, item):
+def preview(db, user, item, *, summary=False):
     return {'id': str(item.id), 'account': item.account, 'source_format': item.source_format, 'status': item.status, 'result': item.result,
         'expired': item.created_at < utcnow() - timedelta(hours=24),
         'rows': [{**{k: v for k, v in row.items() if k != 'fingerprint'},
-                  'duplicate': item.status == 'pending' and duplicate(db, user, item.account, row)} for row in item.rows]}
+                  'duplicate': item.status == 'pending' and duplicate(db, user, item.account, row)}
+                 for row in ([] if summary else item.rows)]}
 
 
 @router.post('')
@@ -235,24 +238,60 @@ def prepare(body: CsvUpload, request: Request, idempotency_key: str = Header(min
     return prepare_statement(body, request, idempotency_key, user, db)
 
 
-def prepare_statement(body, request, idempotency_key, user, db, source_format='csv'):
-    user = db.scalar(select(User).where(User.id == user.id).with_for_update().execution_options(populate_existing=True))
+def locked_import_owner(db, user_id):
+    user = db.scalar(select(User).where(User.id == user_id).with_for_update().execution_options(populate_existing=True))
+    if not user or user.deleted_at is not None:
+        raise AppError(403, 'account_unavailable', 'Аккаунт недоступен.')
     access(user)
-    if not body.account.strip():
-        raise AppError(422, 'invalid_csv', 'Укажите название счёта.')
-    digest = hashlib.sha256(((source_format + ':') if source_format != 'csv' else '').encode() + body.model_dump_json().encode()).hexdigest()
+    return user
+
+
+def existing_preview(db, user, idempotency_key, digest):
     previous = db.scalar(select(CsvImport).where(CsvImport.user_id == user.id, CsvImport.request_key == idempotency_key))
     if previous:
         if previous.request_hash != digest:
             raise AppError(409, 'idempotency_conflict', 'Этот запрос уже использован для другого файла.')
         if previous.status == 'processing':
+            if previous.pdf_payload:
+                return preview(db, user, previous)
             raise AppError(409, 'csv_processing', 'Разбор ещё выполняется. Обновите список через некоторое время.')
         if previous.status == 'failed':
             raise AppError(409, 'csv_failed', 'Предыдущий разбор не завершился. Можно повторить отправку.')
         return preview(db, user, previous)
+
+
+def finish_preview(item, rows):
+    item.rows = rows
+    for row in item.rows:
+        if row.get('transaction'):
+            row['transaction']['notes'] = 'Импорт ' + item.source_format.upper() + ' · ' + item.account
+    item.status = 'pending'
+    item.result = None
+    item.pdf_payload = None
+    item.pdf_claim_until = None
+
+
+def prepare_statement(body, request, idempotency_key, user, db, source_format='csv'):
+    user_id = user.id
+    user = locked_import_owner(db, user_id)
+    if not body.account.strip():
+        raise AppError(422, 'invalid_csv', 'Укажите название счёта.')
+    digest = hashlib.sha256(((source_format + ':') if source_format != 'csv' else '').encode() + body.model_dump_json().encode()).hexdigest()
+    if previous := existing_preview(db, user, idempotency_key, digest):
+        return previous
+    settings = request.app.state.settings
+    payload = None
     if source_format == 'pdf':
-        from app.modules.finance.pdf_import import parse_pdf
+        from app.modules.finance.pdf_import import parse_pdf, pdf_window
+        db.rollback()  # Extraction may take several seconds. Do not hold the account lock.
         table = parse_pdf(body)
+        if len(pdf_window(table)) < len(table):
+            if not settings.openai_api_key and not getattr(request.app.state, 'pdf_import_provider', None):
+                raise AppError(503, 'provider_unavailable', 'ИИ не настроен на сервере.')
+            payload = encrypt_secret(json.dumps({'currency': body.currency, 'lines': table, 'blocks': []}), settings.encryption_key)
+        user = locked_import_owner(db, user_id)
+        if previous := existing_preview(db, user, idempotency_key, digest):
+            return previous
     else:
         table = parse_table(body)
     now = utcnow()
@@ -264,30 +303,27 @@ def prepare_statement(body, request, idempotency_key, user, db, source_format='c
     if usage.count >= limit:
         raise AppError(429, 'ai_limit', 'Лимит запросов к ИИ на сегодня исчерпан.')
     usage.count += 1
-    item = CsvImport(user_id=user.id, request_key=idempotency_key, request_hash=digest, account=body.account.strip(), source_format=source_format)
+    item = CsvImport(user_id=user.id, request_key=idempotency_key, request_hash=digest, account=body.account.strip(),
+                     source_format=source_format, pdf_payload=payload)
     db.add(item)
     db.commit()
+    if payload is not None:
+        return preview(db, user, item)
     item_id = item.id
     db.rollback()  # Release the connection while the provider processes the CSV.
     try:
         if source_format == 'pdf':
-            from app.modules.finance.pdf_import import PdfMapping, generate_pdf_mapping, normalize_pdf
+            from app.modules.finance.pdf_import import generate_pdf_mapping, map_section, normalize_pdf
             provider = getattr(request.app.state, 'pdf_import_provider', None)
-            mapping = PdfMapping.model_validate(provider(table) if provider else generate_pdf_mapping(request.app.state.settings, table))
+            blocks = map_section(table, 0, provider or (lambda lines: generate_pdf_mapping(settings, lines)))
         else:
             provider = getattr(request.app.state, 'csv_import_provider', None)
             mapping = CsvMapping.model_validate(provider(table) if provider else generate_mapping(request.app.state.settings, table))
         # Recheck account, permissions and module entitlement after the external call.
-        user = db.scalar(select(User).where(User.id == user.id).with_for_update().execution_options(populate_existing=True))
-        if not user or user.deleted_at is not None:
-            raise AppError(403, 'account_unavailable', 'Аккаунт недоступен.')
-        access(user)
+        user = locked_import_owner(db, user_id)
         item = db.get(CsvImport, item_id)
-        item.rows = normalize_pdf(table, mapping, body.currency, user) if source_format == 'pdf' else normalize_rows(table, mapping, body.currency, user)
-        for row in item.rows:
-            if row.get('transaction'):
-                row['transaction']['notes'] = 'Импорт ' + source_format.upper() + ' · ' + item.account
-        item.status = 'pending'
+        rows = normalize_pdf(table, blocks, body.currency, user) if source_format == 'pdf' else normalize_rows(table, mapping, body.currency, user)
+        finish_preview(item, rows)
         db.commit()
         return preview(db, user, item)
     except Exception as exc:
@@ -302,11 +338,21 @@ def prepare_statement(body, request, idempotency_key, user, db, source_format='c
 
 
 @router.get('')
-def recent(user=Depends(require_planning_user), db=Depends(get_db)):
+def recent(summary: bool = False, user=Depends(require_planning_user), db=Depends(get_db)):
     access(user)
     items = db.scalars(select(CsvImport).where(CsvImport.user_id == user.id,
         CsvImport.created_at >= utcnow() - timedelta(hours=24)).order_by(CsvImport.created_at.desc()).limit(5)).all()
-    return {'items': [preview(db, user, item) for item in items]}
+    return {'items': [preview(db, user, item, summary=summary) for item in items]}
+
+
+@router.get('/{import_id}')
+def get_preview(import_id: UUID, user=Depends(require_planning_user), db=Depends(get_db)):
+    access(user)
+    item = db.scalar(select(CsvImport).where(CsvImport.id == import_id, CsvImport.user_id == user.id,
+        CsvImport.created_at >= utcnow() - timedelta(hours=24)))
+    if not item:
+        raise AppError(404, 'not_found', 'Импорт не найден.')
+    return preview(db, user, item)
 
 
 class Selection(InputModel):
@@ -316,7 +362,7 @@ class Selection(InputModel):
 
 
 class Confirm(InputModel):
-    rows: list[Selection] = Field(max_length=100)
+    rows: list[Selection] = Field(max_length=MAX_OPERATIONS)
 
 
 @router.post('/{import_id}/confirm')
@@ -330,6 +376,8 @@ def confirm(import_id: UUID, body: Confirm, user=Depends(require_planning_user),
         return preview(db, user, item)
     if item.status != 'pending' or item.created_at < utcnow() - timedelta(hours=24):
         raise AppError(409, 'proposal_expired', 'Предпросмотр недоступен. Загрузите файл заново.')
+    if item.source_format == 'csv' and len(body.rows) > 100:
+        raise AppError(422, 'invalid_csv', 'Можно сохранить до 100 операций из одного CSV.')
     indexes = [r.row for r in body.rows]
     if len(indexes) != len(set(indexes)):
         raise AppError(422, 'invalid_csv', 'Одна строка выбрана несколько раз.')

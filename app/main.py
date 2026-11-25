@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+import re
 from uuid import uuid4
 
 from fastapi import FastAPI, Request
@@ -10,6 +11,10 @@ from app.core.config import Settings
 from app.core.database import Base, build_database
 from app.core.errors import ErrorResponse, error_response, register_error_handlers
 from app.core.rate_limits import MemoryRateLimiter, RedisRateLimiter
+from app.modules.finance.pdf_extract import MAX_CONFIRM_BYTES, MAX_REQUEST_BYTES
+
+PDF_UPLOAD_PATH = '/api/v1/finance/pdf-imports'
+IMPORT_CONFIRM_PATH = re.compile(r'/api/v1/finance/csv-imports/[0-9a-fA-F-]{36}/confirm')
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -52,7 +57,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def request_metadata(request: Request, call_next):
         request.state.trace_id = uuid4().hex
         length = request.headers.get('content-length')
-        body_limit = 7_000_000 if request.url.path == '/api/v1/finance/pdf-imports' and request.method == 'POST' else 1_048_576
+        path = request.url.path.rstrip('/')
+        pdf_upload = request.method == 'POST' and path == PDF_UPLOAD_PATH
+        import_confirm = request.method == 'POST' and IMPORT_CONFIRM_PATH.fullmatch(path)
+        body_limit = MAX_REQUEST_BYTES if pdf_upload else MAX_CONFIRM_BYTES if import_confirm else 1_048_576
         if length:
             try:
                 too_large = int(length) > body_limit or int(length) < 0
@@ -60,7 +68,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 too_large = True
             if too_large:
                 return error_response(request, 413, 'request_too_large', 'Файл превышает допустимый размер запроса.')
-        if request.url.path == '/api/v1/finance/pdf-imports' and request.method == 'POST':
+        if pdf_upload or import_confirm:
             chunks, size = [], 0
             async for chunk in request.stream():
                 size += len(chunk)

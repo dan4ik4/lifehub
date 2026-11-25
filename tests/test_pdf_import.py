@@ -10,6 +10,7 @@ from sqlalchemy import select
 from app.core.database import utcnow
 from app.core.errors import AppError
 from app.modules.finance.import_models import CsvImport
+from app.modules.finance.pdf_extract import MAX_BYTES, MAX_PAGES, MAX_REQUEST_BYTES
 from app.modules.finance.pdf_import import PdfMapping, PdfUpload, generate_pdf_mapping, parse_pdf
 from app.modules.planning.command_models import PlanningAiUsage
 from tests.test_csv_import import BASE, count, selection, setup, upload
@@ -137,9 +138,14 @@ def test_all_pdf_lines_must_be_accounted_for(client, app, db, make_user, auth_he
     assert count(db) == 0
 
 
-@pytest.mark.parametrize(('raw', 'code'), [(b'not a pdf', 'invalid_pdf'), (b'%PDF-broken', 'invalid_pdf'),
-    (make_pdf(encrypted=True), 'pdf_encrypted'), (make_pdf([[]]), 'pdf_no_text'),
-    (make_pdf([TEXT, []]), 'pdf_no_text'), (make_pdf([['page']] * 16), 'pdf_too_large')])
+@pytest.mark.parametrize(('raw', 'code'), [
+    pytest.param(b'not a pdf', 'invalid_pdf', id='wrong-magic'),
+    pytest.param(b'%PDF-broken', 'invalid_pdf', id='broken-pdf'),
+    pytest.param(make_pdf(encrypted=True), 'pdf_encrypted', id='password'),
+    pytest.param(make_pdf([[]]), 'pdf_no_text', id='empty-page'),
+    pytest.param(make_pdf([TEXT, []]), 'pdf_no_text', id='unreadable-second-page'),
+    pytest.param(make_pdf([['page']] * (MAX_PAGES + 1)), 'pdf_too_many_pages', id='page-limit'),
+])
 def test_unreadable_encrypted_and_oversized_pdf_before_provider(client, app, db, make_user, auth_headers, raw, code):
     _, h = prepare(client, app, make_user, auth_headers)
     provider = MagicMock(side_effect=pdf_mapping)
@@ -207,22 +213,24 @@ def test_pdf_worker_timeout_and_size_limit(monkeypatch):
     import subprocess
     body = PdfUpload(data=base64.b64encode(make_pdf()).decode(), account='test', currency='PLN', consent=True)
     monkeypatch.setattr(subprocess, 'run', MagicMock(side_effect=subprocess.TimeoutExpired('worker', 20)))
-    with pytest.raises(AppError):
+    with pytest.raises(AppError) as timeout:
         parse_pdf(body)
-    with pytest.raises(AppError):
-        parse_pdf(body.model_copy(update={'data': base64.b64encode(b'%PDF-' + b' ' * 5_000_000).decode()}))
+    assert timeout.value.code == 'pdf_extraction_timeout'
+    with pytest.raises(AppError) as limit:
+        parse_pdf(body.model_copy(update={'data': base64.b64encode(b'%PDF-' + b' ' * MAX_BYTES).decode()}))
+    assert limit.value.code == 'pdf_too_large'
 
 
 def test_pdf_request_limit_is_specific_and_rejects_chunked_oversize(client, app, make_user, auth_headers):
     _, h = prepare(client, app, make_user, auth_headers)
-    # Valid PDF > old global 1 MiB request limit, with legal trailing padding.
-    response = pdf_upload(client, h, raw=make_pdf() + b'\n%' + b' ' * 800_000)
+    # Full request, including base64 overhead, exceeds the previous PDF upload limit.
+    response = pdf_upload(client, h, raw=make_pdf() + b'\n%' + b' ' * 15_100_000)
     assert response.status_code == 200, response.text
-    assert client.post(PDF_BASE, headers={**h, 'Content-Length': '7000001'}, content=b'{}').status_code == 413
+    assert client.post(PDF_BASE, headers={**h, 'Content-Length': str(MAX_REQUEST_BYTES + 1)}, content=b'{}').status_code == 413
     assert client.post(BASE, headers={**h, 'Content-Length': '1048577'}, content=b'{}').status_code == 413
     def chunks():
-        yield b' ' * 4_000_000
-        yield b' ' * 4_000_000
+        yield b' ' * (MAX_REQUEST_BYTES // 2)
+        yield b' ' * (MAX_REQUEST_BYTES // 2 + 2)
     assert client.post(PDF_BASE, headers=h, content=chunks()).status_code == 413
 
 
@@ -233,11 +241,88 @@ def test_pdf_privacy_export_and_expiry(client, app, db, make_user, auth_headers,
     p = pdf_upload(client, h).json()
     exported = collect_data(db, user)['finance_csv_imports']
     assert exported[0]['source_format'] == 'pdf'
+    assert 'pdf_payload' not in exported[0] and 'pdf_claim_until' not in exported[0]
     item = db.scalar(select(CsvImport).where(CsvImport.user_id == user.id))
     item.created_at = utcnow() - timedelta(days=2)
     db.commit()
     run_privacy_jobs(db, settings)
     assert not db.scalar(select(CsvImport).where(CsvImport.user_id == user.id))
+
+
+def test_monthly_pdf_resumes_sections_and_confirms_more_than_100_operations(client, app, db, make_user, auth_headers, settings):
+    from app.workers.jobs.pdf_imports import run_pdf_section
+
+    user, headers = prepare(client, app, make_user, auth_headers)
+    pages = []
+    for page in range(36):
+        entries = [TEXT[0]]
+        for index in range(page * 4, page * 4 + 4):
+            entries.append(f'05.01.2026 Sklep -12,30 PLN a{index}')
+            entries.extend(['Original statement continuation ' + 'detail ' * 19] * 3)
+        pages.append(entries)
+    assert sum(sum(map(len, rows)) for rows in pages) > 60_000
+    raw = make_pdf(pages)
+    response = pdf_upload(client, headers, raw=raw)
+    assert response.status_code == 200 and response.json()['status'] == 'processing', response.text
+    initial = response.json()
+    path = BASE + '/' + initial['id']
+    assert initial['rows'] == []
+    assert pdf_upload(client, headers, raw=raw).json()['id'] == initial['id']
+    other = auth_headers(make_user(chat_preferences={'messages': True, 'modules': True}))
+    assert client.get(path, headers=other).status_code == 404
+    assert db.get(PlanningAiUsage, (user.id, utcnow().date())).count == 1
+
+    batches = []
+
+    def mapped(lines):
+        batches.append(len(lines))
+        blocks = pdf_mapping(lines)['blocks']
+        groups = []
+        for block, line in zip(blocks, lines, strict=True):
+            if groups and groups[-1]['operation'] and line['text'].startswith('Original statement continuation'):
+                groups[-1]['last_line'] = block['last_line']
+            else:
+                groups.append(block)
+        return {'blocks': groups}
+
+    assert run_pdf_section(app.state.session_factory, settings, provider=mapped)
+    with app.state.session_factory() as session:
+        item = session.scalar(select(CsvImport).where(CsvImport.user_id == user.id))
+        assert item.status == 'processing' and not item.rows
+        assert item.pdf_payload and 'Sklep' not in item.pdf_payload
+    for _ in range(30):
+        if not run_pdf_section(app.state.session_factory, settings, provider=mapped):
+            break
+
+    preview = client.get(path, headers=headers).json()
+    assert preview['status'] == 'pending', preview
+    indexes = [row['row'] for row in preview['rows'] if row['transaction']]
+    assert len(indexes) == 144 and len(batches) > 1
+    assert all(not row['selected'] for row in preview['rows'])
+    assert all(row['source'].count('Original statement continuation') == 3 for row in preview['rows'] if row['transaction'])
+    assert count(db) == 0
+    with app.state.session_factory() as session:
+        item = session.scalar(select(CsvImport).where(CsvImport.user_id == user.id))
+        assert item.pdf_payload is None and item.pdf_claim_until is None
+    confirmed = client.post(path + '/confirm', headers=headers, json=selection(preview, indexes))
+    assert confirmed.status_code == 200 and confirmed.json()['result']['added'] == 144, confirmed.text
+    assert count(db) == 144
+
+
+def test_invalid_second_pdf_section_never_publishes_partial_preview(client, app, db, make_user, auth_headers, settings):
+    from app.workers.jobs.pdf_imports import run_pdf_section
+
+    _, headers = prepare(client, app, make_user, auth_headers)
+    statement = make_pdf([TEXT] * 31)
+    response = pdf_upload(client, headers, raw=statement)
+    assert response.json()['status'] == 'processing'
+    path = BASE + '/' + response.json()['id']
+    assert run_pdf_section(app.state.session_factory, settings, provider=pdf_mapping)
+    assert run_pdf_section(app.state.session_factory, settings, provider=lambda lines: {'blocks': pdf_mapping(lines)['blocks'][1:]})
+    failed = client.get(path, headers=headers).json()
+    assert failed['status'] == 'failed' and failed['rows'] == [] and failed['result']['error_code'] == 'model_error'
+    assert not run_pdf_section(app.state.session_factory, settings, provider=pdf_mapping)
+    assert count(db) == 0
 
 def test_pdf_without_ids_keeps_identical_purchases_and_matches_csv(client, app, db, make_user, auth_headers):
     _, h = prepare(client, app, make_user, auth_headers)
@@ -260,8 +345,11 @@ def test_pdf_without_ids_keeps_identical_purchases_and_matches_csv(client, app, 
     assert csv['rows'][0]['duplicate']
 
 
-def test_pdf_more_than_100_operations_never_truncates(client, app, db, make_user, auth_headers):
+def test_pdf_over_the_operation_limit_never_truncates(client, app, db, make_user, auth_headers, monkeypatch):
+    from app.modules.finance import pdf_import
+
+    monkeypatch.setattr(pdf_import, 'MAX_OPERATIONS', 1)
     _, h = prepare(client, app, make_user, auth_headers)
-    response = pdf_upload(client, h, raw=make_pdf([[TEXT[1]] * 101]))
+    response = pdf_upload(client, h)
     assert response.status_code == 422
     assert count(db) == 0

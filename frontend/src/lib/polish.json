@@ -1852,5 +1852,19 @@
   "Итоги собираются в воскресенье в 20:00": "Podsumowanie powstaje w niedzielę o 20:00",
   "Главное за неделю": "Najważniejsze w tygodniu",
   "Лучше прошлой недели": "Lepiej niż w zeszłym tygodniu",
-  "Два дня недели": "Dwa dni tygodnia"
+  "Два дня недели": "Dwa dni tygodnia",
+  "Выберите файл CSV или PDF.": "Wybierz plik CSV lub PDF.",
+  "Файл CSV больше 128 КБ.": "Plik CSV przekracza 128 KB.",
+  "Файл PDF больше 25 МБ.": "Plik PDF przekracza 25 MB.",
+  "В PDF больше 100 страниц.": "Plik PDF ma więcej niż 100 stron.",
+  "Текст выписки превышает предел обработки PDF.": "Wyciąg zawiera zbyt dużo tekstu do przetworzenia.",
+  "Не удалось извлечь текст из PDF вовремя. Попробуйте выгрузить файл из банка ещё раз.": "Przekroczono czas odczytu tekstu PDF. Pobierz wyciąg z banku ponownie.",
+  "Загрузите месячную выписку одним PDF с выделяемым текстом, до 25 МБ и 100 страниц. Для CSV действует предел 128 КБ и 100 операций.": "Prześlij miesięczny wyciąg jako jeden plik PDF z tekstem do zaznaczenia, do 25 MB i 100 stron. Limit CSV to 128 KB i 100 operacji.",
+  "Выписка обрабатывается по частям. Можно закрыть окно и вернуться к ней в списке последних разборов.": "Wyciąg jest przetwarzany częściami. Możesz zamknąć okno i wrócić do niego na liście ostatnich importów.",
+  "Не удалось разобрать выписку целиком. Повторите загрузку. Операции пока не сохранены.": "Nie udało się odczytać całego wyciągu. Prześlij go ponownie. Żadna operacja nie została zapisana.",
+  "Страницы предпросмотра": "Strony podglądu",
+  "Страница {0} из {1}": "Strona {0} z {1}",
+  "Назад": "Wstecz",
+  "Вперёд": "Dalej",
+  "Отметить операции на этой странице": "Zaznacz operacje na tej stronie"
 }

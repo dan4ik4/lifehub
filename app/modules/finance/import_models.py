@@ -1,7 +1,7 @@
 """Owner-scoped CSV/PDF previews and shared durable import fingerprints."""
 from datetime import datetime
 from uuid import UUID, uuid4
-from sqlalchemy import ForeignKey, JSON, String, UniqueConstraint, Uuid
+from sqlalchemy import ForeignKey, JSON, String, Text, UniqueConstraint, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 from app.core.database import Base, UTCDateTime, utcnow
 
@@ -18,6 +18,8 @@ class CsvImport(Base):
     status: Mapped[str] = mapped_column(String(16), default='processing')
     rows: Mapped[list] = mapped_column(JSON, default=list)
     result: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    pdf_payload: Mapped[str | None] = mapped_column(Text, nullable=True)
+    pdf_claim_until: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
 
 

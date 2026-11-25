@@ -1217,4 +1217,12 @@ CREATE INDEX ix_reading_deltas_user_day ON reading_deltas (user_id, day);
 
 UPDATE alembic_version SET version_num='0021_results' WHERE alembic_version.version_num = '0020_dashboard_closed_days';
 
+-- Running upgrade 0021_results -> 0022_pdf_batches
+
+ALTER TABLE finance_csv_imports ADD COLUMN pdf_payload TEXT;
+
+ALTER TABLE finance_csv_imports ADD COLUMN pdf_claim_until TIMESTAMP WITH TIME ZONE;
+
+UPDATE alembic_version SET version_num='0022_pdf_batches' WHERE alembic_version.version_num = '0021_results';
+
 COMMIT;

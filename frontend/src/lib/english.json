@@ -1848,5 +1848,19 @@
   "Итоги собираются в воскресенье в 20:00": "Results are compiled on Sunday at 20:00",
   "Главное за неделю": "Weekly highlights",
   "Лучше прошлой недели": "Better than last week",
-  "Два дня недели": "Two days this week"
+  "Два дня недели": "Two days this week",
+  "Выберите файл CSV или PDF.": "Choose a CSV or PDF file.",
+  "Файл CSV больше 128 КБ.": "The CSV file exceeds 128 KB.",
+  "Файл PDF больше 25 МБ.": "The PDF exceeds 25 MB.",
+  "В PDF больше 100 страниц.": "The PDF has more than 100 pages.",
+  "Текст выписки превышает предел обработки PDF.": "The statement contains more text than can be processed.",
+  "Не удалось извлечь текст из PDF вовремя. Попробуйте выгрузить файл из банка ещё раз.": "Extracting text from the PDF timed out. Try downloading the statement again from your bank.",
+  "Загрузите месячную выписку одним PDF с выделяемым текстом, до 25 МБ и 100 страниц. Для CSV действует предел 128 КБ и 100 операций.": "Upload a monthly statement as a single PDF with selectable text, up to 25 MB and 100 pages. CSV files are limited to 128 KB and 100 transactions.",
+  "Выписка обрабатывается по частям. Можно закрыть окно и вернуться к ней в списке последних разборов.": "The statement is being processed in sections. You can close this window and return to it under recent imports.",
+  "Не удалось разобрать выписку целиком. Повторите загрузку. Операции пока не сохранены.": "The statement could not be fully read. Try uploading it again. No transactions have been saved.",
+  "Страницы предпросмотра": "Preview pages",
+  "Страница {0} из {1}": "Page {0} of {1}",
+  "Назад": "Back",
+  "Вперёд": "Next",
+  "Отметить операции на этой странице": "Select transactions on this page"
 }

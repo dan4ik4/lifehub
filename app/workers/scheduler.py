@@ -47,6 +47,7 @@ def run_once(
 def main():
     # Register every mapped class before the first ORM query; tables are migration-owned.
     from app import models  # noqa: F401
+    from app.workers.jobs.pdf_imports import pdf_loop
 
     settings = Settings()
     engine = create_engine(settings.database_url, pool_pre_ping=True)
@@ -55,6 +56,8 @@ def main():
     for sig in (signal.SIGINT, signal.SIGTERM):
         signal.signal(sig, lambda *_: stopped.set())
     logging.basicConfig(level=logging.INFO)
+    pdf_worker = threading.Thread(target=pdf_loop, args=(session_factory, settings, stopped), name='pdf-imports', daemon=True)
+    pdf_worker.start()
     next_cleanup_at = 0.0
     next_maintenance_at = 0.0
     try:
@@ -74,6 +77,8 @@ def main():
                 log.error("Worker tick failed; next tick will retry")
             stopped.wait(settings.worker_poll_seconds)
     finally:
+        stopped.set()
+        pdf_worker.join(timeout=2)
         engine.dispose()
 
 

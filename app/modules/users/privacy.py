@@ -217,7 +217,8 @@ def collect_data(db, user):
     for name in sorted(EXPORT_TABLES):
         table = Base.metadata.tables[name]
         columns = [
-            c for c in table.c if c.name not in ("user_id", "sync_token", "lease_token", "lease_until", "delivery_key", "last_error")
+            c for c in table.c if c.name not in ("user_id", "sync_token", "lease_token", "lease_until", "delivery_key", "last_error",
+                                                  "pdf_payload", "pdf_claim_until")
         ]
         rows = db.execute(select(*columns).where(table.c.user_id == user.id)).mappings().all()
         result[name] = jsonable_encoder([dict(r) for r in rows], custom_encoder={__import__("decimal").Decimal: str})
