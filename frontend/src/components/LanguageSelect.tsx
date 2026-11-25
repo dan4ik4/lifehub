@@ -22,6 +22,7 @@ export function LanguageSelect({ disabled = false }: { disabled?: boolean }) {
       disabled={disabled} aria-describedby={failed ? `${id}-error` : undefined}>
       <option value="ru" lang="ru">Русский</option>
       <option value="en" lang="en">English</option>
+      <option value="pl" lang="pl">Polski</option>
     </select>
     {failed && <span className="field-error" id={`${id}-error`} role="alert">
       {t('Не удалось сохранить язык на этом устройстве.')}

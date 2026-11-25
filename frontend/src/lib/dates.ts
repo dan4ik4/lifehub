@@ -1,4 +1,4 @@
-import { t, locale, language } from './language';
+import { t, locale } from './language';
 const pad = (value: number) => String(value).padStart(2, '0');
 
 export function parts(value: Date | string, timezone: string) {
@@ -52,8 +52,8 @@ export function shortDate(value: string, timezone: string) {
 export function minutesOfDay(value: string, timezone: string) {
   const p = parts(value, timezone); return Number(p.hour) * 60 + Number(p.minute);
 }
+const pluralRules = new Intl.PluralRules(locale);
 export function plural(count: number, forms: [string, string, string]) {
-  if (language === 'en') return `${count} ${forms[count === 1 ? 0 : 2]}`;
-  const last = count % 10, tens = count % 100;
-  return `${count} ${forms[tens >= 11 && tens <= 14 ? 2 : last === 1 ? 0 : last >= 2 && last <= 4 ? 1 : 2]}`;
+  const category = pluralRules.select(count);
+  return `${count} ${forms[category === 'one' ? 0 : category === 'few' ? 1 : 2]}`;
 }

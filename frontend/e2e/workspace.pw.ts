@@ -150,7 +150,7 @@ test('completed tasks switch between the selected day and history', async ({ pag
 });
 
 
-test('finance groups, English preference and browser session survive navigation', async ({ page, context }) => {
+test('finance groups, language preferences and browser session survive navigation', async ({ page, context, browser }) => {
   const cookies = (await context.cookies()).filter(cookie => /lifehub_(access|refresh)_/.test(cookie.name));
   expect(cookies).toHaveLength(2);
   expect(cookies.every(cookie => cookie.httpOnly)).toBeTruthy();
@@ -178,6 +178,40 @@ test('finance groups, English preference and browser session survive navigation'
   await expect(page.getByRole('heading', {name:'Subscriptions',exact:true})).toBeVisible();
   await page.reload();
   await expect(page.getByRole('heading', {name:'Subscriptions',exact:true})).toBeVisible();
+
+  await page.getByRole('button', {name:'Profile settings', exact:true}).click();
+  await page.getByLabel('Interface language').selectOption('pl');
+  await expect(page.locator('html')).toHaveAttribute('lang','pl');
+  await expect(page.getByRole('heading', {name:'Subskrypcje',exact:true})).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole('heading', {name:'Subskrypcje',exact:true})).toBeVisible();
+
+  await page.setViewportSize({width:375,height:850});
+  for (const [route, heading] of [
+    ['/planning', 'Mój dzień'],
+    ['/modules/health/sleep','Sen'],
+    ['/modules/books/diary','Dziennik'],
+    ['/modules/finance/subscriptions','Subskrypcje'],
+  ]) {
+    await page.goto(route);
+    await expect(page.getByRole('heading', {name:heading,exact:true}).first()).toBeVisible();
+    const horizontalOverflow = await page.locator('.app-main').evaluate(node => node.scrollWidth-node.clientWidth);
+    expect(horizontalOverflow, route).toBeLessThanOrEqual(1);
+  }
+  await page.goto('/privacypolicy-pl.html');
+  await expect(page.getByRole('heading', {name:'Dane dotyczące zdrowia'})).toBeVisible();
+
+  const signedOut = await browser.newPage();
+  try {
+    await signedOut.goto(new URL('/', page.url()).href);
+    await signedOut.getByLabel('Язык интерфейса').selectOption('pl');
+    await expect(signedOut.getByLabel('Adres e-mail', {exact:true})).toBeVisible();
+    await expect(signedOut.getByRole('button', {name:'Zaloguj się', exact:true})).toBeVisible();
+    await signedOut.reload();
+    await expect(signedOut.getByLabel('Język interfejsu')).toHaveValue('pl');
+  } finally {
+    await signedOut.close();
+  }
 });
 
 test('manual book addition can open a shelf match or save a separate edition', async ({ page }) => {
