@@ -55,13 +55,14 @@ export async function enablePush() {
     throw error;
   }
 }
-export async function disablePush() {
+export async function disablePush(signal?: AbortSignal) {
   const subscription = await currentPush();
-  if (!subscription) return;
+  if (!subscription || signal?.aborted) return;
   try {
     await api("/notifications/push/subscriptions", {
       method: "DELETE",
       body: { endpoint: subscription.endpoint },
+      signal,
     });
   } finally {
     await subscription.unsubscribe();

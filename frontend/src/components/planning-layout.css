@@ -33,9 +33,6 @@
 .life-free-slot.busy {background:#e3e8e3;color:#52645a}
 .life-free-slot.past {background:#edf0eb;color:#839087}
 .life-free-slot.short {background:#edf1ed;color:#617167;border:1px dashed #cedbd1}
-.life-free-bottom {display:grid;grid-template-columns:1.57fr 1fr;gap:16px}
-.life-slot-list {display:grid;grid-template-columns:1fr 1.8fr auto;gap:14px;align-items:center;text-align:left;width:100%;min-height:46px;border:0;border-bottom:1px solid var(--life-subtle);background:none;color:var(--life-text);font-size:14px}
-.life-slot-list small {background:var(--life-tint);border-radius:999px;padding:3px 8px;color:var(--life-primary);font-weight:800}
 .life-share textarea {width:100%;resize:vertical;min-height:130px;border-radius:16px;border:0;background:var(--life-bg);padding:14px;margin:0 0 12px}
 .life-slot-actions {display:flex;gap:12px;flex-wrap:wrap}
 .life-today-progress {display:flex;align-items:center;gap:15px}
@@ -45,7 +42,6 @@
 @media(max-width:760px){
   .life-free-header {align-items:start;flex-direction:column;gap:10px}
   .life-free-header h1 {font-size:30px}
-  .life-free-bottom {grid-template-columns:1fr}
   .life-nearest .button {font-size:12px;padding:6px}
   .life-free-summary .life-card {padding:15px}
   .life-free-summary h2 {font-size:17px}

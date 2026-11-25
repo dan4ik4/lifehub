@@ -23,3 +23,9 @@
 .life-goals[data-view=today] .gh-habit { grid-template-areas: "check title edit"; }
 .life-habit-statistics { background: white; border-radius: 24px; padding: 20px 0; }
 .life-habit-statistics .gh-stat-body { max-width: 720px; margin: 0 auto; }
+
+.gh-goal-habit {display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:4px 10px}
+.gh-goal-habit .gh-link {text-align:left;overflow-wrap:anywhere}
+.gh-goal-habit .gh-link svg {flex:none}
+.gh-goal-habit .button {min-height:44px;padding:6px 10px;font-size:12px}
+.gh-goal-habit small {grid-column:1/-1;color:var(--life-muted);line-height:1.5}

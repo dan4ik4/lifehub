@@ -5,6 +5,29 @@ import { api, errorMessage, isDemo } from "../lib/api";
 import type { Notify, User } from "../lib/types";
 import { Modal } from "./ui";
 import {AssistantPreferences} from "./AssistantPreferences";
+async function prepareAvatar(file: File): Promise<string> {
+  const url = URL.createObjectURL(file);
+  try {
+    const image = new Image();
+    image.src = url;
+    await image.decode();
+    const scale = Math.min(1, 512 / Math.max(image.naturalWidth, image.naturalHeight));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+    canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error();
+    context.fillStyle = "#fff";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL("image/jpeg", 0.88);
+  } catch {
+    throw new Error(t("Не удалось открыть фото. Попробуйте JPG, PNG или WebP."));
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
 type ExportJob = {
   id: string;
   format: "json" | "csv";
@@ -110,24 +133,15 @@ export function PrivacySettings({
           <input
             className="sr-only"
             type="file"
-            accept="image/jpeg,image/png,image/webp"
+            accept="image/*"
             disabled={demo || !!busy}
             onChange={async (e) => {
               const file = e.target.files?.[0];
               if (!file) return;
               setError("");
-              if (file.size > 650000) {
-                setError(t("Выберите фото меньше 650 КБ."));
-                return;
-              }
               setBusy("avatar");
               try {
-                const data = await new Promise<string>((resolve, reject) => {
-                  const reader = new FileReader();
-                  reader.onload = () => resolve(String(reader.result));
-                  reader.onerror = reject;
-                  reader.readAsDataURL(file);
-                });
+                const data = await prepareAvatar(file);
                 await api("/users/me/avatar", {
                   method: "POST",
                   body: { data },
@@ -169,7 +183,7 @@ export function PrivacySettings({
         )}
       </div>
       <p className="settings-help">
-        {t("JPG, PNG или WebP до 650 КБ. Фото доступно только в вашем аккаунте.")}
+        {t("Фото уменьшается автоматически и доступно только в вашем аккаунте.")}
       </p>
       <div className="settings-divider" />
       <h3>{t("Копия ваших данных")}</h3>

@@ -201,3 +201,132 @@ test('manual book addition can open a shelf match or save a separate edition', a
   expect((await saved).status()).toBe(201);
   await expect(editor).toHaveCount(0);
 });
+
+test('mobile profile opens in view mode and resizes a large avatar before upload', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 760 });
+  await page.getByRole('navigation', { name: 'Мобильная навигация' }).getByRole('button', { name: 'Профиль', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Настройки' });
+  await expect(dialog.locator('.settings-profile-overview').getByText('Александр', { exact: true })).toBeVisible();
+  await expect(dialog.getByLabel('Как вас называть')).toHaveCount(0);
+  await dialog.getByRole('button', { name: 'Редактировать профиль' }).click();
+  await expect(dialog.getByLabel('Как вас называть')).toHaveValue('Александр');
+  await dialog.getByRole('button', { name: 'Отмена', exact: true }).click();
+
+  const data = await page.evaluate(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = 600;
+    const context = canvas.getContext('2d')!;
+    const image = context.createImageData(600, 600);
+    for (let index = 0; index < image.data.length; index += 4) {
+      image.data[index] = Math.random() * 256;
+      image.data[index + 1] = Math.random() * 256;
+      image.data[index + 2] = Math.random() * 256;
+      image.data[index + 3] = 255;
+    }
+    context.putImageData(image, 0, 0);
+    return canvas.toDataURL().split(',')[1];
+  });
+  const buffer = Buffer.from(data, 'base64');
+  expect(buffer.byteLength).toBeGreaterThan(650_000);
+  const upload = page.waitForResponse(response => response.url().endsWith('/users/me/avatar') && response.request().method() === 'POST');
+  await dialog.locator('input[type=file]').setInputFiles({ name: 'large-avatar.png', mimeType: 'image/png', buffer });
+  expect((await upload).ok()).toBeTruthy();
+  await expect(dialog.getByRole('img', { name: 'Ваше фото профиля' })).toBeVisible();
+});
+
+test('opening and closing Luna preserves the layout and scroll position', async ({ page }) => {
+  await page.goto('/modules/health');
+  const heading = page.locator('.product-title h1');
+  await expect(heading).toBeVisible();
+  await expect(page.locator('.hub-health-metric')).toHaveCount(4);
+  const before = await heading.boundingBox();
+  const icon = page.locator('.hub-health-metric .life-metric-heading>span').first();
+  const badgeBox = (await icon.boundingBox())!;
+  const iconBox = (await icon.locator('svg').boundingBox())!;
+  expect(Math.abs(iconBox.x + iconBox.width / 2 - badgeBox.x - badgeBox.width / 2)).toBeLessThanOrEqual(1);
+  const scrollBefore = await page.evaluate(() => window.scrollY);
+  await page.getByRole('button', { name: 'Открыть чат с помощником' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Помощник', exact: true });
+  await expect(dialog).toBeVisible();
+  expect((await heading.boundingBox())?.x).toBe(before?.x);
+  expect(await page.evaluate(() => window.scrollY)).toBe(scrollBefore);
+  await dialog.getByRole('button', { name: 'Закрыть окно' }).click();
+  await expect(dialog).toHaveCount(0);
+  expect((await heading.boundingBox())?.x).toBe(before?.x);
+});
+
+test('a goal can record and update its linked numeric habit on a phone', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 760 });
+  await page.goto('/modules/goals_habits/goals');
+  await page.getByRole('button', { name: 'Своя цель' }).click();
+  let dialog = page.getByRole('dialog');
+  await dialog.getByLabel('Чего хотите достичь?').fill('Накопить 10000 zł');
+  await dialog.getByLabel('Как измерять результат').selectOption('number');
+  await dialog.getByLabel('Хочу достичь').fill('10000');
+  await dialog.getByLabel('Единица', { exact: true }).fill('zł');
+  await dialog.getByRole('button', { name: 'Сохранить', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+
+  const goal = page.locator('.gh-goal').filter({ hasText: 'Накопить 10000 zł' });
+  await goal.getByRole('button', { name: 'Привычка для этой цели' }).click();
+  dialog = page.getByRole('dialog', { name: 'Новая привычка' });
+  await dialog.getByLabel('Что будете делать?').fill('Отложить 100 zł');
+  await expect(dialog.getByLabel('Как отмечать')).toHaveValue('count');
+  await expect(dialog.getByLabel('Единица', { exact: true })).toHaveValue('zł');
+  await expect(dialog.getByRole('checkbox', { name: 'Учитывать отмеченное количество в прогрессе цели' })).toBeChecked();
+  await dialog.getByLabel('План на день').fill('100');
+  const save = dialog.getByRole('button', { name: 'Сохранить', exact: true });
+  await page.evaluate(() => {
+    const viewport = window.visualViewport!;
+    Object.defineProperty(viewport, 'height', { configurable: true, value: 300 });
+    viewport.dispatchEvent(new Event('resize'));
+  });
+  await expect(dialog).toHaveAttribute('data-keyboard-open', '');
+  await save.scrollIntoViewIfNeeded();
+  const saveRect = await save.boundingBox();
+  expect(saveRect!.y + saveRect!.height).toBeLessThanOrEqual(300);
+  await save.click();
+  await expect(dialog).toHaveCount(0);
+  await page.evaluate(() => {
+    Reflect.deleteProperty(window.visualViewport!, 'height');
+    window.visualViewport!.dispatchEvent(new Event('resize'));
+  });
+
+  const mark = goal.getByRole('button', { name: /Отметить за/ });
+  await mark.click();
+  dialog = page.getByRole('dialog', { name: 'Отложить 100 zł' });
+  await expect(dialog.getByLabel('Всего за день', { exact: false })).toHaveValue('100');
+  await dialog.getByRole('button', { name: 'Сохранить', exact: true }).click();
+  await expect(goal.locator('.gh-goal-amount')).toContainText('1%');
+  await mark.click();
+  await dialog.getByLabel('Всего за день', { exact: false }).fill('200');
+  await dialog.getByRole('button', { name: 'Сохранить', exact: true }).click();
+  await expect(goal.locator('.gh-goal-amount')).toContainText('2%');
+  await page.reload();
+  await expect(goal.locator('.gh-goal-amount')).toContainText('2%');
+});
+
+test('logout returns to the sign-in form even when the server does not answer', async ({ page, context }) => {
+  await page.route('**/api/v1/auth/logout', () => {});
+  await page.locator('.life-rail-avatar:visible').first().click();
+  await page.getByRole('button', { name: 'Выйти из аккаунта', exact: true }).click();
+  const email = page.getByLabel('Электронная почта', { exact: true });
+  await expect(email).toBeVisible({ timeout: 8_000 });
+  await page.reload();
+  await expect(email).toBeVisible();
+
+  await page.unroute('**/api/v1/auth/logout');
+  await page.setViewportSize({ width: 375, height: 760 });
+  await email.fill('overview-qa@example.com');
+  await page.getByLabel('Пароль', { exact: true }).fill('Local-QA-Only-9182!');
+  await page.getByRole('button', { name: 'Войти', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Мобильная навигация' }).getByRole('button', { name: 'Профиль', exact: true }).click();
+  const logout = page.waitForResponse(response => response.url().endsWith('/auth/logout') && response.request().method() === 'POST');
+  await page.getByRole('button', { name: 'Выйти из аккаунта', exact: true }).click();
+  const response = await logout;
+  expect(response.status()).toBe(204);
+  expect((await response.headerValues('set-cookie')).filter(value => /Max-Age=0/.test(value))).toHaveLength(2);
+  await expect(email).toBeVisible();
+  const storage = await context.storageState();
+  expect(storage.origins.flatMap(origin => origin.localStorage).some(item => item.name === 'lifehub.session.v1')).toBeFalsy();
+});

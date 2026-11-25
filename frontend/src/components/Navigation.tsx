@@ -131,7 +131,7 @@ export function Navigation({user,path,navigate,onSettings,onConnections,onSearch
       <button className="hub-mobile-add" onClick={()=>openQuickAdd()} aria-label={t("Добавить")}><Plus size={24}/></button>
       <button aria-current={!['home','plans'].includes(active.id)?'page':undefined} aria-expanded={open} onClick={()=>setOpen(true)}><Grid2X2 size={22}/><span>{t("Модули")}</span></button>
       <button aria-haspopup="dialog" aria-label={t("Открыть чат с помощником")} onClick={()=>openAssistant()}><Sparkles size={22}/><span>{t("ИИ")}</span></button>
-      <button onClick={onSettings}><UserRound size={22}/><span>{t("Профиль")}</span></button>
+      <button onClick={onSettings} aria-haspopup="dialog"><UserRound size={22}/><span>{t("Профиль")}</span></button>
     </nav>
     {open && <dialog className="life-module-sheet" ref={sheet} aria-labelledby="life-module-title" onCancel={e=>{e.preventDefault();setOpen(false);}}
       onClick={e=>{if(e.target===e.currentTarget)setOpen(false);}}>

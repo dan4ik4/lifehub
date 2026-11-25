@@ -163,17 +163,18 @@ export function getSessionGeneration(): number {
   return epoch;
 }
 
-export async function logoutSession(): Promise<void> {
+export async function logoutSession(signal = AbortSignal.timeout(5000)): Promise<void> {
   const current = getSession();
   if (!current || current.demo) return;
   const expectedEpoch = epoch;
   const revoke = async () => {
     const latest = getSession();
+    signal.throwIfAborted();
     if (!latest || epoch !== expectedEpoch) throw changedSession();
-    await api('/auth/logout', { method: 'POST', body: { refresh_token: latest.tokens.refresh_token } });
+    await request('/auth/logout', { method: 'POST', body: { refresh_token: latest.tokens.refresh_token }, signal }, latest.tokens);
   };
   if (typeof navigator !== 'undefined' && navigator.locks) {
-    await navigator.locks.request('lifehub.auth.refresh', revoke);
+    await navigator.locks.request('lifehub.auth.refresh', {signal}, revoke);
   } else await revoke();
 }
 
@@ -271,7 +272,13 @@ const messages: Record<string, string> = {
   catalog_unavailable: t("Каталог книг сейчас недоступен. Книгу можно добавить вручную."),
   export_not_ready: t("Копия данных ещё готовится."),
   export_expired: t("Срок скачивания истёк. Закажите новую копию."),
-  invalid_image: t("Нужно фото JPG, PNG или WebP до 650 КБ и 16 мегапикселей."),
+  invalid_image: t("Не удалось загрузить фото. Выберите другое изображение."),
+  pdf_too_large: t("Файл PDF больше 15 МБ. Выберите выписку за меньший период."),
+  pdf_too_many_pages: t("В PDF больше 30 страниц. Выберите выписку за меньший период."),
+  pdf_content_too_large: t("В PDF слишком много текста для одного разбора. Выберите выписку за меньший период."),
+  pdf_extraction_timeout: t("Чтение PDF заняло слишком много времени. Выберите выписку за меньший период."),
+  pdf_encrypted: t("PDF защищён паролем. Сохраните копию без пароля и загрузите её."),
+  pdf_no_text: t("На одной из страниц нет читаемого текста. Нужен PDF из банка с выделяемым текстом; сканы пока не поддерживаются."),
   ai_limit: t("Лимит запросов к ИИ на сегодня исчерпан."),
   system_list_locked: t("Список «Покупки» нельзя переименовать или удалить."),
   already_completed: t("Задача уже выполнена. Обновите список."),

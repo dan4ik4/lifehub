@@ -149,7 +149,7 @@ body {background:var(--hub-bg);color:var(--hub-ink)}
 .hub-health-metric {text-align:left;padding:18px;border:1px solid var(--hub-line);background:white;border-radius:17px;color:var(--hub-ink);box-shadow:var(--hub-shadow);min-width:0}
 .hub-health-metric:hover {background:#f4faf5}
 .hub-health-metric>span {display:flex;align-items:center;gap:8px;color:var(--hub-accent);font-size:14px;font-weight:700}
-.hub-health-metric>span svg:last-child {margin-left:auto;flex:none}
+.hub-health-metric>.life-metric-heading>svg {margin-left:auto;flex:none}
 .hub-health-metric>strong {display:block;margin:18px 0 6px;font-size:clamp(22px,3vw,32px);letter-spacing:-.035em;overflow-wrap:anywhere}
 .hub-health-metric>small {font-size:12px;color:var(--hub-muted)}
 .hub-steps-history {display:grid}

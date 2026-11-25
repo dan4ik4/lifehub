@@ -10,6 +10,7 @@ from sqlalchemy import select
 from app.core.database import utcnow
 from app.core.errors import AppError
 from app.modules.finance.import_models import CsvImport
+from app.modules.finance.pdf_extract import MAX_BYTES, MAX_PAGES, MAX_REQUEST_BYTES
 from app.modules.finance.pdf_import import PdfMapping, PdfUpload, generate_pdf_mapping, parse_pdf
 from app.modules.planning.command_models import PlanningAiUsage
 from tests.test_csv_import import BASE, count, selection, setup, upload
@@ -139,7 +140,7 @@ def test_all_pdf_lines_must_be_accounted_for(client, app, db, make_user, auth_he
 
 @pytest.mark.parametrize(('raw', 'code'), [(b'not a pdf', 'invalid_pdf'), (b'%PDF-broken', 'invalid_pdf'),
     (make_pdf(encrypted=True), 'pdf_encrypted'), (make_pdf([[]]), 'pdf_no_text'),
-    (make_pdf([TEXT, []]), 'pdf_no_text'), (make_pdf([['page']] * 16), 'pdf_too_large')])
+    (make_pdf([TEXT, []]), 'pdf_no_text'), (make_pdf([['page']] * (MAX_PAGES + 1)), 'pdf_too_many_pages')])
 def test_unreadable_encrypted_and_oversized_pdf_before_provider(client, app, db, make_user, auth_headers, raw, code):
     _, h = prepare(client, app, make_user, auth_headers)
     provider = MagicMock(side_effect=pdf_mapping)
@@ -207,22 +208,24 @@ def test_pdf_worker_timeout_and_size_limit(monkeypatch):
     import subprocess
     body = PdfUpload(data=base64.b64encode(make_pdf()).decode(), account='test', currency='PLN', consent=True)
     monkeypatch.setattr(subprocess, 'run', MagicMock(side_effect=subprocess.TimeoutExpired('worker', 20)))
-    with pytest.raises(AppError):
+    with pytest.raises(AppError) as timeout:
         parse_pdf(body)
-    with pytest.raises(AppError):
-        parse_pdf(body.model_copy(update={'data': base64.b64encode(b'%PDF-' + b' ' * 5_000_000).decode()}))
+    assert timeout.value.code == 'pdf_extraction_timeout'
+    with pytest.raises(AppError) as oversized:
+        parse_pdf(body.model_copy(update={'data': base64.b64encode(b'%PDF-' + b' ' * MAX_BYTES).decode()}))
+    assert oversized.value.code == 'pdf_too_large'
 
 
 def test_pdf_request_limit_is_specific_and_rejects_chunked_oversize(client, app, make_user, auth_headers):
     _, h = prepare(client, app, make_user, auth_headers)
-    # Valid PDF > old global 1 MiB request limit, with legal trailing padding.
-    response = pdf_upload(client, h, raw=make_pdf() + b'\n%' + b' ' * 800_000)
+    # Large statement with legal trailing padding and more than the original 15 pages.
+    response = pdf_upload(client, h, raw=make_pdf([TEXT] + [['Statement information']] * 15) + b'\n%' + b' ' * 5_100_000)
     assert response.status_code == 200, response.text
-    assert client.post(PDF_BASE, headers={**h, 'Content-Length': '7000001'}, content=b'{}').status_code == 413
+    assert client.post(PDF_BASE, headers={**h, 'Content-Length': str(MAX_REQUEST_BYTES + 1)}, content=b'{}').status_code == 413
     assert client.post(BASE, headers={**h, 'Content-Length': '1048577'}, content=b'{}').status_code == 413
     def chunks():
-        yield b' ' * 4_000_000
-        yield b' ' * 4_000_000
+        yield b' ' * (MAX_REQUEST_BYTES // 2)
+        yield b' ' * (MAX_REQUEST_BYTES // 2 + 1)
     assert client.post(PDF_BASE, headers=h, content=chunks()).status_code == 413
 
 

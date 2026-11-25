@@ -8,6 +8,7 @@ import './settings.css';
 import { LanguageSelect } from './LanguageSelect';
 import { PushSettings } from './PushSettings';
 import { PrivacySettings } from './PrivacySettings';
+import { Avatar } from './Avatar';
 
 type Tab = 'profile' | 'connections' | 'plan';
 interface SettingsProps {
@@ -51,6 +52,7 @@ function PasswordInput({ id, value, onChange, label, autoComplete, description, 
 
 export function Settings({ user, onUserChange, onClose, onLogout, notify, initialTab = 'profile' }: SettingsProps) {
   const [tab, setTab] = useState<Tab>(initialTab);
+  const [editingProfile, setEditingProfile] = useState(false);
   const [name, setName] = useState(user.name);
   const [weightUnit,setWeightUnit]=useState(user.weight_unit||'kg');
   const [timezone, setTimezone] = useState(user.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone);
@@ -97,7 +99,12 @@ export function Settings({ user, onUserChange, onClose, onLogout, notify, initia
     return () => window.clearInterval(interval);
   }, [challenge]);
 
-  useEffect(() => { setName(user.name); setTimezone(user.timezone || 'UTC'); }, [user.name, user.timezone]);
+  const resetProfile = () => {
+    setName(user.name);
+    setTimezone(user.timezone || 'UTC');
+    setWeightUnit(user.weight_unit || 'kg');
+  };
+  useEffect(resetProfile, [user.name, user.timezone, user.weight_unit]);
 
   function setError(section: string, value = '') { setErrors(previous => ({ ...previous, [section]: value })); }
 
@@ -150,6 +157,7 @@ export function Settings({ user, onUserChange, onClose, onLogout, notify, initia
     try {
       const updated = await api<User>('/users/me', { method: 'PATCH', body: { name: name.trim(), timezone: timezone.trim(), weight_unit:weightUnit } });
       onUserChange(updated);
+      setEditingProfile(false);
       notify(t("Профиль сохранён"), 'success');
     } catch (error) { setError('profile', errorMessage(error)); }
     finally { if (alive.current) setBusy(null); }
@@ -311,7 +319,7 @@ export function Settings({ user, onUserChange, onClose, onLogout, notify, initia
     <div className="settings-layout">
       <aside className="settings-sidebar">
         <div className="settings-person">
-          <span className="settings-avatar" aria-hidden="true">{(user.name || user.email).trim().slice(0, 1).toUpperCase()}</span>
+          <span className="settings-avatar" aria-hidden="true"><Avatar user={user}/></span>
           <div><strong>{user.name || t("Ваш профиль")}</strong><span className="settings-person-plan">{planName}</span></div>
         </div>
         <div className="settings-tabs" role="tablist" aria-label={t("Разделы настроек")}>
@@ -324,12 +332,19 @@ export function Settings({ user, onUserChange, onClose, onLogout, notify, initia
         {tab === 'profile' && <>
           <div className="settings-heading"><h2>{t("Профиль и безопасность")}</h2></div>
           {demo && <div className="settings-demo-note"><Sparkles size={16} /><span>{t("Вы в деморежиме. Изменения остаются в этом браузере.")}</span></div>}
-          <form onSubmit={saveProfile} className="settings-profile-form" aria-busy={busy === 'profile'}>
+          {!editingProfile ? <div className="settings-profile-overview">
+            <dl>
+              <div><dt>{t("Имя")}</dt><dd>{user.name || '—'}</dd></div>
+              <div><dt>{t("Часовой пояс")}</dt><dd>{user.timezone}</dd></div>
+              <div><dt>{t("Единица веса")}</dt><dd>{user.weight_unit === 'lb' ? t("Фунты") : t("Килограммы")}</dd></div>
+            </dl>
+            <button className="button secondary" type="button" onClick={() => {resetProfile();setError('profile');setEditingProfile(true);}}>{t("Редактировать профиль")}</button>
+          </div> : <form onSubmit={saveProfile} className="settings-profile-form" aria-busy={busy === 'profile'}>
             <div className="field"><label htmlFor="settings-name">{t("Как вас называть")}</label><input className="input" id="settings-name" disabled={!!busy} value={name} onChange={event => setName(event.target.value)} autoComplete="name" maxLength={50} required placeholder={t("Ваше имя")} /></div>
             <div className="field"><label htmlFor="settings-timezone">{t("Часовой пояс")}</label><input className="input" id="settings-timezone" disabled={!!busy} list="settings-timezones" value={timezone} onChange={event => setTimezone(event.target.value)} autoComplete="off" required aria-describedby="settings-timezone-help" /><datalist id="settings-timezones">{['Europe/Warsaw', 'Europe/Moscow', 'Europe/Kyiv', 'Europe/Berlin', 'Europe/London', 'Europe/Paris', 'Asia/Tbilisi', 'Asia/Almaty', 'Asia/Dubai', 'America/New_York', 'America/Los_Angeles', 'UTC'].map(zone => <option key={zone} value={zone} />)}</datalist><span className="settings-help" id="settings-timezone-help">{t("Используется для событий и напоминаний.")}</span></div>
             {errors.profile && <p className="field-error" role="alert">{errors.profile}</p>}
-            <div className="field"><label htmlFor="weight-unit">{t("Единица веса")}</label><select id="weight-unit" className="input" value={weightUnit} onChange={e=>setWeightUnit(e.target.value as "kg"|"lb")}><option value="kg">{t("Килограммы")}</option><option value="lb">{t("Фунты")}</option></select></div><div className="settings-form-actions"><button className="button primary" type="submit" disabled={!!busy || (name.trim() === user.name && timezone === user.timezone && weightUnit === (user.weight_unit||"kg"))}>{busy === 'profile' ? <Loader2 size={16} className="settings-spin" /> : <Check size={16} />}{t("Сохранить изменения")}</button></div>
-          </form>
+            <div className="field"><label htmlFor="weight-unit">{t("Единица веса")}</label><select id="weight-unit" className="input" value={weightUnit} onChange={e=>setWeightUnit(e.target.value as "kg"|"lb")}><option value="kg">{t("Килограммы")}</option><option value="lb">{t("Фунты")}</option></select></div><div className="settings-form-actions settings-wrap"><button className="button secondary" type="button" disabled={!!busy} onClick={() => setEditingProfile(false)}>{t("Отмена")}</button><button className="button primary" type="submit" disabled={!!busy || (name.trim() === user.name && timezone === user.timezone && weightUnit === (user.weight_unit||"kg"))}>{busy === 'profile' ? <Loader2 size={16} className="settings-spin" /> : <Check size={16} />}{t("Сохранить изменения")}</button></div>
+          </form>}
 
           <LanguageSelect disabled={!!busy} />
           <PushSettings /><PrivacySettings user={user} onLogout={onLogout} notify={notify} /><div className="settings-section-divider" />

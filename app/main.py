@@ -17,6 +17,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     from app.api.v1.router import router
     from app.modules.auth.email import build_email_sender
     from app.modules.auth.oauth import OAuthTokenVerifier
+    from app.modules.finance.pdf_extract import MAX_REQUEST_BYTES
 
     settings = settings or Settings()
     engine, session_factory = build_database(settings.database_url)
@@ -52,7 +53,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def request_metadata(request: Request, call_next):
         request.state.trace_id = uuid4().hex
         length = request.headers.get('content-length')
-        body_limit = 7_000_000 if request.url.path == '/api/v1/finance/pdf-imports' and request.method == 'POST' else 1_048_576
+        pdf_upload = request.url.path.rstrip('/') == '/api/v1/finance/pdf-imports' and request.method == 'POST'
+        body_limit = MAX_REQUEST_BYTES if pdf_upload else 1_048_576
         if length:
             try:
                 too_large = int(length) > body_limit or int(length) < 0
@@ -60,7 +62,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 too_large = True
             if too_large:
                 return error_response(request, 413, 'request_too_large', 'Файл превышает допустимый размер запроса.')
-        if request.url.path == '/api/v1/finance/pdf-imports' and request.method == 'POST':
+        if pdf_upload:
             chunks, size = [], 0
             async for chunk in request.stream():
                 size += len(chunk)

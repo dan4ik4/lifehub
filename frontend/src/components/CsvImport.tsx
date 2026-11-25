@@ -31,12 +31,22 @@ export function CsvImportDialog({onClose,modulesAllowed,missingPlanning=false}:{
   async function prepare(){
     if(!file||busy||!consent)return;setBusy(true);setError('');
     try{
-      if(!/\.(csv|pdf)$/i.test(file.name)||file.size>(isPdf?5000000:128000))throw new Error(t("Выберите CSV до 128 КБ или PDF до 5 МБ. В одном файле может быть до 100 операций."));
+      if(!/\.(csv|pdf)$/i.test(file.name))throw new Error(t("Выберите файл CSV или PDF."));
+      if(isPdf&&file.size>15_000_000)throw new Error(t("Файл PDF больше 15 МБ. Выберите выписку за меньший период."));
+      if(!isPdf&&file.size>128_000)throw new Error(t("Файл CSV больше 128 КБ. Выберите выписку за меньший период."));
       const data=await new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result).split(',')[1]);reader.onerror=()=>reject(new Error(t("Не удалось прочитать файл.")));reader.readAsDataURL(file);});
       key.current??=crypto.randomUUID();
       const result=await api<Preview>(isPdf?'/finance/pdf-imports':'/finance/csv-imports',{method:'POST',headers:{'Idempotency-Key':key.current},body:{data,account:account.trim(),currency,...(isPdf?{}:{encoding}),consent:true}});
       if(alive.current){choose(result);setConsent(false);key.current=null;void reload();}
-    }catch(e){if(e instanceof ApiError&&['model_error','invalid_csv','invalid_pdf','csv_failed'].includes(e.code))key.current=null;if(alive.current){setError(errorMessage(e));void reload();}}
+    }catch(e){
+      let message=errorMessage(e);
+      if(e instanceof ApiError){
+        if(['model_error','invalid_csv','invalid_pdf','csv_failed'].includes(e.code))key.current=null;
+        if(isPdf&&e.status===413)message=t("Сервер отклонил размер PDF. Попробуйте выписку за меньший период.");
+        if(isPdf&&e.code==='model_error')message=t("Не удалось разобрать PDF целиком. Попробуйте выписку за меньший период.");
+      }
+      if(alive.current)setError(message);
+    }
     finally{if(alive.current)setBusy(false);}
   }
   function change(index:number,changes:Partial<Draft>){setRows(old=>old.map((r,i)=>i===index?{...r,...changes}:r));}
@@ -63,7 +73,7 @@ export function CsvImportDialog({onClose,modulesAllowed,missingPlanning=false}:{
         {!isPdf&&<label>{t("Кодировка CSV")}<select value={encoding} disabled={busy} onChange={e=>{setEncoding(e.target.value);editRequest();}}><option value="utf-8-sig">UTF-8</option><option value="cp1250">{t("Windows-1250 (польский)")}</option><option value="cp1251">{t("Windows-1251 (кириллица)")}</option><option value="utf-16">UTF-16</option></select></label>}
         <label>{t("Файл")}<input type="file" accept=".csv,.pdf,text/csv,application/pdf" disabled={busy} onChange={e=>{setFile(e.target.files?.[0]??null);setConsent(false);editRequest();}}/></label>
       </div>
-      <p className="csv-help">{t("До 100 операций. CSV: до 128 КБ, разделитель ; , или табуляция. PDF: до 5 МБ, 15 страниц, с выделяемым текстом, без пароля; сканы пока не поддерживаются. Для повторных выписок используйте то же название счёта. Валюта должна совпадать с валютой счёта.")}</p>
+      <p className="csv-help">{t("До 100 операций. CSV: до 128 КБ, разделитель ; , или табуляция. PDF: до 15 МБ, 30 страниц, с выделяемым текстом, без пароля; сканы пока не поддерживаются. Для повторных выписок используйте то же название счёта. Валюта должна совпадать с валютой счёта.")}</p>
       <label className="csv-consent"><input type="checkbox" checked={consent} disabled={busy} onChange={e=>setConsent(e.target.checked)}/>{t("Разрешаю передать текст выбранной выписки в OpenAI для распознавания операций и категорий. Предпросмотр сохраняется в Life Hub на 24 часа; подтверждённые операции — в моих финансах.")}</label>
       <button className="button primary" disabled={busy||!modulesAllowed||!consent||!file||!account.trim()||!/^[A-Z]{3}$/.test(currency)} onClick={()=>void prepare()}>{busy?<LoaderCircle size={16} className="spinner"/>:<FileSpreadsheet size={16}/>}{t("Разобрать выписку")}</button>
       {error&&<p className="field-error" role="alert">{error}</p>}

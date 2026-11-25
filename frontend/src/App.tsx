@@ -78,17 +78,28 @@ export default function App() {
     setSession(value);
     if (path === '/') navigate('/home', true);
   };
+  const loggingOut = useRef(false);
   const logout = useCallback(async () => {
+    if (loggingOut.current) return;
+    loggingOut.current = true;
     const current = getSession();
     const generation = getSessionGeneration();
     try {
       if (current && !current.demo) {
-        await disablePush().catch(() => {});
+        const cleanup = AbortSignal.timeout(1200);
+        await Promise.race([
+          disablePush(cleanup),
+          new Promise<void>(resolve => cleanup.addEventListener('abort', () => resolve(), {once:true})),
+        ]).catch(() => {});
         if (getSessionGeneration() === generation) await logoutSession();
       }
     }
-    catch { notify(t("Вход на этом устройстве закрыт. Сервер не ответил на запрос завершения сессии."), 'info'); }
-    finally { if (getSessionGeneration() === generation) { clearSession(); navigate('/', true); } }
+    catch {
+      if (getSessionGeneration() === generation) notify(t("Вход на этом устройстве закрыт. Сервер не ответил на запрос завершения сессии."), 'info');
+    } finally {
+      loggingOut.current = false;
+      if (getSessionGeneration() === generation) { clearSession(); navigate('/', true); }
+    }
   }, [navigate, notify]);
   const user = session?.user;
   const planning = path in {'/planning':1,'/planning/calendar':1,'/planning/free-time':1,'/planning/lists':1};
@@ -188,7 +199,7 @@ function Workspace({ navigateProduct, user, view, search, onUserChange, onLogout
     <Navigation user={user} path={viewPaths[view]} navigate={navigateProduct} onSettings={() => setSettings('profile')} onConnections={() => setSettings('connections')} onSearch={() => setSearchOpen(true)} lists={view==='calendar'?[]:data.lists} context={view==='calendar'&&<div className="life-calendar-context"><MiniCalendar selected={selected} timezone={user.timezone} onSelect={setSelected} marked={calendar?.events.map(event=>dateKey(event.start_at,user.timezone))??[]}/><fieldset><legend>{t("Календари")}</legend>{([['local',t("Личное")],['google','Google Calendar'],['apple','Apple Calendar']] as const).map(([source,label])=><label key={source}><input type="checkbox" checked={!hiddenSources.includes(source)} onChange={()=>setHiddenSources(old=>old.includes(source)?old.filter(item=>item!==source):[...old,source])}/>{label}</label>)}</fieldset></div>}/>
     <div className="app-main"><WorkspaceBar user={user} title={t("Планирование")} onHome={() => navigateProduct('/home')}
       onProfile={() => setSettings('profile')} onSearch={() => setSearchOpen(true)}/>
-      <main id="main-content" className={`workspace-content view-${view}${focusMode&&view==='day'?' life-focus-mode':''}`}>{view!=='free'&&<header className="page-header planning-header"><div><div className="life-page-eyebrow"><span>{t("Планирование")}</span>{isDemo() && <span className="demo-badge">{t("Демо")}</span>}</div><h1>{title}</h1>{view==='day'&&<span className="life-page-subtitle">{dayLabel(selected,{weekday:'long',day:'numeric',month:'long'})}</span>}</div><div className="page-actions">{view==='day'&&<button className="button secondary" aria-pressed={focusMode} onClick={()=>setFocusMode(value=>!value)}><Target size={16}/>{focusMode?t("Выйти из фокуса"):t("Фокус")}</button>}<button className="icon-button refresh-button" onClick={() => void data.refresh()} aria-label={t("Обновить данные")} disabled={data.refreshing || data.loading}><RefreshCw size={17} className={data.refreshing ? 'spinner' : ''} /></button><div className="create-menu-wrap" ref={menuRef}><div className="split-button"><button className="button primary" onClick={view === 'calendar' ? () => createEvent() : createTask}><Plus size={17} />{view === 'calendar' ? t("Новое событие") : t("Новая задача")}</button><button className="split-trigger" aria-label={t("Другие способы добавления")} aria-expanded={createMenu} onClick={() => setCreateMenu(!createMenu)}><ChevronDown size={16} /></button></div>{createMenu && <div className="action-menu create-menu"><button onClick={createTask}><CheckCircle2 size={16} />{t("Создать задачу")}<kbd>N</kbd></button><button onClick={() => createEvent()}><CalendarDays size={16} />{t("Создать событие")}</button><button onClick={() => { navigate('lists'); setCreateMenu(false); }}><ListChecks size={16} />{t("Открыть списки")}</button></div>}</div></div></header>}
+      <main id="main-content" className={`workspace-content view-${view}${focusMode&&view==='day'?' life-focus-mode':''}`}>{view!=='free'&&<header className="page-header planning-header"><div><div className="life-page-eyebrow"><span>{t("Планирование")}</span>{isDemo() && <span className="demo-badge">{t("Демо")}</span>}</div><h1>{title}</h1>{view==='day'&&<span className="life-page-subtitle">{dayLabel(selected,{weekday:'long',day:'numeric',month:'long'})}</span>}</div><div className="page-actions">{view==='day'&&<button className="button secondary" aria-pressed={focusMode} onClick={()=>setFocusMode(value=>!value)}><Target size={16}/>{focusMode?t("Задачи и расписание"):t("Только задачи")}</button>}<button className="icon-button refresh-button" onClick={() => void data.refresh()} aria-label={t("Обновить данные")} disabled={data.refreshing || data.loading}><RefreshCw size={17} className={data.refreshing ? 'spinner' : ''} /></button><div className="create-menu-wrap" ref={menuRef}><div className="split-button"><button className="button primary" onClick={view === 'calendar' ? () => createEvent() : createTask}><Plus size={17} />{view === 'calendar' ? t("Новое событие") : t("Новая задача")}</button><button className="split-trigger" aria-label={t("Другие способы добавления")} aria-expanded={createMenu} onClick={() => setCreateMenu(!createMenu)}><ChevronDown size={16} /></button></div>{createMenu && <div className="action-menu create-menu"><button onClick={createTask}><CheckCircle2 size={16} />{t("Создать задачу")}<kbd>N</kbd></button><button onClick={() => createEvent()}><CalendarDays size={16} />{t("Создать событие")}</button><button onClick={() => { navigate('lists'); setCreateMenu(false); }}><ListChecks size={16} />{t("Открыть списки")}</button></div>}</div></div></header>}
       <nav className="product-tabs planning-tabs" aria-label={t("Разделы планирования")}>
         {(['day','calendar','free','lists'] as const).map((key,index) => <button key={key} className={view===key?'active':''}
           aria-current={view===key?'page':undefined} onClick={() => navigate(key)}>{[t("Мой день"),t("Календарь"),t("Свободно"),t("Списки")][index]}</button>)}

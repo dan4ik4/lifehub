@@ -32614,7 +32614,7 @@
         "properties": {
           "data": {
             "type": "string",
-            "maxLength": 6666668,
+            "maxLength": 20000000,
             "minLength": 1,
             "title": "Data"
           },

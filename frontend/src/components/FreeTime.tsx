@@ -89,7 +89,6 @@ export function FreeTime({user,calendar,tasks,notify,onCreate}:{user:User;calend
   const [draft,setDraft]=useState<typeof settings|null>(null);
   const [useBuffer,setUseBuffer]=useState(true);
   const [selected,setSelected]=useState<Window|null>(null);
-  const [all,setAll]=useState(false);
   const [now,setNow]=useState(Date.now);
   const drag=useRef<{x:number;start:number}|null>(null);
   const blockClick=useRef(false);
@@ -150,11 +149,8 @@ export function FreeTime({user,calendar,tasks,notify,onCreate}:{user:User;calend
             :<span className={'life-free-slot '+slot.kind} style={style} key={slot.start} title={slot.title+' · '+range(slot)}>{slot.title}</span>;
         })}</div><small>{hm(row.total)}</small></div>)}</div>
     </LifeCard>
-    <div className="life-free-bottom"><LifeCard><header className="life-card-head"><h2>{t("Окна списком")}</h2><small>{slots.length} {t("окон")}</small></header>
-      {(all?slots:slots.slice(0,7)).map(slot=><button className="life-slot-list" key={slot.start} onClick={()=>setSelected(slot)}><span>{label(slot.start)}</span><strong>{range(slot)}</strong><small>{hm(length(slot))}</small></button>)}
-      {slots.length>7&&<button className="life-text-link" onClick={()=>setAll(value=>!value)}>{all?t("Свернуть"):t("Показать все")}</button>}
-    </LifeCard><LifeCard className="life-share" ><div id="free-share"><header className="life-card-head"><h2>{t("Поделиться")}</h2></header><p>{t("Текст по выбранному периоду и фильтрам.")}</p>
-      <textarea readOnly value={share} aria-label={t("Текст со свободными окнами")} rows={6}/><button className="button primary" disabled={!slots.length} onClick={()=>void copy(share)}><Copy size={16}/>{t("Скопировать текст")}</button></div></LifeCard></div></>}
+    <LifeCard className="life-share"><div id="free-share"><header className="life-card-head"><h2>{t("Поделиться")}</h2></header><p>{t("Текст по выбранному периоду и фильтрам.")}</p>
+      <textarea readOnly value={share} aria-label={t("Текст со свободными окнами")} rows={6}/><button className="button primary" disabled={!slots.length} onClick={()=>void copy(share)}><Copy size={16}/>{t("Скопировать текст")}</button></div></LifeCard></>}
     {selected&&<Modal title={range(selected)} description={label(selected.start)+' · '+hm(length(selected))+t(" свободно")} onClose={()=>setSelected(null)}>
       <div className="modal-body life-slot-actions"><button className="button primary" onClick={()=>{onCreate(dateKey(new Date(selected.start),timezone),format(selected.start),format(selected.end));setSelected(null);}}><Plus size={16}/>{t("Занять время")}</button>
         <button className="button secondary" onClick={()=>void copy(label(selected.start)+' · '+range(selected))}><Copy size={16}/>{t("Скопировать")}</button>

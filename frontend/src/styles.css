@@ -24,3 +24,21 @@
 @media(max-width:1024px){.day-layout{grid-template-columns:minmax(0,1fr)}.day-aside{min-width:0}.task-filter-row{overflow-x:auto}.task-filters{min-width:max-content}.task-panel-header>div{min-width:0}}@media(max-width:470px){.welcome-art{right:-85px;opacity:.3}.welcome-art .art-note{display:none}.task-filters{min-width:0}.task-filters button{font-size:10px;padding-left:6px;padding-right:6px;white-space:nowrap}.task-filters button svg{display:none}}
 @media(max-width:470px){.day-aside{grid-template-columns:minmax(0,1fr)}.agenda-panel,.agenda-event>div{min-width:0}.agenda-event strong,.agenda-event p{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
 .calendar-block{gap:2px;padding:4px 6px}.calendar-block strong{flex-shrink:0;-webkit-line-clamp:1;line-height:1.35}.calendar-block>span,.calendar-block>p{flex-shrink:0;line-height:1.35}
+
+@media (min-width:761px) {
+  html { scrollbar-gutter: stable; }
+}
+html:has(dialog.modal[open]) { overflow: hidden; }
+dialog.modal[data-keyboard-open] {
+  position: fixed;
+  inset: var(--dialog-visible-top) 0 auto;
+  margin: 8px auto 0;
+  max-height: calc(var(--dialog-visible-height) - 16px);
+}
+dialog.modal[data-keyboard-open] .modal-shell {
+  max-height: calc(var(--dialog-visible-height) - 16px);
+}
+dialog.modal.assistant-modal[data-keyboard-open] {
+  height: calc(var(--dialog-visible-height) - 16px);
+  width: calc(100vw - 16px);
+}

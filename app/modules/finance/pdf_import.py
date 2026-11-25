@@ -16,6 +16,7 @@ from pydantic import Field, ValidationError
 from app.core.dependencies import get_db
 from app.core.errors import AppError
 from app.modules.finance.csv_import import Annotation, CsvMapping, normalize_rows, parse_money, prepare_statement
+from app.modules.finance.pdf_extract import MAX_BYTES, MAX_ENCODED_BYTES
 from app.modules.planning.dependencies import require_planning_user
 from app.modules.planning.schemas import InputModel
 
@@ -23,7 +24,7 @@ router = APIRouter(prefix='/api/v1/finance/pdf-imports', tags=['finance PDF'])
 
 
 class PdfUpload(InputModel):
-    data: str = Field(min_length=1, max_length=6_666_668)
+    data: str = Field(min_length=1, max_length=MAX_ENCODED_BYTES)
     account: str = Field(min_length=1, max_length=100)
     currency: str = Field(pattern=r'^[A-Z]{3}$')
     consent: Literal[True]
@@ -51,21 +52,28 @@ class PdfMapping(InputModel):
 
 
 ERRORS = {
-    'invalid_pdf': 'Не удалось прочитать PDF. Загрузите исходную выписку из банка, до 5 МБ.',
+    'invalid_pdf': 'Не удалось прочитать PDF. Скачайте исходную выписку из банка и попробуйте ещё раз.',
     'pdf_encrypted': 'PDF защищён паролем. Сохраните копию без пароля и загрузите её.',
     'pdf_no_text': 'На одной из страниц нет читаемого текста. Нужен PDF из банка с выделяемым текстом; сканы пока не поддерживаются.',
-    'pdf_too_large': 'Выписка слишком большая: до 5 МБ, 15 страниц и 60 000 символов. Выберите меньший период.',
+    'pdf_too_large': 'Файл PDF больше 15 МБ. Выберите выписку за меньший период.',
+    'pdf_too_many_pages': 'В PDF больше 30 страниц. Выберите выписку за меньший период.',
+    'pdf_content_too_large': 'В PDF слишком много текста для одного разбора. Выберите выписку за меньший период.',
+    'pdf_extraction_timeout': 'Чтение PDF заняло слишком много времени. Выберите выписку за меньший период.',
 }
 
 
 def parse_pdf(body):
     try:
         raw = base64.b64decode(body.data, validate=True)
-        if len(raw) > 5_000_000 or not raw.startswith(b'%PDF-'):
+        if len(raw) > MAX_BYTES:
+            raise AppError(422, 'pdf_too_large', ERRORS['pdf_too_large'])
+        if not raw.startswith(b'%PDF-'):
             raise ValueError()
         process = subprocess.run([sys.executable, '-m', 'app.modules.finance.pdf_extract'], input=raw,
             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=20, check=True)
         result = json.loads(process.stdout)
+    except subprocess.TimeoutExpired as exc:
+        raise AppError(422, 'pdf_extraction_timeout', ERRORS['pdf_extraction_timeout']) from exc
     except (ValueError, binascii.Error, subprocess.SubprocessError) as exc:
         raise AppError(422, 'invalid_pdf', ERRORS['invalid_pdf']) from exc
     if result.get('error'):

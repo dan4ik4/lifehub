@@ -115,9 +115,10 @@
 .life-mood button[aria-pressed=true] {border-color:#b5d9c4;background:#c0e1cb}
 .life-diary-aside {width:38%;float:right;display:grid;gap:14px;margin-left:2%}
 .life-diary-aside .diary-calendar {background:white;border:0;border-radius:24px;padding:20px;margin:0}
-.life-diary-review {background:var(--life-dark)!important;color:white;border:0!important;border-radius:24px!important}
-.life-diary-review>summary {color:white}
-.life-diary-review[open] .diary-review {background:white;color:var(--life-text);margin:0 8px 8px}
+.life-diary-review.hub-disclosure {background:white;border:1px solid var(--life-line);border-radius:20px}
+.life-diary-review>summary {color:var(--life-text)}
+.life-diary-review[open]>summary {border-bottom:1px solid var(--life-line)}
+.life-diary-review[open] .diary-review {background:white;color:var(--life-text);margin:0;border:0;border-radius:0}
 .life-section-diary>.product-search,.life-section-diary>.record-layout-diary {width:60%}
 .life-diary-tags {display:flex;flex-wrap:wrap;gap:6px}
 .life-diary-tags button {border:0;border-radius:99px;background:var(--life-tint);color:var(--life-primary);font-size:11px;padding:4px 9px}
@@ -139,10 +140,21 @@
 .life-cross-results {margin:20px 0}
 .life-comparisons {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,330px),1fr));gap:12px}
 .life-comparisons .cross-comparison {margin:0;border:0;border-radius:24px;padding:20px;background:white}
-.life-cross .cross-ai {border:0;border-radius:24px;background:var(--life-dark);color:white}
-.life-cross .cross-ai :is(h3,.cross-note,.cross-consent) {color:#e0eee5}
-.life-cross .cross-ai .cross-comparison {background:white;color:var(--life-text)}
-.life-cross .cross-ai .cross-comparison .cross-note {color:var(--life-muted)}
+.life-cross .cross-ai {
+  padding:clamp(16px,3vw,24px);
+  border:1px solid var(--life-line);
+  border-radius:20px;
+  background:white;
+  color:var(--life-text);
+  overflow-wrap:anywhere;
+}
+.life-cross .cross-ai>h3 {color:var(--life-text);margin-bottom:8px}
+.life-cross .cross-ai>h3 svg {flex:none}
+.life-cross .cross-ai :is(.cross-note,.cross-consent) {color:var(--life-muted);font-size:14px}
+.life-cross .cross-ai .cross-comparison {background:var(--life-bg);color:var(--life-text)}
+.life-cross .cross-ai>p,.life-cross .cross-ai>.cross-consent {max-width:75ch}
+.life-cross .cross-ai>.cross-consent {padding:12px;border-radius:12px;background:var(--life-bg)}
+.life-cross .cross-ai .field-error {color:#9b4236}
 .life-goals .gh-toolbar>p {display:none}
 .life-goals .gh-toolbar {justify-content:flex-end}
 .life-goals .gh-day {background:white;border:0;border-radius:24px;box-shadow:none}
@@ -178,6 +190,7 @@
   .life-book-cover strong {font-size:11px}
   .life-diary-aside,.life-section-diary>.product-search,.life-section-diary>.record-layout-diary {width:100%;float:none;margin-left:0}
   .life-diary-aside {margin-bottom:16px}
+  .life-cross .cross-ai>.button.primary {width:100%}
   .life-diary-compose {padding:14px}
   .life-diary-compose-head {align-items:start;flex-direction:column}
   .life-cross-refresh {position:static;display:flex;margin:0 0 12px auto}

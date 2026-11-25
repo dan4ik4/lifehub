@@ -11,11 +11,31 @@ export function Logo({ compact = false }: { compact?: boolean }) {
 export function Modal({ title, description, onClose, children, className = '' }: { title: string; description?: string; onClose: () => void; children: ReactNode; className?: string }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
+    const dialog = ref.current;
+    if (!dialog) return;
     const active = document.activeElement as HTMLElement | null;
-    const dialog = ref.current; dialog?.showModal();
-    dialog?.querySelector<HTMLInputElement>('input:not([disabled]):not([type="hidden"]), textarea:not([disabled])')?.focus();
-    const previous = document.body.style.overflow; document.body.style.overflow = 'hidden';
-    return () => { dialog?.close(); document.body.style.overflow = previous; active?.focus(); };
+    const viewport = window.visualViewport;
+    const syncViewport = () => {
+      const keyboardOpen = viewport && viewport.scale === 1 && window.innerHeight - viewport.height > 80;
+      dialog.toggleAttribute('data-keyboard-open', Boolean(keyboardOpen));
+      if (keyboardOpen) {
+        dialog.style.setProperty('--dialog-visible-height', viewport.height + 'px');
+        dialog.style.setProperty('--dialog-visible-top', viewport.offsetTop + 'px');
+      }
+    };
+    dialog.showModal();
+    if (!window.matchMedia('(pointer: coarse), (max-width: 760px)').matches && !dialog.classList.contains('assistant-modal')) {
+      dialog.querySelector<HTMLElement>('input:not([disabled]):not([type="hidden"]):not([type="file"]), textarea:not([disabled])')?.focus({preventScroll:true});
+    }
+    syncViewport();
+    viewport?.addEventListener('resize', syncViewport);
+    viewport?.addEventListener('scroll', syncViewport);
+    return () => {
+      viewport?.removeEventListener('resize', syncViewport);
+      viewport?.removeEventListener('scroll', syncViewport);
+      dialog.close();
+      active?.focus({preventScroll:true});
+    };
   }, []);
   return createPortal(<dialog className={`modal ${className}`} ref={ref} onCancel={event => { event.preventDefault(); onClose(); }} onClick={event => { if (event.target === event.currentTarget) { const r = event.currentTarget.getBoundingClientRect(); if (event.clientX < r.left || event.clientX > r.right || event.clientY < r.top || event.clientY > r.bottom) onClose(); } }} aria-label={title}>
     <div className="modal-shell"><header className="modal-heading"><div><h2>{title}</h2>{description && <p>{description}</p>}</div><button className="icon-button" onClick={onClose} aria-label={t("Закрыть окно")}><X size={20} /></button></header>{children}</div>
