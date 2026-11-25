@@ -235,3 +235,89 @@ test('manual book addition can open a shelf match or save a separate edition', a
   expect((await saved).status()).toBe(201);
   await expect(editor).toHaveCount(0);
 });
+
+test('list header actions stay in place across custom and shopping lists', async ({ page }) => {
+  await page.goto('/planning/lists');
+  const header = page.locator('.list-detail-header');
+  const heading = header.getByRole('heading');
+  const buttons = header.locator('.life-list-actions button');
+  const shopping = header.getByRole('button', { name: 'Режим магазина', exact: true });
+  const short = 'Дела';
+  const long = 'Подготовка к поездке и всё, что ещё нужно успеть сделать'.padEnd(100, 'я');
+
+  async function createList(name: string) {
+    await header.getByRole('button', { name: 'Новый список', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: 'Новый список', exact: true });
+    await dialog.getByLabel('Название', { exact: true }).fill(name);
+    await dialog.getByRole('button', { name: 'Сохранить', exact: true }).click();
+    await expect(heading).toHaveText(name);
+  }
+
+  async function actionPositions() {
+    await expect(buttons).toHaveCount(2);
+    return header.evaluate(node => {
+      const origin = node.getBoundingClientRect();
+      return Array.from(node.querySelectorAll('.life-list-actions button'), button => {
+        const { x, y } = button.getBoundingClientRect();
+        return { x: x - origin.x, y: y - origin.y };
+      });
+    });
+  }
+
+  await expect(shopping).toBeVisible();
+  const desktop = await actionPositions();
+  await createList(short);
+  expect(await actionPositions()).toEqual(desktop);
+  await createList(long);
+  expect(await actionPositions()).toEqual(desktop);
+  await page.locator('.life-context-pins').getByRole('button', { name: /^Покупки/ }).click();
+  await expect(heading).toHaveText('Покупки');
+  await shopping.click();
+  await expect(header.getByRole('button', { name: 'Завершить покупки' })).toBeVisible();
+  expect(await actionPositions()).toEqual(desktop);
+  await header.getByRole('button', { name: 'Завершить покупки' }).click();
+
+  await page.setViewportSize({ width: 375, height: 850 });
+  const mobileX = (await actionPositions()).map(({ x }) => x);
+  await page.locator('.list-collection').getByRole('button', { name: new RegExp('^' + long) }).click();
+  await expect(heading).toHaveText(long);
+  expect((await actionPositions()).map(({ x }) => x)).toEqual(mobileX);
+});
+
+test('My Day aligns the quick add row and split task button', async ({ page }) => {
+  await page.goto('/planning');
+  const row = page.locator('.task-quick-add');
+  const input = row.getByRole('textbox', { name: 'Быстро добавить задачу' });
+  const submit = row.getByRole('button', { name: 'Добавить', exact: true });
+  const split = page.locator('.planning-header .split-button');
+  const create = split.getByRole('button', { name: 'Новая задача', exact: true });
+  const more = split.getByRole('button', { name: 'Другие способы добавления', exact: true });
+  for (const width of [1440, 1180, 375]) {
+    await page.setViewportSize({ width, height: 850 });
+    const offsets = await row.evaluate(form => {
+      const center = (box: DOMRect) => box.y + box.height / 2;
+      const middle = center(form.getBoundingClientRect());
+      return Array.from(form.children, control => Math.abs(center(control.getBoundingClientRect()) - middle));
+    });
+    expect(Math.max(...offsets)).toBeLessThan(1);
+    const alignment = await split.evaluate(node => {
+      const [left, right] = Array.from(node.querySelectorAll('button'), button => button.getBoundingClientRect());
+      return [left.y - right.y, left.height - right.height, left.right - right.left];
+    });
+    expect(alignment).toEqual([0, 0, 0]);
+    await expect(create).toHaveCSS('border-top-right-radius', '0px');
+    await expect(more).toHaveCSS('border-top-left-radius', '0px');
+  }
+  await more.click();
+  await expect(page.getByRole('button', { name: 'Создать событие' })).toBeVisible();
+  await more.click();
+  await create.click();
+  const editor = page.getByRole('dialog');
+  await expect(editor.getByLabel('Название', { exact: true })).toBeVisible();
+  await editor.getByRole('button', { name: 'Закрыть окно' }).click();
+  await input.fill('Задача из быстрой строки');
+  await expect(input).toHaveCSS('outline-style', 'none');
+  await expect(row).not.toHaveCSS('box-shadow', 'none');
+  await submit.click();
+  await expect(page.getByText('Задача из быстрой строки', { exact: true })).toBeVisible();
+});

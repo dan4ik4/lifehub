@@ -190,9 +190,21 @@
 .life-progress-body dd {text-align:right}
 .app-layout .life-lists {grid-template-columns:1fr}
 .app-layout .life-lists .list-detail {background:none;padding:0}
-.app-layout .life-lists .list-detail-header {border:0;padding:0;margin:0 0 14px;gap:12px}
+.app-layout .life-lists .list-detail-header {
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto minmax(0,1fr) 44px;
+  align-items:start;
+  gap:12px;
+  border:0;
+  padding:0;
+  margin:0 0 14px;
+}
+.life-list-heading {display:flex;align-items:start;gap:12px;min-width:0}
+.life-list-heading>div:last-child {min-width:0}
 .life-list-actions,.life-list-filters {display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-.life-list-actions {margin-left:auto}
+.life-list-actions {grid-column:2}
+.life-list-shop {grid-column:3;justify-self:end}
+.app-layout .life-lists .list-menu {grid-column:4;margin:0;justify-self:end}
 .app-layout .life-list-filters label {display:flex;gap:6px;align-items:center;color:var(--life-muted);font-size:13px}
 .app-layout .life-list-filters input {accent-color:var(--life-primary)}
 .app-layout .life-lists .inline-add {background:#fff;border:1px solid var(--life-line);border-radius:16px;margin:14px 0}
@@ -211,10 +223,14 @@
 .life-calendar-context input {accent-color:var(--life-primary)}
 .life-calendar-context .mini-calendar {min-width:0}
 @media(min-width:1200px){.app-layout .view-lists .list-collection{display:none}}
+@media(max-width:960px){
+  .app-layout .life-lists .list-detail-header {grid-template-columns:minmax(0,1fr) 44px}
+  .life-list-actions {grid-area:2 / 1 / 3 / -1}
+  .life-list-shop {grid-area:3 / 1 / 4 / -1;justify-self:start}
+  .app-layout .life-lists .list-menu {grid-area:1 / 2}
+}
 @media(max-width:760px){
   .app-layout .life-list-groups {grid-template-columns:1fr}
-  .app-layout .life-lists .list-detail-header {flex-wrap:wrap}
-  .life-list-actions {order:3;flex-basis:100%;margin:0}
   .life-list-actions .button {font-size:12px}
 }
 
