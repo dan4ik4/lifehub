@@ -197,6 +197,7 @@ test('finance groups, language preferences and browser session survive navigatio
     await expect(page.getByRole('heading', {name:heading,exact:true}).first()).toBeVisible();
     const horizontalOverflow = await page.locator('.app-main').evaluate(node => node.scrollWidth-node.clientWidth);
     expect(horizontalOverflow, route).toBeLessThanOrEqual(1);
+    if (route === '/planning') await expect(page.getByRole('button', {name:'Tylko zadania',exact:true})).toBeVisible();
   }
   await page.goto('/privacypolicy-pl.html');
   await expect(page.getByRole('heading', {name:'Dane dotyczące zdrowia'})).toBeVisible();
