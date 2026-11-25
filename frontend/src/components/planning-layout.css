@@ -1,3 +1,43 @@
+.app-layout .view-day .split-button {
+  align-items:stretch;
+  border-radius:11px;
+  background:var(--life-primary);
+}
+.app-layout .view-day .split-button>.button {border-radius:11px 0 0 11px;min-height:44px;gap:8px}
+.app-layout .view-day .split-button>.button>svg {flex:none}
+.app-layout .view-day .split-trigger {
+  flex:0 0 44px;
+  width:44px;
+  min-height:44px;
+  border-radius:0 11px 11px 0;
+  border-left-color:#ffffff30;
+  background:var(--life-primary);
+  color:white;
+}
+.app-layout .view-day .split-trigger:is(:hover,[aria-expanded=true]) {background:#19382f}
+.app-layout .view-day .task-quick-add {
+  display:grid;
+  grid-template-columns:auto minmax(0,1fr) auto;
+  align-items:center;
+  gap:10px;
+  margin:12px clamp(12px,2vw,23px) 18px;
+  padding:4px 6px 4px 12px;
+  border-color:var(--life-line);
+  color:var(--life-muted);
+}
+.app-layout .view-day .task-quick-add:focus-within {
+  border-color:var(--life-primary);
+  box-shadow:0 0 0 2px var(--life-tint);
+}
+.app-layout .view-day .task-quick-add>input {width:100%;min-height:44px;padding:0;color:var(--life-text)}
+.app-layout .view-day .task-quick-add>input:focus {outline:none;box-shadow:none}
+.app-layout .view-day .task-quick-add>input::placeholder {color:var(--life-muted)}
+.app-layout .view-day .quick-add-submit {min-height:44px;padding:0 12px;gap:6px;font-size:12px}
+.app-layout .view-day .quick-add-submit span {color:inherit;opacity:.75}
+@media (max-width:760px) {
+  .app-layout .view-day .task-quick-add>input {font-size:16px}
+}
+
 .life-free {display:grid;gap:20px}
 .life-free-header {display:flex;justify-content:space-between;align-items:end;gap:16px}
 .life-free-header h1 {font-size:42px;font-weight:800;letter-spacing:-.055em;line-height:1.19;margin:0}
