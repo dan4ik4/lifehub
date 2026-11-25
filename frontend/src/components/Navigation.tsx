@@ -1,6 +1,8 @@
 import { t } from '../lib/language';
 import {ResultsIcon} from '../product/results/shared';
 import type {IconName} from '../product/results/shared';
+import {healthRoutes,HIcon} from '../product/health/shared';
+import type {HealthIconName} from '../product/health/shared';
 import { financeGroup } from '../product/financeNavigation';
 import { listDisplayName } from '../lib/workspace';
 import {useEffect, useRef, useState} from 'react';
@@ -36,12 +38,13 @@ const moduleLinks:Record<string,[string,string,LucideIcon][]> = {
   insights:[[t("Неделя"),'',Sun],[t("Связи"),'links',Sparkles],[t("Архив"),'archive',Clock3]],
 };
 
-const resultsRailIcons:Record<string,IconName>={home:'home',plans:'calendar',habits:'target',health:'heart',finance:'wallet',books:'book',insights:'sparkles'};
+const resultsRailIcons:Record<string,IconName & HealthIconName>={home:'home',plans:'calendar',habits:'target',health:'heart',finance:'wallet',books:'book',insights:'sparkles'};
 const resultsTabIcons:Record<string,IconName>={'/modules/insights':'sun','/modules/insights/links':'sparkles','/modules/insights/archive':'clock'};
 
-export function Navigation({user,path,navigate,onSettings,onConnections,onSearch,lists=[],context,resultsNewCount=0}: {
+export function Navigation({user,path,navigate,onSettings,onConnections,onSearch,lists=[],context,resultsNewCount=0,healthBadges}: {
   user:User; path:string; navigate:(path:string)=>void; onSettings:()=>void; onConnections?:()=>void;
   onSearch?:()=>void; lists?:PlanningList[]; context?:ReactNode; resultsNewCount?:number;
+  healthBadges?:Record<string,string|undefined>;
 }) {
   const [open,setOpen]=useState(false);
   const [homeLists,setHomeLists]=useState<PlanningList[]>([]);
@@ -50,6 +53,8 @@ export function Navigation({user,path,navigate,onSettings,onConnections,onSearch
   const sheet=useRef<HTMLDialogElement>(null);
   const active=modules.find(module => path===module.to || path.startsWith(module.to+'/'))??modules[0];
   const results = active.id==='insights';
+  const health = active.id==='health' && !!healthBadges;
+  const sharedIcon = (name:IconName & HealthIconName,size:number) => health?<HIcon name={name} size={size}/>:<ResultsIcon name={name} size={size}/>;
   const go = (to:string) => {setOpen(false); navigate(to);};
   const chooseSearch = () => onSearch ? onSearch() : go('/planning?find=1');
   useEffect(()=>{
@@ -92,27 +97,31 @@ export function Navigation({user,path,navigate,onSettings,onConnections,onSearch
   const alias=financeSection?active.to+(financeSection==='overview'?'':'/'+financeSection):path.replace(/\/overview$/,'').replace(/\/modules\/books\/books$/,'/modules/books');
   return <>
     <aside className="life-rail" aria-label={t("Основная навигация")}>
-      <button className="life-brand" onClick={()=>go('/home')} aria-label={t("LifeHub — главная")}>{results?<ResultsIcon name="leaf" size={20}/>:<Leaf size={22}/>}</button>
+      <button className="life-brand" onClick={()=>go('/home')} aria-label={t("LifeHub — главная")}>{results||health?sharedIcon('leaf',20):<Leaf size={22}/>}</button>
       <nav aria-label={t("Разделы LifeHub")}>
         {modules.map(({id,short,to,icon:Icon})=><button key={id} className={'life-rail-button theme-'+id} aria-label={short}
-          aria-current={id===active.id?'true':undefined} onClick={()=>go(to)}><span>{results?<ResultsIcon name={resultsRailIcons[id]} size={20}/>:<Icon size={21}/>}</span><small>{short}</small></button>)}
+          aria-current={id===active.id?'true':undefined} onClick={()=>go(to)}><span>{results||health?sharedIcon(resultsRailIcons[id],20):<Icon size={21}/>}</span><small>{short}</small></button>)}
       </nav>
       <div className="life-rail-foot">
         <button className="life-rail-button" onClick={()=>openAssistant()} aria-label={t("Открыть чат с помощником")}>
-          <span className="life-rail-ai">{results?<ResultsIcon name="sparkles" size={20}/>:<Sparkles size={21}/>}</span><small>{t("ИИ")}</small>
+          <span className="life-rail-ai">{results||health?sharedIcon('sparkles',20):<Sparkles size={21}/>}</span><small>{t("ИИ")}</small>
         </button>
-        <button className="life-rail-settings" onClick={onSettings} aria-label={t("Настройки")}>{results?<ResultsIcon name="settings" size={20}/>:<Settings2 size={19}/>}</button>
+        <button className="life-rail-settings" onClick={onSettings} aria-label={t("Настройки")}>{results||health?sharedIcon('settings',20):<Settings2 size={19}/>}</button>
         <button className="life-rail-avatar" onClick={onSettings} aria-label={t("Настройки профиля")}><Avatar user={user}/></button>
       </div>
     </aside>
     <aside className={'life-context theme-'+active.id} aria-label={t("Навигация: ")+active.title}>
       <header><strong>{active.title}</strong>{active.id!=='home'&&<small>{active.id==='plans'?t("Расписание, задачи и списки"):active.id==='health'?t("Показатели и записи"):active.id==='finance'?t("Операции и бюджеты"):active.id==='books'?t("Чтение и дневник"):active.id==='habits'?t("Прогресс и цели"):t("Твоя неделя и связи")}</small>}</header>
-      <button className="life-context-search" onClick={chooseSearch}>{results?<ResultsIcon name="search" size={14}/>:<Search size={15}/>}{t("Поиск")}<kbd>⌘K</kbd></button>
+      <button className="life-context-search" onClick={chooseSearch}>{results||health?sharedIcon('search',14):<Search size={15}/>}{t("Поиск")}<kbd>⌘K</kbd></button>
       <nav className="life-context-links" aria-label={active.title}>
         {links.map(({label,icon:Icon,to,action})=>{
           const selected=to&&(alias===to||(to!==active.to&&alias.startsWith(to+'/')));
-          return <button key={label} aria-current={selected?'page':undefined} onClick={to?()=>go(to):action}>{results&&to?<ResultsIcon name={resultsTabIcons[to]}/>:<Icon size={16}/>}
-            {label}{results&&to?.endsWith('/links')&&resultsNewCount>0&&<small>{t('Новых: {0}',resultsNewCount)}</small>}</button>;
+          const healthLink=health&&to?healthRoutes[to]:undefined;
+          const badge=healthLink?healthBadges?.[healthLink.key]:undefined;
+          return <button key={label} aria-current={selected?'page':undefined} onClick={to?()=>go(to):action}>
+            {healthLink?<HIcon name={healthLink.icon}/>:results&&to?<ResultsIcon name={resultsTabIcons[to]}/>:<Icon size={16}/>}
+            {health?<span>{label}</span>:label}{badge&&<small className="health-nav-badge">{badge}</small>}
+            {results&&to?.endsWith('/links')&&resultsNewCount>0&&<small>{t('Новых: {0}',resultsNewCount)}</small>}</button>;
         })}
       </nav>
       {active.id==='home'&&(homeLists.length>0||reading)&&<details open className="life-context-pins"><summary>{t("Закреплено")}</summary>

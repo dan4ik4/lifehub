@@ -1,6 +1,7 @@
 from datetime import date, timedelta
 from decimal import Decimal
 from typing import Literal
+from uuid import UUID
 from pydantic import AwareDatetime, Field, model_validator, field_validator
 from app.modules.planning.schemas import InputModel
 
@@ -20,6 +21,7 @@ class SleepInput(InputModel):
 class WeightInput(InputModel):
     day: date
     kg: Decimal = Field(gt=0, le=1000, max_digits=7, decimal_places=3)
+    notes: str = Field(default="", max_length=1000)
 
 
 class WorkoutEffort(InputModel):
@@ -34,6 +36,7 @@ class WorkoutInput(InputModel):
     minutes: int = Field(gt=0, le=1440)
     notes: str = Field(default="", max_length=20000)
     efforts: list[WorkoutEffort] = Field(default_factory=list, max_length=500)
+    program_id: UUID | None = None
 
 
 class NutritionInput(InputModel):
@@ -50,6 +53,16 @@ class MedicationInput(InputModel):
     title: str = Field(min_length=1, max_length=300)
     dosage: str = Field(min_length=1, max_length=100)
     times: list[str] = Field(min_length=1, max_length=12)
+    weekdays: list[int] = Field(default_factory=lambda: list(range(7)), min_length=1, max_length=7)
+    course_end: date | None = None
+    stock: int | None = Field(default=None, ge=0, le=100000)
+
+    @field_validator("weekdays")
+    @classmethod
+    def weekdays_valid(cls, value):
+        if len(set(value)) != len(value) or any(day < 0 or day > 6 for day in value):
+            raise ValueError("Use unique weekdays from 0 to 6")
+        return sorted(value)
 
     @field_validator("times")
     @classmethod
@@ -65,7 +78,14 @@ class IntakeInput(InputModel):
     day: date
     time: str = Field(pattern=r"^([01][0-9]|2[0-3]):[0-5][0-9]$")
     taken: bool
+    skipped: bool = False
     version: int = Field(ge=1)
+
+    @model_validator(mode="after")
+    def one_status(self):
+        if self.taken and self.skipped:
+            raise ValueError("A scheduled intake cannot be both taken and skipped")
+        return self
 
 
 class ExerciseInput(InputModel):
@@ -82,3 +102,11 @@ class ProgramInput(InputModel):
 
 class WeightTargetInput(InputModel):
     kg: Decimal = Field(gt=0, le=1000, max_digits=7, decimal_places=3)
+    mode: Literal["gain", "maintain", "lose"] = "maintain"
+
+
+class NutritionTargetInput(InputModel):
+    calories: int = Field(ge=0, le=100000)
+    protein: int = Field(ge=0, le=10000)
+    fat: int = Field(ge=0, le=10000)
+    carbs: int = Field(ge=0, le=10000)

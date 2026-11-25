@@ -72,6 +72,8 @@ def schedule(db, now):
             for m in db.scalars(
                 select(Medication).where(Medication.user_id == user.id, Medication.deleted_at.is_(None))
             ):
+                if not m.scheduled(day):
+                    continue
                 for slot in m.times:
                     if not due(slot):
                         continue
@@ -194,7 +196,7 @@ def still_relevant(db, item, user, now):
                 MedicationIntake.deleted_at.is_(None),
             )
         )
-        return slot in source.times and taken is None
+        return source.scheduled(day) and slot in source.times and taken is None
     if kind == "debt":
         return source.status == "active" and str(source.due_date) == parts[2]
     if kind == "payment":

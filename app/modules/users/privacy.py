@@ -192,6 +192,7 @@ EXPORT_TABLES = {
     "diary_weekly_reviews",
     "health_programs",
     "health_weight_targets",
+    "health_nutrition_targets",
 }
 
 

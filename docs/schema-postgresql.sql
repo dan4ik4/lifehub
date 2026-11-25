@@ -1225,4 +1225,45 @@ ALTER TABLE finance_csv_imports ADD COLUMN pdf_claim_until TIMESTAMP WITH TIME Z
 
 UPDATE alembic_version SET version_num='0022_pdf_batches' WHERE alembic_version.version_num = '0021_results';
 
+-- Running upgrade 0022_pdf_batches -> 0023_health_details
+
+ALTER TABLE health_weight ADD COLUMN notes TEXT DEFAULT '' NOT NULL;
+
+ALTER TABLE health_weight_targets ADD COLUMN mode VARCHAR(8) DEFAULT 'maintain' NOT NULL;
+
+ALTER TABLE health_workouts ADD COLUMN program_id UUID;
+
+ALTER TABLE health_medications ADD COLUMN weekdays JSON DEFAULT '[0,1,2,3,4,5,6]' NOT NULL;
+
+ALTER TABLE health_medications ADD COLUMN course_end DATE;
+
+ALTER TABLE health_medications ADD COLUMN stock INTEGER;
+
+ALTER TABLE health_medications ADD COLUMN stock_since TIMESTAMP WITH TIME ZONE;
+
+ALTER TABLE health_medication_intakes ADD COLUMN skipped BOOLEAN DEFAULT 'false' NOT NULL;
+
+ALTER TABLE health_medication_intakes ADD COLUMN taken_at TIMESTAMP WITH TIME ZONE;
+
+CREATE TABLE health_nutrition_targets (
+    id UUID NOT NULL,
+    user_id UUID NOT NULL,
+    version INTEGER NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    deleted_at TIMESTAMP WITH TIME ZONE,
+    calories INTEGER NOT NULL,
+    protein INTEGER NOT NULL,
+    fat INTEGER NOT NULL,
+    carbs INTEGER NOT NULL,
+    CONSTRAINT pk_health_nutrition_targets PRIMARY KEY (id),
+    CONSTRAINT fk_health_nutrition_targets_user_id_users FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+CREATE INDEX ix_health_nutrition_targets_user_id ON health_nutrition_targets (user_id);
+
+CREATE INDEX ix_health_nutrition_targets_deleted_at ON health_nutrition_targets (deleted_at);
+
+UPDATE alembic_version SET version_num='0023_health_details' WHERE alembic_version.version_num = '0022_pdf_batches';
+
 COMMIT;

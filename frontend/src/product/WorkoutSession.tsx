@@ -10,7 +10,7 @@ import type {Row} from './schema';
 
 type Exercise={name:string;sets:number;reps:number;kg:number|null};
 type Effort={name:string;reps:number;kg:number|null};
-type Session={started:number;title:string;program:Exercise[];index:number;efforts:Effort[];restUntil:number};
+type Session={started:number;title:string;program:Exercise[];programId?:string;index:number;efforts:Effort[];restUntil:number};
 const clock=(seconds:number)=>Math.floor(seconds/60)+':'+String(seconds%60).padStart(2,'0');
 const storage=(id:string)=>'lifehub.workout.draft.'+id;
 
@@ -21,8 +21,8 @@ export function readWorkout(id:string):Session|null {
   }catch{return null;}
 }
 
-export function openWorkout(program?:Row){
-  window.dispatchEvent(new CustomEvent('lifehub:workout-open',{detail:program}));
+export function openWorkout(program?:Row,autoStart=false){
+  window.dispatchEvent(new CustomEvent('lifehub:workout-open',{detail:{program,autoStart}}));
 }
 export function useActiveWorkout(id:string){
   const [session,setSession]=useState(()=>readWorkout(id));
@@ -55,16 +55,21 @@ export function WorkoutSession({user,notify}:{user:User;notify:Notify}){
   const rest=session?Math.max(0,Math.ceil((session.restUntil-now)/1000)):0;
   useEffect(()=>{
     const show=(event:Event)=>{
-      const program=(event as CustomEvent<Row|undefined>).detail;
+      const {program,autoStart}=(event as CustomEvent<{program?:Row;autoStart:boolean}>).detail;
       setError('');setOpen(true);setNow(Date.now());
       if(program?.id&&!session){
+        if(pro&&autoStart&&Array.isArray(program.exercises)&&program.exercises.length){
+          record({started:Date.now(),title:String(program.title??''),program:program.exercises as Exercise[],
+            programId:program.id,index:0,efforts:[],restUntil:0});
+          return;
+        }
         setPrograms(old=>old.some(item=>item.id===program.id)?old:[program,...old]);
         setProgram(program.id);setTitle(String(program.title??''));
       }
     };
     window.addEventListener('lifehub:workout-open',show);
     return ()=>window.removeEventListener('lifehub:workout-open',show);
-  },[session]);
+  },[session,pro]);
   useEffect(()=>{
     if(!open)return;
     const controller=new AbortController(),signal=controller.signal;
@@ -95,7 +100,8 @@ export function WorkoutSession({user,notify}:{user:User;notify:Notify}){
     const source=programs.find(item=>item.id===program);
     const now=Date.now();
     setNow(now);
-    record({started:now,title:title.trim(),program:Array.isArray(source?.exercises)?source.exercises as Exercise[]:[],index:0,efforts:[],restUntil:0});
+    record({started:now,title:title.trim(),program:Array.isArray(source?.exercises)?source.exercises as Exercise[]:[],
+      programId:source?.id,index:0,efforts:[],restUntil:0});
   }
   function add(){
     if(!session||session.efforts.length>=500||!name.trim())return;
@@ -109,7 +115,7 @@ export function WorkoutSession({user,notify}:{user:User;notify:Notify}){
     setBusy(true);setError('');
     try{
       await api('/health/workouts',{method:'POST',body:{day:todayKey(user.timezone),title:session.title,
-        minutes:Math.max(1,Math.min(1440,Math.round((Date.now()-session.started)/60_000))),efforts:session.efforts}});
+        minutes:Math.max(1,Math.min(1440,Math.round((Date.now()-session.started)/60_000))),efforts:session.efforts,program_id:pro?session.programId:undefined}});
       record(null);setOpen(false);setTitle('');setName('');setProgram('');setKg('');refreshWorkspace();notify(t("Тренировка сохранена"));
     }catch(e){setError(errorMessage(e));}
     finally{setBusy(false);}

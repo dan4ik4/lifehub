@@ -3,6 +3,7 @@ import { openQuickAdd } from '../lib/workspace';
 import { WorkspaceBar } from '../components/WorkspaceBar';
 import { Results } from './results/Results';
 import { HealthOverview } from './HealthOverview';
+import {HealthScreens,isHealthScreen} from './health/HealthScreens';
 import { GoalsHabits } from './GoalsHabits';
 import { Navigation } from '../components/Navigation';
 import { Dashboard } from './Dashboard';
@@ -88,6 +89,12 @@ export function Product({
   }, []);
   if (module==='insights'&&!isDemo()) return <>
     <Results user={user} path={path} search={search} navigate={navigate} notify={notify} onSettings={()=>setSettings('profile')}/>
+    {settings&&<Settings user={user} initialTab={settings} onClose={()=>setSettings(null)}
+      onUserChange={onUserChange} onLogout={onLogout} notify={notify}/>}
+  </>;
+  if(module==='health'&&allowed&&!isDemo()&&isHealthScreen(tab)) return <>
+    <HealthScreens key={tab} tab={tab} id={recordId} path={path} user={user} pro={pro} navigate={navigate}
+      onSettings={()=>setSettings('profile')} onUpgrade={()=>setSettings('plan')}/>
     {settings&&<Settings user={user} initialTab={settings} onClose={()=>setSettings(null)}
       onUserChange={onUserChange} onLogout={onLogout} notify={notify}/>}
   </>;

@@ -7,6 +7,7 @@ import type {Notify, User} from '../lib/types';
 import {refreshWorkspace} from '../lib/workspace';
 import {isPro} from '../product/recordPresentation';
 import {RecordEditor} from '../product/RecordEditor';
+import {SleepForm,WeightForm} from '../product/health/Forms';
 import {sections} from '../product/schema';
 import {EntityEditor} from './EntityEditor';
 import {Modal} from './ui';
@@ -60,6 +61,8 @@ export function QuickAdd({user, notify}: {user:User; notify:Notify}) {
     </Modal>;
   }
   if (!available.some(action => action.key===step)) return null;
+  if (step==='sleep') return <SleepForm user={user} onClose={close} onSaved={saved}/>;
+  if (step==='weight') return <WeightForm user={user} onClose={close} onSaved={saved}/>;
   if (step==='task' || step==='event') {
     return <EntityEditor key={step} kind={step} day={todayKey(user.timezone)} timezone={user.timezone}
       pro={pro} onClose={close} onSaved={saved} onUpgrade={() => {
